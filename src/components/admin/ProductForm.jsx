@@ -226,7 +226,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
 
       if (formData.tem_variantes_cor) {
         if (!formData.variantes_cor || formData.variantes_cor.length === 0) {
-          toast.info('Adicione pelo menos uma variante de cor, ou desative ')Produto tem variantes de cor".');
+          toast.info('Adicione pelo menos uma variante de cor, ou desative "Produto tem variantes de cor".');
           return;
         }
         const variantesInvalidas = formData.variantes_cor.filter(v => !v.cor_nome || !v.cor_codigo_hex);

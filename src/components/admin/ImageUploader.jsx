@@ -67,7 +67,7 @@ export default function ImageUploader({ images = [], onImagesChange, maxImages =
         setCurrentImageToEdit(null);
       }
     } catch (error) {
-      toast.error('Erro ao fazer upload da imagem: ') + error.message);
+      toast.error(`Erro ao fazer upload da imagem: ${error.message}`);
       setCurrentImageToEdit(null);
       setPendingFiles([]);
     } finally {

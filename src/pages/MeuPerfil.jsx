@@ -154,7 +154,7 @@ export default function MeuPerfil() {
       toast.success('Avatar atualizado com sucesso!');
       loadData(); // Recarregar dados do usuário
     } catch (error) {
-      toast.error('Erro ao atualizar avatar: ') + error.message);
+      toast.error(`Erro ao atualizar avatar: ${error.message}`);
     } finally {
       setUploadingAvatar(false);
       setSelectedImage(null);

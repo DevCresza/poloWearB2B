@@ -45,7 +45,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
       }
 
       await Pedido.update(pedido.id, updateData);
-      toast.info('${tipo === ')nf' ? 'Nota Fiscal' : 'Boleto'} enviado com sucesso!`);
+      toast.info(`${tipo === 'nf' ? 'Nota Fiscal' : 'Boleto'} enviado com sucesso!`);
       onUpdate();
     } catch (error) {
       toast.error('Erro ao fazer upload do arquivo.');

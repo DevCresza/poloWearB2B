@@ -53,8 +53,8 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
         };
 
         await PendingUser.create(pendingUserData);
-        
-        toast.info('Usuário ')${formData.full_name}" foi registrado com sucesso!
+
+        toast.info(`Usuário "${formData.full_name}" foi registrado com sucesso!
 
 ✅ O QUE FOI FEITO:
 • Usuário salvo no sistema
