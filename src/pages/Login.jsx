@@ -30,20 +30,6 @@ export default function Login() {
     }
   };
 
-  const handleQuickLogin = async (userEmail, userPassword) => {
-    setEmail(userEmail);
-    setPassword(userPassword);
-    setError('');
-    setLoading(true);
-
-    try {
-      await User.login(userEmail, userPassword);
-      navigate('/PortalDashboard');
-    } catch (err) {
-      setError(err.message || 'Erro ao fazer login');
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-4">
@@ -108,69 +94,6 @@ export default function Login() {
                 )}
               </Button>
             </form>
-
-            <div className="mt-6">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-white px-2 text-muted-foreground">
-                    Ou use um dos logins rápidos
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-4 space-y-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => handleQuickLogin('admin@polo-b2b.com', 'admin123')}
-                  disabled={loading}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <span>Login como Admin</span>
-                    <span className="text-xs text-muted-foreground">admin123</span>
-                  </div>
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => handleQuickLogin('fornecedor@exemplo.com', 'fornecedor123')}
-                  disabled={loading}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <span>Login como Fornecedor</span>
-                    <span className="text-xs text-muted-foreground">fornecedor123</span>
-                  </div>
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => handleQuickLogin('cliente@exemplo.com', 'cliente123')}
-                  disabled={loading}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <span>Login como Cliente</span>
-                    <span className="text-xs text-muted-foreground">cliente123</span>
-                  </div>
-                </Button>
-              </div>
-            </div>
-
-            <div className="mt-4 text-center text-sm text-muted-foreground">
-              <p>Credenciais de teste:</p>
-              <p className="text-xs mt-1">
-                admin@polo-b2b.com / admin123<br />
-                fornecedor@exemplo.com / fornecedor123<br />
-                cliente@exemplo.com / cliente123
-              </p>
-            </div>
           </CardContent>
         </Card>
       </div>
