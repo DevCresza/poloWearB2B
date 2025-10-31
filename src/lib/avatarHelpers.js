@@ -31,7 +31,6 @@ export const uploadAvatar = async (file, userId) => {
     const fileName = `avatar-${userId}-${timestamp}.${extension}`;
     const filePath = `avatars/${fileName}`;
 
-    console.log(`📤 Fazendo upload de avatar: ${filePath}`);
 
     // Upload para o bucket 'produtos' na pasta 'avatars'
     const { data, error } = await supabase.storage
@@ -42,7 +41,6 @@ export const uploadAvatar = async (file, userId) => {
       });
 
     if (error) {
-      console.error('❌ Erro no upload:', error);
       throw error;
     }
 
@@ -51,7 +49,6 @@ export const uploadAvatar = async (file, userId) => {
       .from('produtos')
       .getPublicUrl(filePath);
 
-    console.log('✅ Avatar enviado com sucesso:', publicUrl);
 
     return {
       success: true,
@@ -59,7 +56,6 @@ export const uploadAvatar = async (file, userId) => {
       path: filePath
     };
   } catch (error) {
-    console.error('❌ Erro ao fazer upload do avatar:', error);
     throw error;
   }
 };
@@ -77,25 +73,20 @@ export const deleteAvatar = async (avatarUrl) => {
     const path = extractPathFromUrl(avatarUrl);
 
     if (!path) {
-      console.warn('⚠️ Path não encontrado na URL:', avatarUrl);
       return false;
     }
 
-    console.log(`🗑️ Deletando avatar: ${path}`);
 
     const { error } = await supabase.storage
       .from('produtos')
       .remove([path]);
 
     if (error) {
-      console.error('❌ Erro ao deletar:', error);
       throw error;
     }
 
-    console.log('✅ Avatar deletado com sucesso');
     return true;
   } catch (error) {
-    console.error('❌ Erro ao deletar avatar:', error);
     throw error;
   }
 };
@@ -113,7 +104,6 @@ const extractPathFromUrl = (url) => {
     const match = url.match(/\/produtos\/(.+)$/);
     return match ? match[1] : null;
   } catch (error) {
-    console.error('❌ Erro ao extrair path da URL:', error);
     return null;
   }
 };
@@ -132,7 +122,6 @@ export const updateAvatar = async (file, userId, oldAvatarUrl = null) => {
       try {
         await deleteAvatar(oldAvatarUrl);
       } catch (error) {
-        console.warn('⚠️ Não foi possível deletar avatar antigo:', error);
         // Continua mesmo se falhar ao deletar o antigo
       }
     }
@@ -140,7 +129,6 @@ export const updateAvatar = async (file, userId, oldAvatarUrl = null) => {
     // Upload do novo avatar
     return await uploadAvatar(file, userId);
   } catch (error) {
-    console.error('❌ Erro ao atualizar avatar:', error);
     throw error;
   }
 };

@@ -66,7 +66,6 @@ export default function ImageUploader({ images = [], onImagesChange, maxImages =
         setCurrentImageToEdit(null);
       }
     } catch (error) {
-      console.error('Erro ao fazer upload:', error);
       alert('Erro ao fazer upload da imagem: ' + error.message);
       setCurrentImageToEdit(null);
       setPendingFiles([]);

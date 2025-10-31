@@ -50,7 +50,6 @@ export const uploadImage = async (file, folder = 'produtos') => {
     const fileName = generateUniqueFileName(file.name);
     const filePath = `${folder}/${fileName}`;
 
-    console.log('📤 Fazendo upload da imagem:', filePath);
 
     // Upload para o Supabase Storage
     const { data, error } = await supabase.storage
@@ -61,7 +60,6 @@ export const uploadImage = async (file, folder = 'produtos') => {
       });
 
     if (error) {
-      console.error('❌ Erro no upload:', error);
       throw error;
     }
 
@@ -70,7 +68,6 @@ export const uploadImage = async (file, folder = 'produtos') => {
       .from(BUCKET_NAME)
       .getPublicUrl(filePath);
 
-    console.log('✅ Upload concluído:', publicUrl);
 
     return {
       success: true,
@@ -79,7 +76,6 @@ export const uploadImage = async (file, folder = 'produtos') => {
       fileName: fileName
     };
   } catch (error) {
-    console.error('❌ Erro ao fazer upload:', error);
     return {
       success: false,
       error: error.message || 'Erro ao fazer upload da imagem'
@@ -115,24 +111,20 @@ export const deleteImage = async (filePath) => {
       throw new Error('Caminho do arquivo não fornecido');
     }
 
-    console.log('🗑️ Deletando imagem:', filePath);
 
     const { error } = await supabase.storage
       .from(BUCKET_NAME)
       .remove([filePath]);
 
     if (error) {
-      console.error('❌ Erro ao deletar:', error);
       throw error;
     }
 
-    console.log('✅ Imagem deletada com sucesso');
 
     return {
       success: true
     };
   } catch (error) {
-    console.error('❌ Erro ao deletar imagem:', error);
     return {
       success: false,
       error: error.message || 'Erro ao deletar imagem'
@@ -155,24 +147,20 @@ export const deleteMultipleImages = async (filePaths) => {
       throw new Error('Nenhum arquivo para deletar');
     }
 
-    console.log(`🗑️ Deletando ${filePaths.length} imagens`);
 
     const { error } = await supabase.storage
       .from(BUCKET_NAME)
       .remove(filePaths);
 
     if (error) {
-      console.error('❌ Erro ao deletar:', error);
       throw error;
     }
 
-    console.log('✅ Imagens deletadas com sucesso');
 
     return {
       success: true
     };
   } catch (error) {
-    console.error('❌ Erro ao deletar imagens:', error);
     return {
       success: false,
       error: error.message || 'Erro ao deletar imagens'
@@ -210,7 +198,6 @@ export const extractPathFromUrl = (url) => {
     const match = url.match(/\/storage\/v1\/object\/public\/produtos\/(.+)$/);
     return match ? match[1] : null;
   } catch (error) {
-    console.error('Erro ao extrair path da URL:', error);
     return null;
   }
 };
@@ -243,7 +230,6 @@ export const listImages = async (folder = 'produtos') => {
       files: data
     };
   } catch (error) {
-    console.error('❌ Erro ao listar imagens:', error);
     return {
       success: false,
       error: error.message || 'Erro ao listar imagens'
@@ -275,7 +261,6 @@ export const downloadImage = async (filePath) => {
       blob: data
     };
   } catch (error) {
-    console.error('❌ Erro ao baixar imagem:', error);
     return {
       success: false,
       error: error.message || 'Erro ao baixar imagem'

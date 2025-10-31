@@ -33,7 +33,6 @@ export default function ConfigWhatsApp() {
       const list = await WhatsappTemplate.list('-created_at');
       setTemplates(list || []);
     } catch (error) {
-      console.error('Erro ao carregar templates:', error);
     } finally {
       setLoading(false);
     }
@@ -52,7 +51,6 @@ export default function ConfigWhatsApp() {
       setFormData({ nome: '', titulo: '', mensagem: '', ativo: true });
       loadTemplates();
     } catch (error) {
-      console.error('Erro ao salvar template:', error);
       alert('Erro ao salvar template');
     }
   };
@@ -74,7 +72,6 @@ export default function ConfigWhatsApp() {
       await WhatsappTemplate.delete(id);
       loadTemplates();
     } catch (error) {
-      console.error('Erro ao excluir:', error);
       alert('Erro ao excluir template');
     }
   };

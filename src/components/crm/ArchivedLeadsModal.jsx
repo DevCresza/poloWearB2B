@@ -40,7 +40,6 @@ export default function ArchivedLeadsModal({ open, onClose, onExport }) {
 
       setArchivedLeads(result || []);
     } catch (error) {
-      console.error('Erro ao carregar leads arquivados:', error);
     } finally {
       setLoading(false);
     }

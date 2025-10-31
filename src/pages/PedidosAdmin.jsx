@@ -51,7 +51,6 @@ export default function PedidosAdmin() {
       setUsers(usersList || []);
       setFornecedores(fornecedoresList || []);
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
     }
@@ -100,7 +99,6 @@ export default function PedidosAdmin() {
         );
       }
     } catch (error) {
-      console.error('Erro no export:', error);
       alert('Erro ao exportar dados.');
     }
   };
@@ -111,7 +109,6 @@ export default function PedidosAdmin() {
       await Pedido.update(pedidoId, { status: newStatus });
       await loadData();
     } catch (error) {
-      console.error('Erro ao atualizar status:', error);
       alert('Falha ao atualizar status.');
     } finally {
       setUpdatingPedidoId(null);
@@ -128,7 +125,6 @@ export default function PedidosAdmin() {
       await Pedido.update(pedidoId, updateData);
       await loadData();
     } catch (error) {
-      console.error('Erro ao atualizar status do pagamento:', error);
       alert('Falha ao atualizar status do pagamento.');
     } finally {
       setUpdatingPedidoId(null);

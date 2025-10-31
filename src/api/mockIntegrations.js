@@ -8,7 +8,6 @@ export const Core = {
   InvokeLLM: async ({ prompt, model = 'gpt-4', max_tokens = 1000 }) => {
     await delay();
 
-    console.log('Invocando LLM:', model, prompt.substring(0, 50) + '...');
 
     // Simula resposta de IA
     return {
@@ -24,8 +23,6 @@ export const Core = {
   SendEmail: async ({ to, subject, body, html, from }) => {
     await delay();
 
-    console.log('Enviando email para:', to);
-    console.log('Assunto:', subject);
 
     return {
       success: true,
@@ -41,7 +38,6 @@ export const Core = {
   UploadFile: async ({ file, folder = 'uploads' }) => {
     await delay();
 
-    console.log('Fazendo upload de arquivo:', file.name || 'arquivo', 'para', folder);
 
     // Simula URL do arquivo
     const fileUrl = `https://storage.exemplo.com/${folder}/${Date.now()}-${file.name || 'file'}`;
@@ -60,7 +56,6 @@ export const Core = {
   GenerateImage: async ({ prompt, size = '1024x1024', quality = 'standard' }) => {
     await delay(1000);
 
-    console.log('Gerando imagem com IA:', prompt);
 
     // Retorna placeholder
     const [width, height] = size.split('x');
@@ -80,7 +75,6 @@ export const Core = {
   ExtractDataFromUploadedFile: async ({ file_url, file_type = 'pdf' }) => {
     await delay(1500);
 
-    console.log('Extraindo dados do arquivo:', file_url);
 
     // Simula extração de dados
     return {
@@ -105,7 +99,6 @@ export const Core = {
   CreateFileSignedUrl: async ({ file_path, expires_in = 3600 }) => {
     await delay(200);
 
-    console.log('Criando URL assinada para:', file_path);
 
     // Simula URL assinada
     const signedUrl = `https://storage.exemplo.com/signed/${file_path}?token=mock-token-${Date.now()}&expires=${expires_in}`;
@@ -123,7 +116,6 @@ export const Core = {
   UploadPrivateFile: async ({ file, folder = 'private' }) => {
     await delay();
 
-    console.log('Fazendo upload de arquivo privado:', file.name || 'arquivo', 'para', folder);
 
     // Simula caminho do arquivo
     const filePath = `${folder}/${Date.now()}-${file.name || 'file'}`;

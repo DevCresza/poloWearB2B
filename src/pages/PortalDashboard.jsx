@@ -182,7 +182,6 @@ export default function PortalDashboard() {
       setCarteira(carteiraList);
 
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
     }

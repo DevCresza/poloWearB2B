@@ -43,7 +43,6 @@ export default function SugestoesIA({ onAddToCart }) {
             }
           });
         } catch (e) {
-          console.error('Erro ao processar itens:', e);
         }
       });
 
@@ -133,14 +132,12 @@ Retorne em JSON com formato:
 
           setSugestoes(sugestoesComIA);
         } catch (error) {
-          console.error('Erro ao processar IA:', error);
           setSugestoes(produtosSugeridos);
         }
       } else {
         setSugestoes([]);
       }
     } catch (error) {
-      console.error('Erro ao carregar sugestões:', error);
     } finally {
       setLoading(false);
     }

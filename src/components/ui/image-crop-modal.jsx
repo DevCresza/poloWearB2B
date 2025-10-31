@@ -80,7 +80,6 @@ export default function ImageCropModal({ open, onClose, imageSrc, onCropComplete
       onCropComplete(croppedImageUrl, croppedImageBlob);
       onClose();
     } catch (e) {
-      console.error('Error cropping image:', e);
     }
   };
 

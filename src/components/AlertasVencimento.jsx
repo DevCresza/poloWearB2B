@@ -96,7 +96,6 @@ export default function AlertasVencimento() {
 
       setAlertas(alertasFiltrados);
     } catch (error) {
-      console.error('Erro ao carregar alertas:', error);
     } finally {
       setLoading(false);
     }

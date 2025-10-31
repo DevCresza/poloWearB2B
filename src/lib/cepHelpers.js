@@ -45,7 +45,6 @@ export const consultarCep = async (cep) => {
       throw new Error('CEP inválido. Deve conter 8 dígitos.');
     }
 
-    console.log(`🔍 Consultando CEP: ${cleanCep}`);
 
     const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
 
@@ -59,7 +58,6 @@ export const consultarCep = async (cep) => {
       throw new Error('CEP não encontrado');
     }
 
-    console.log('✅ CEP encontrado:', data);
 
     return {
       cep: formatCepForDisplay(data.cep),
@@ -70,7 +68,6 @@ export const consultarCep = async (cep) => {
       complemento: data.complemento || ''
     };
   } catch (error) {
-    console.error('❌ Erro ao consultar CEP:', error);
     throw error;
   }
 };

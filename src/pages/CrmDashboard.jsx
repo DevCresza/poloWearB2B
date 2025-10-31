@@ -32,7 +32,6 @@ export default function CrmDashboard() {
       const contactsList = await Contact.list('-created_at');
       setContacts(contactsList || []); // Garantir que sempre seja array
     } catch (error) {
-      console.error('Erro ao carregar contatos:', error);
       setContacts([]); // Definir array vazio em caso de erro
     } finally {
       setLoading(false);
@@ -73,7 +72,6 @@ export default function CrmDashboard() {
       });
       loadContacts();
     } catch (error) {
-      console.error('Erro ao atualizar status:', error);
     }
   };
 
@@ -126,7 +124,6 @@ export default function CrmDashboard() {
         );
       }
     } catch (error) {
-      console.error('Erro ao exportar:', error);
       alert('Erro ao exportar dados.');
     }
   };
@@ -177,7 +174,6 @@ export default function CrmDashboard() {
       loadContacts();
 
     } catch (error) {
-      console.error('Erro ao criar usuário:', error);
       alert('Erro ao criar cliente. Verifique se o email já não está cadastrado no sistema.');
     }
   };

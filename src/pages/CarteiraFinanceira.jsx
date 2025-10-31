@@ -66,7 +66,6 @@ export default function CarteiraFinanceira() {
             fornecedor_id: fornecedor.id
           }, '-data_vencimento');
         } else {
-          console.warn('Fornecedor não encontrado para usuário:', currentUser.id);
           titulosList = [];
         }
       } else if (currentUser.role === 'admin') {
@@ -81,7 +80,6 @@ export default function CarteiraFinanceira() {
 
       calculateStats(titulosList);
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
     }
@@ -166,7 +164,6 @@ export default function CarteiraFinanceira() {
       setSelectedTitulo(null);
       loadData();
     } catch (error) {
-      console.error('Erro ao enviar comprovante:', error);
       alert('Erro ao enviar comprovante. Tente novamente.');
     } finally {
       setUploadingComprovante(false);
@@ -220,7 +217,6 @@ export default function CarteiraFinanceira() {
       alert(aprovado ? 'Comprovante aprovado!' : 'Comprovante recusado!');
       loadData();
     } catch (error) {
-      console.error('Erro ao analisar comprovante:', error);
       alert('Erro ao processar comprovante');
     }
   };
@@ -297,7 +293,6 @@ export default function CarteiraFinanceira() {
         );
       }
     } catch (error) {
-      console.error('Erro ao exportar:', error);
       alert('Erro ao exportar dados.');
     }
   };

@@ -91,7 +91,6 @@ export default function CadastroCompra() {
         alert('CEP não encontrado.');
       }
     } catch (error) {
-      console.error('Erro ao buscar CEP:', error);
       alert('Erro ao buscar CEP. Verifique sua conexão.');
     }
   };
@@ -117,7 +116,6 @@ export default function CadastroCompra() {
         alert('CEP não encontrado.');
       }
     } catch (error) {
-      console.error('Erro ao buscar CEP:', error);
       alert('Erro ao buscar CEP. Verifique sua conexão.');
     }
   };
@@ -244,13 +242,11 @@ Origem: Formulário Site
 Data: ${new Date().toLocaleString('pt-BR')}`
         });
       } catch (emailError) {
-        console.error('Erro no email:', emailError);
       }
       
       setSuccess(true);
       
     } catch (error) {
-      console.error('Erro:', error);
       alert('Erro ao enviar solicitação. Tente novamente.');
     } finally {
       setLoading(false);

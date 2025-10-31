@@ -42,10 +42,8 @@ const createSupabaseEntity = (tableName) => {
 
         if (error) throw error;
 
-        console.log(`✅ ${tableName}.list: ${data.length} registros (Supabase)`);
         return data || [];
       } catch (error) {
-        console.error(`❌ Erro ao listar ${tableName}:`, error);
         throw new Error(`Erro ao listar ${tableName}: ${error.message}`);
       }
     },
@@ -77,10 +75,8 @@ const createSupabaseEntity = (tableName) => {
 
         if (error) throw error;
 
-        console.log(`✅ ${tableName}.get: ${id} (Supabase)`);
         return data;
       } catch (error) {
-        console.error(`❌ Erro ao buscar ${tableName}:`, error);
         throw new Error(`Erro ao buscar ${tableName}: ${error.message}`);
       }
     },
@@ -102,10 +98,8 @@ const createSupabaseEntity = (tableName) => {
 
         if (error) throw error;
 
-        console.log(`✅ ${tableName}.create: ${created.id} (Supabase)`);
         return created;
       } catch (error) {
-        console.error(`❌ Erro ao criar ${tableName}:`, error);
         throw new Error(`Erro ao criar ${tableName}: ${error.message}`);
       }
     },
@@ -128,10 +122,8 @@ const createSupabaseEntity = (tableName) => {
 
         if (error) throw error;
 
-        console.log(`✅ ${tableName}.update: ${id} (Supabase)`);
         return updated;
       } catch (error) {
-        console.error(`❌ Erro ao atualizar ${tableName}:`, error);
         throw new Error(`Erro ao atualizar ${tableName}: ${error.message}`);
       }
     },
@@ -152,10 +144,8 @@ const createSupabaseEntity = (tableName) => {
 
         if (error) throw error;
 
-        console.log(`✅ ${tableName}.delete: ${id} (Supabase)`);
         return { id };
       } catch (error) {
-        console.error(`❌ Erro ao deletar ${tableName}:`, error);
         throw new Error(`Erro ao deletar ${tableName}: ${error.message}`);
       }
     },
@@ -181,10 +171,8 @@ const createSupabaseEntity = (tableName) => {
 
         if (error) throw error;
 
-        console.log(`✅ ${tableName}.count: ${count} (Supabase)`);
         return count;
       } catch (error) {
-        console.error(`❌ Erro ao contar ${tableName}:`, error);
         throw new Error(`Erro ao contar ${tableName}: ${error.message}`);
       }
     },

@@ -55,7 +55,6 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       onUpdate();
       alert('Confirmação registrada com sucesso!');
     } catch (error) {
-      console.error('Erro ao confirmar:', error);
       alert('Erro ao registrar confirmação');
     } finally {
       setConfirmando(false);
@@ -66,7 +65,6 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   try {
     itens = typeof pedido.itens === 'string' ? JSON.parse(pedido.itens) : pedido.itens;
   } catch (e) {
-    console.error('Erro ao parsear itens:', e);
   }
 
   return (

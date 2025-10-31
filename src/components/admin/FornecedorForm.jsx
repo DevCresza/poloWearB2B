@@ -72,7 +72,6 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
       setAdmins(adminsList);
       setClientes(clientesList); // Set clients state
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
     }
   };
 
@@ -90,7 +89,6 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
       }
       onSuccess();
     } catch (error) {
-      console.error('Erro ao salvar fornecedor:', error);
       alert('Erro ao salvar fornecedor. Tente novamente.');
     } finally {
       setLoading(false);

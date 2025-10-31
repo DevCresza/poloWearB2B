@@ -96,7 +96,6 @@ export default function ImageEditor({
       onSave(croppedImageBlob);
       onClose();
     } catch (error) {
-      console.error('Erro ao processar imagem:', error);
       alert('Erro ao processar a imagem. Tente novamente.');
     } finally {
       setSaving(false);

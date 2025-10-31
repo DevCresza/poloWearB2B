@@ -12,4 +12,3 @@ export const base44 = {
   requiresAuth: false, // Auth é gerenciado pelo mockAuth.js
 };
 
-console.log('Base44 Client: Usando dados mockados localmente');

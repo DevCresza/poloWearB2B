@@ -144,7 +144,6 @@ export default function DashboardAdmin() {
       });
 
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
     }
@@ -315,7 +314,6 @@ export default function DashboardAdmin() {
           produtosVendidos[key].valor += (item.preco * item.quantidade) || 0;
         });
       } catch (e) {
-        console.error('Erro ao processar itens:', e);
       }
     });
 
@@ -372,7 +370,6 @@ export default function DashboardAdmin() {
       window.URL.revokeObjectURL(url);
       a.remove();
     } catch (error) {
-      console.error('Erro ao exportar relatório:', error);
       alert('Erro ao exportar relatório');
     }
   };

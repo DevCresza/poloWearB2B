@@ -26,7 +26,6 @@ export default function ContactDetailsModal({ contact, onClose, onUpdate }) {
       alert('Observações salvas com sucesso!');
       onUpdate();
     } catch (error) {
-      console.error('Erro ao salvar:', error);
       alert('Erro ao salvar observações.');
     } finally {
       setSaving(false);

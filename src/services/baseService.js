@@ -146,7 +146,6 @@ class BaseService {
    * @returns {{success: false, error: string, details: Error}}
    */
   handleError(error) {
-    console.error('Service error:', error);
     return {
       success: false,
       error: error?.message || 'Erro desconhecido',

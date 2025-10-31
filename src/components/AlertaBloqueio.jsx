@@ -27,7 +27,6 @@ export default function AlertaBloqueio() {
         sessionStorage.setItem('bloqueio_visto', 'true');
       }
     } catch (error) {
-      console.error('Erro ao verificar usuário:', error);
     }
   };
 

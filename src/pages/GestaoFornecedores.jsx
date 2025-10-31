@@ -24,7 +24,6 @@ export default function GestaoFornecedores() {
       const fornecedoresList = await Fornecedor.list();
       setFornecedores(fornecedoresList);
     } catch (error) {
-      console.error("Erro ao carregar fornecedores:", error);
     } finally {
       setLoading(false);
     }

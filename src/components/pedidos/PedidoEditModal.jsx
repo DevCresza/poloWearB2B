@@ -47,7 +47,6 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
       alert(`${tipo === 'nf' ? 'Nota Fiscal' : 'Boleto'} enviado com sucesso!`);
       onUpdate();
     } catch (error) {
-      console.error('Erro ao fazer upload:', error);
       alert('Erro ao fazer upload do arquivo.');
     } finally {
       setUploadingNF(false);
@@ -85,13 +84,11 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
       try {
         await base44.functions.invoke('notificarMudancaStatus', { pedidoId: pedido.id });
       } catch (error) {
-        console.error('Erro ao enviar notificação:', error);
       }
 
       alert('Pedido atualizado com sucesso!');
       onUpdate();
     } catch (error) {
-      console.error('Erro ao atualizar pedido:', error);
       alert('Erro ao atualizar pedido. Tente novamente.');
     } finally {
       setSalvando(false);

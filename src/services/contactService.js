@@ -85,7 +85,6 @@ class ContactService extends BaseService {
         updated_at: new Date().toISOString()
       });
 
-      console.log('ContactService: Status atualizado', {
         contactId,
         status: novoStatus
       });
@@ -109,7 +108,6 @@ class ContactService extends BaseService {
         data_arquivamento: new Date().toISOString()
       });
 
-      console.log('ContactService: Contato arquivado', contactId);
 
       return this.handleSuccess(updated);
     } catch (error) {
@@ -129,7 +127,6 @@ class ContactService extends BaseService {
         data_arquivamento: null
       });
 
-      console.log('ContactService: Contato desarquivado', contactId);
 
       return this.handleSuccess(updated);
     } catch (error) {

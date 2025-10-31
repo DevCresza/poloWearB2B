@@ -51,7 +51,6 @@ export default function MeusPedidos() {
       setFornecedores(fornecedoresList || []);
       setCarteira(carteiraList || []);
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
     }
@@ -149,7 +148,6 @@ export default function MeusPedidos() {
         setSelectedPedido(pedidoAtualizado);
       }
     } catch (error) {
-      console.error('Erro ao confirmar:', error);
       alert('Erro ao registrar confirmação. Tente novamente.');
     }
   };
@@ -172,7 +170,6 @@ export default function MeusPedidos() {
       loadData();
       setShowFinanceiroModal(false);
     } catch (error) {
-      console.error('Erro ao enviar comprovante:', error);
       alert('Erro ao enviar comprovante. Tente novamente.');
     } finally {
       setUploadingComprovante(false);

@@ -4,7 +4,6 @@ import { mockAuth } from './mockAuth';
 
 // Se Supabase não configurado, usa mock
 if (!isSupabaseConfigured()) {
-  console.warn('⚠️ Supabase não configurado. Usando Mock Auth.');
 }
 
 export const supabaseAuth = {
@@ -13,7 +12,6 @@ export const supabaseAuth = {
     // Se Supabase configurado, usa Supabase
     if (isSupabaseConfigured()) {
       try {
-        console.log('🔐 Tentando login com Supabase:', email);
 
         // Login com Supabase Auth
         const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -22,11 +20,9 @@ export const supabaseAuth = {
         });
 
         if (authError) {
-          console.error('❌ Erro Supabase Auth:', authError);
           throw authError;
         }
 
-        console.log('✅ Supabase Auth sucesso, buscando dados do usuário...');
 
         // Buscar dados completos do usuário na tabela users
         const { data: userData, error: userError } = await supabase
@@ -36,11 +32,9 @@ export const supabaseAuth = {
           .single();
 
         if (userError) {
-          console.error('❌ Erro ao buscar usuário:', userError);
           throw userError;
         }
 
-        console.log('✅ Login Supabase completo:', userData.email);
 
         // Atualizar last_login
         await supabase
@@ -50,13 +44,11 @@ export const supabaseAuth = {
 
         return userData;
       } catch (error) {
-        console.error('❌ Erro no login Supabase:', error);
         throw new Error(error.message || 'Erro ao fazer login');
       }
     }
 
     // Fallback para Mock
-    console.log('🔐 Usando Mock Auth (Supabase não configurado)');
     return await mockAuth.login(email, password);
   },
 
@@ -64,18 +56,15 @@ export const supabaseAuth = {
   async logout() {
     if (isSupabaseConfigured()) {
       try {
-        console.log('👋 Logout Supabase');
         const { error } = await supabase.auth.signOut();
         if (error) throw error;
         return true;
       } catch (error) {
-        console.error('❌ Erro no logout Supabase:', error);
         throw new Error(error.message);
       }
     }
 
     // Fallback para Mock
-    console.log('👋 Logout Mock');
     return await mockAuth.logout();
   },
 
@@ -100,7 +89,6 @@ export const supabaseAuth = {
           throw userError;
         }
 
-        console.log('✅ Usuário autenticado (Supabase):', userData.email);
         return userData;
       } catch (error) {
         throw new Error(error.message || 'Não autenticado');
@@ -138,16 +126,13 @@ export const supabaseAuth = {
 
         if (createError) throw createError;
 
-        console.log('✅ Signup Supabase completo:', newUser.email);
         return newUser;
       } catch (error) {
-        console.error('❌ Erro no signup Supabase:', error);
         throw new Error(error.message);
       }
     }
 
     // Fallback para Mock
-    console.log('📝 Usando Mock Signup');
     return await mockAuth.signup(userData);
   },
 
@@ -184,10 +169,8 @@ export const supabaseAuth = {
 
         if (error) throw error;
 
-        console.log('✅ Perfil atualizado (Supabase)');
         return data;
       } catch (error) {
-        console.error('❌ Erro ao atualizar perfil:', error);
         throw new Error(error.message);
       }
     }
@@ -206,10 +189,8 @@ export const supabaseAuth = {
 
         if (error) throw error;
 
-        console.log('✅ Email de reset enviado (Supabase)');
         return { message: 'Email de recuperação enviado' };
       } catch (error) {
-        console.error('❌ Erro no reset password:', error);
         throw new Error(error.message);
       }
     }
@@ -228,10 +209,8 @@ export const supabaseAuth = {
 
         if (error) throw error;
 
-        console.log('✅ Senha alterada (Supabase)');
         return { message: 'Senha alterada com sucesso' };
       } catch (error) {
-        console.error('❌ Erro ao alterar senha:', error);
         throw new Error(error.message);
       }
     }
@@ -269,10 +248,8 @@ export const supabaseAuth = {
 
         if (error) throw error;
 
-        console.log(`✅ Listados ${data.length} usuários (Supabase)`);
         return data;
       } catch (error) {
-        console.error('❌ Erro ao listar usuários:', error);
         throw new Error(error.message);
       }
     }

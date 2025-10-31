@@ -82,7 +82,6 @@ O usuário já pode fazer login no sistema!`);
       onSuccess();
 
     } catch (error) {
-      console.error('Erro detalhado ao salvar usuário:', error);
       
       if (!useAlternativeMethod && !user) {
         setUseAlternativeMethod(true);

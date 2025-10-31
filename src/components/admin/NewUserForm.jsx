@@ -88,7 +88,6 @@ export default function NewUserForm({ onSuccess, onCancel }) {
         setFornecedores(fornecedoresList);
         setCurrentUser(user);
       } catch (error) {
-        console.error('Erro ao carregar dados:', error);
       }
     };
     loadData();
@@ -146,7 +145,6 @@ As informações detalhadas estão na aba "Usuários Pendentes".`);
       
       onSuccess();
     } catch (error) {
-      console.error('Erro ao salvar usuário pendente:', error);
       alert('Falha ao registrar usuário. Tente novamente.');
     } finally {
       setLoading(false);

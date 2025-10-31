@@ -51,7 +51,6 @@ export default function ProductVariantsManager({ variantes, onChange, gradeConfi
       
       updateVariante(varianteId, 'fotos_urls', novasFotos);
     } catch (error) {
-      console.error('Erro ao fazer upload:', error);
       alert('Erro ao fazer upload das imagens');
     } finally {
       setUploadingImages(prev => ({ ...prev, [varianteId]: false }));

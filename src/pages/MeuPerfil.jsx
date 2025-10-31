@@ -58,7 +58,6 @@ export default function MeuPerfil() {
         setPedidos(pedidosList || []);
       }
     } catch (error) {
-      console.error('Erro ao carregar perfil:', error);
     } finally {
       setLoading(false);
     }
@@ -72,7 +71,6 @@ export default function MeuPerfil() {
       setEditando(false);
       loadData();
     } catch (error) {
-      console.error('Erro ao salvar:', error);
       alert('Erro ao atualizar perfil.');
     } finally {
       setSalvando(false);
@@ -100,9 +98,7 @@ export default function MeuPerfil() {
           estado: endereco.estado
         }));
 
-        console.log('✅ Endereço preenchido automaticamente');
       } catch (error) {
-        console.error('❌ Erro ao buscar CEP:', error);
         alert('CEP não encontrado. Verifique o número digitado.');
       } finally {
         setBuscandoCep(false);
@@ -157,7 +153,6 @@ export default function MeuPerfil() {
       alert('Avatar atualizado com sucesso!');
       loadData(); // Recarregar dados do usuário
     } catch (error) {
-      console.error('Erro ao fazer upload do avatar:', error);
       alert('Erro ao atualizar avatar: ' + error.message);
     } finally {
       setUploadingAvatar(false);

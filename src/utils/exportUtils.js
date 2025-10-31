@@ -118,7 +118,6 @@ export const exportToPDF = async (data, columns, title = 'Relatório', filename 
     // Salvar PDF
     doc.save(filename);
   } catch (error) {
-    console.error('Erro ao gerar PDF:', error);
 
     // Fallback: gerar relatório em texto
     const text = generateTextReport(data, columns, title);

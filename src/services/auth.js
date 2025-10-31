@@ -54,7 +54,6 @@ class AuthService {
           timestamp: Date.now()
         });
 
-        console.log('AuthService: Login realizado com sucesso (Supabase)', userData.email);
 
         return this.handleSuccess({
           user: userData,
@@ -70,14 +69,12 @@ class AuthService {
         timestamp: Date.now()
       });
 
-      console.log('AuthService: Login realizado com sucesso (Mock)', user.email);
 
       return this.handleSuccess({
         user,
         session: { accessToken: 'mock-token' }
       });
     } catch (error) {
-      console.error('AuthService: Erro no login', error);
       return this.handleError(error);
     }
   }
@@ -105,14 +102,12 @@ class AuthService {
         timestamp: Date.now()
       });
 
-      console.log('AuthService: Registro realizado com sucesso', user.email);
 
       return this.handleSuccess({
         user,
         session: { accessToken: 'mock-token' }
       });
     } catch (error) {
-      console.error('AuthService: Erro no registro', error);
       return this.handleError(error);
     }
   }
@@ -146,7 +141,6 @@ class AuthService {
           timestamp: Date.now()
         });
 
-        console.log('AuthService: Usuário recuperado (Supabase)', userData.email);
 
         return this.handleSuccess(userData);
       }
@@ -161,14 +155,12 @@ class AuthService {
       // Verifica timeout da sessão
       const now = Date.now();
       if (now - session.timestamp > this.SESSION_TIMEOUT) {
-        console.warn('AuthService: Sessão expirada');
         this.clearSession();
         throw new Error('Sessão expirada');
       }
 
       // Se tem sessão válida em cache, retorna
       if (session.user) {
-        console.log('AuthService: Usuário recuperado do cache (Mock)', session.user.email);
         return this.handleSuccess(session.user);
       }
 
@@ -180,11 +172,9 @@ class AuthService {
         timestamp: now
       });
 
-      console.log('AuthService: Usuário recuperado (Mock)', user.email);
 
       return this.handleSuccess(user);
     } catch (error) {
-      console.error('AuthService: Erro ao recuperar usuário', error);
       this.clearSession();
       return this.handleError(error);
     }
@@ -202,7 +192,6 @@ class AuthService {
         if (error) throw error;
 
         this.clearSession();
-        console.log('AuthService: Logout realizado com sucesso (Supabase)');
 
         return this.handleSuccess(true);
       }
@@ -211,11 +200,9 @@ class AuthService {
       await mockAuth.logout();
       this.clearSession();
 
-      console.log('AuthService: Logout realizado com sucesso (Mock)');
 
       return this.handleSuccess(true);
     } catch (error) {
-      console.error('AuthService: Erro no logout', error);
       return this.handleError(error);
     }
   }
@@ -242,11 +229,9 @@ class AuthService {
         if (error) throw error;
         updatedUser = data;
 
-        console.log('AuthService: Perfil atualizado (Supabase)', updatedUser.email);
       } else {
         // Fallback para mockAuth
         updatedUser = await mockAuth.updateProfile(updateData);
-        console.log('AuthService: Perfil atualizado (Mock)', updatedUser.email);
       }
 
       // Atualiza sessão
@@ -260,7 +245,6 @@ class AuthService {
 
       return this.handleSuccess(updatedUser);
     } catch (error) {
-      console.error('AuthService: Erro ao atualizar perfil', error);
       return this.handleError(error);
     }
   }
@@ -277,7 +261,6 @@ class AuthService {
 
       return this.handleSuccess(exists);
     } catch (error) {
-      console.error('AuthService: Erro ao verificar email', error);
       return this.handleError(error);
     }
   }
@@ -291,11 +274,9 @@ class AuthService {
     try {
       await mockAuth.resetPassword(email);
 
-      console.log('AuthService: Reset de senha enviado para', email);
 
       return this.handleSuccess(true);
     } catch (error) {
-      console.error('AuthService: Erro ao resetar senha', error);
       return this.handleError(error);
     }
   }
@@ -310,11 +291,9 @@ class AuthService {
     try {
       await mockAuth.changePassword(oldPassword, newPassword);
 
-      console.log('AuthService: Senha atualizada com sucesso');
 
       return this.handleSuccess(true);
     } catch (error) {
-      console.error('AuthService: Erro ao atualizar senha', error);
       return this.handleError(error);
     }
   }
@@ -356,7 +335,6 @@ class AuthService {
       try {
         localStorage.setItem(this.SESSION_KEY, JSON.stringify(session));
       } catch (error) {
-        console.error('Erro ao salvar sessão:', error);
       }
     }
   }
@@ -371,7 +349,6 @@ class AuthService {
         const data = localStorage.getItem(this.SESSION_KEY);
         return data ? JSON.parse(data) : null;
       } catch (error) {
-        console.error('Erro ao recuperar sessão:', error);
         return null;
       }
     }

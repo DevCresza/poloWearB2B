@@ -45,7 +45,6 @@ export default function NewUserFlow({ onSuccess, onCancel }) {
       setStep('success');
 
     } catch (error) {
-      console.error('Erro ao criar usuário:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Ocorreu um erro desconhecido.';
       alert(`Falha ao criar usuário: ${errorMessage}`);
     } finally {

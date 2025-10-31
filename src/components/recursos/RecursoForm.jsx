@@ -47,7 +47,6 @@ export default function RecursoForm({ recurso, onClose, onSuccess }) {
       const fileUrl = result.url || result.file_url;
       setFormData({ ...formData, [field]: fileUrl });
     } catch (error) {
-      console.error('Erro ao fazer upload:', error);
       alert('Erro ao fazer upload do arquivo.');
     } finally {
       setUploadingFile(false);
@@ -103,7 +102,6 @@ export default function RecursoForm({ recurso, onClose, onSuccess }) {
       alert(recurso ? 'Conteúdo atualizado com sucesso!' : 'Conteúdo criado com sucesso!');
       onSuccess();
     } catch (error) {
-      console.error('Erro ao salvar Conteúdo:', error);
       alert('Erro ao salvar Conteúdo. Tente novamente.');
     } finally {
       setSalvando(false);

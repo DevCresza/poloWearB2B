@@ -27,7 +27,6 @@ export default function WhatsappModal({ contacts, onClose }) {
       const templatesList = await WhatsappTemplate.list();
       setTemplates(templatesList.filter(t => t.ativo));
     } catch (error) {
-      console.error('Erro ao carregar templates:', error);
     }
   };
 

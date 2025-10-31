@@ -22,7 +22,6 @@ export default function PendingUserDetails({ pendingUser, onClose, onUpdate, for
       onUpdate();
       onClose();
     } catch (error) {
-      console.error('Erro ao atualizar status:', error);
       alert('Falha ao atualizar status.');
     } finally {
       setUpdating(false);
@@ -37,7 +36,6 @@ export default function PendingUserDetails({ pendingUser, onClose, onUpdate, for
         onUpdate();
         onClose();
       } catch (error) {
-        console.error('Erro ao excluir:', error);
         alert('Falha ao excluir usuário.');
       }
     }

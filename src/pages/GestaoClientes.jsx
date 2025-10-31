@@ -53,7 +53,6 @@ export default function GestaoClientes() {
       const usersList = await User.list();
       setUsers(usersList);
     } catch (error) {
-      console.error("Erro ao carregar usuários:", error);
     } finally {
       setLoading(false);
     }
@@ -77,7 +76,6 @@ export default function GestaoClientes() {
         alert('Usuário excluído com sucesso.');
         loadUsers();
       } catch (error) {
-        console.error("Erro ao excluir usuário:", error);
         alert('Falha ao excluir o usuário. Tente novamente.');
       }
     }

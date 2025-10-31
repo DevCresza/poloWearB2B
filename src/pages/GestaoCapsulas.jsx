@@ -21,7 +21,6 @@ export default function GestaoCapsulas() {
       const capsulasList = await Capsula.list('-created_at');
       setCapsulas(capsulasList);
     } catch (error) {
-      console.error("Erro ao carregar cápsulas:", error);
     } finally {
       setLoading(false);
     }
@@ -38,7 +37,6 @@ export default function GestaoCapsulas() {
         await Capsula.delete(capsulaId);
         loadCapsulas();
       } catch (error) {
-        console.error("Erro ao excluir cápsula:", error);
         alert('Falha ao excluir a cápsula.');
       }
     }

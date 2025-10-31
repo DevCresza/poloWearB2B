@@ -32,7 +32,6 @@ class ProductService extends BaseService {
         if (fornecedor) {
           filters.fornecedor_id = fornecedor.id;
         } else {
-          console.warn('Fornecedor não encontrado para usuário:', currentUser.id);
           return this.handleSuccess([]);
         }
       }
@@ -175,7 +174,6 @@ class ProductService extends BaseService {
         data_movimentacao: new Date().toISOString()
       });
 
-      console.log('ProductService: Estoque atualizado', {
         produtoId,
         anterior: produto.estoque_atual,
         novo: novoEstoque

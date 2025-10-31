@@ -4,7 +4,6 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('⚠️ Supabase environment variables not found. Using mock data.')
 }
 
 export const supabase = supabaseUrl && supabaseAnonKey
@@ -26,7 +25,6 @@ export const supabase = supabaseUrl && supabaseAnonKey
 // Helper para converter erro do Supabase
 export const handleSupabaseError = (error) => {
   if (error?.message) {
-    console.error('Supabase error:', error)
     return {
       success: false,
       error: error.message,
@@ -57,7 +55,6 @@ export const getCurrentUser = async () => {
     if (error) throw error
     return user
   } catch (error) {
-    console.error('Error getting current user:', error)
     return null
   }
 }
@@ -71,7 +68,6 @@ export const signOut = async () => {
     if (error) throw error
     return { success: true }
   } catch (error) {
-    console.error('Error signing out:', error)
     return handleSupabaseError(error)
   }
 }

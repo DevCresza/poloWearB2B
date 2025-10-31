@@ -30,7 +30,6 @@ class PedidoService extends BaseService {
                     produto
                   };
                 } catch (error) {
-                  console.warn(`Produto ${item.produto_id} não encontrado`);
                   return item;
                 }
               })
@@ -74,7 +73,6 @@ class PedidoService extends BaseService {
         if (fornecedor) {
           targetFornecedorId = fornecedor.id;
         } else {
-          console.warn('Fornecedor não encontrado para usuário:', currentUser.id);
           return this.handleSuccess([]);
         }
       }
@@ -165,7 +163,6 @@ class PedidoService extends BaseService {
         ...dadosEntrega
       });
 
-      console.log('PedidoService: Pedido criado', pedido.id);
 
       return this.handleSuccess(pedido);
     } catch (error) {
@@ -193,7 +190,6 @@ class PedidoService extends BaseService {
         updated_at: new Date().toISOString()
       });
 
-      console.log('PedidoService: Status atualizado', {
         pedidoId,
         status: novoStatus
       });

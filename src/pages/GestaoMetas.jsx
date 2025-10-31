@@ -59,7 +59,6 @@ export default function GestaoMetas() {
       setFornecedores(fornecedoresList);
       setClientes(clientesList);
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
     }
@@ -100,7 +99,6 @@ export default function GestaoMetas() {
             }
           });
         } catch (e) {
-          console.error('Erro ao processar itens:', e);
         }
       });
 
@@ -132,7 +130,6 @@ export default function GestaoMetas() {
       meta.percentual_pecas = percentualPecas;
       meta.status = status;
     } catch (error) {
-      console.error('Erro ao atualizar realizado da meta:', error);
     }
   };
 
@@ -158,7 +155,6 @@ export default function GestaoMetas() {
       });
       loadData();
     } catch (error) {
-      console.error('Erro ao salvar meta:', error);
       alert('Erro ao salvar meta');
     }
   };

@@ -54,7 +54,6 @@ export default function Recursos() {
 
       setRecursos(recursosList || []);
     } catch (error) {
-      console.error('Erro ao carregar recursos:', error);
     } finally {
       setLoading(false);
     }
@@ -66,7 +65,6 @@ export default function Recursos() {
         visualizacoes: (recurso.visualizacoes || 0) + 1
       });
     } catch (error) {
-      console.error('Erro ao atualizar visualizações:', error);
     }
 
     setSelectedRecurso(recurso);

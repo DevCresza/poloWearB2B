@@ -19,9 +19,7 @@ const loadUserFromStorage = () => {
     if (savedUser) {
       try {
         currentUser = JSON.parse(savedUser);
-        console.log('Usuário carregado do localStorage:', currentUser.email);
       } catch (error) {
-        console.error('Erro ao carregar usuário:', error);
         localStorage.removeItem('currentUser');
       }
     }
@@ -71,7 +69,6 @@ export const mockAuth = {
     currentUser = user;
     saveUserToStorage(user);
 
-    console.log('Login realizado com sucesso:', user.email);
 
     return user;
   },
@@ -80,7 +77,6 @@ export const mockAuth = {
   async logout() {
     await delay();
 
-    console.log('Logout realizado:', currentUser?.email);
 
     currentUser = null;
     saveUserToStorage(null);
@@ -110,7 +106,6 @@ export const mockAuth = {
     currentUser = newUser;
     saveUserToStorage(newUser);
 
-    console.log('Usuário criado:', newUser.email);
 
     return newUser;
   },
@@ -159,7 +154,6 @@ export const mockAuth = {
 
     saveUserToStorage(currentUser);
 
-    console.log('Perfil atualizado:', currentUser.email);
 
     return currentUser;
   },
@@ -173,7 +167,6 @@ export const mockAuth = {
       throw new Error('Usuário não encontrado');
     }
 
-    console.log('Reset password para:', email);
     return { message: 'Email de recuperação enviado' };
   },
 
@@ -189,7 +182,6 @@ export const mockAuth = {
       throw new Error('Nova senha deve ter pelo menos 6 caracteres');
     }
 
-    console.log('Senha alterada para:', currentUser.email);
     return { message: 'Senha alterada com sucesso' };
   },
 };
@@ -199,7 +191,5 @@ export const getMockUser = () => currentUser;
 
 // Log para debug
 if (currentUser) {
-  console.log('MockAuth: Usuário já autenticado:', currentUser.email);
 } else {
-  console.log('MockAuth: Nenhum usuário autenticado');
 }

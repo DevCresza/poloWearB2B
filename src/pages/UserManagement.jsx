@@ -58,7 +58,6 @@ export default function UserManagement() {
       setFornecedores(fornecedoresList || []);
       setFornecedorMap(new Map(fornecedoresList.map(f => [f.id, f.nome_marca])));
     } catch(error) {
-      console.error("Erro ao carregar dados", error);
     } finally {
       setLoading(false);
     }
@@ -94,7 +93,6 @@ export default function UserManagement() {
       await User.update(userId, { role: newRole });
       await loadData();
     } catch (error) {
-      console.error('Falha ao atualizar função:', error);
       alert('Não foi possível atualizar a função do usuário.');
     } finally {
       setUpdatingUserId(null);
@@ -133,7 +131,6 @@ export default function UserManagement() {
         alert('Usuário excluído com sucesso.');
         loadData();
       } catch (error) {
-        console.error("Erro ao excluir usuário:", error);
         alert('Falha ao excluir o usuário. Tente novamente.');
       }
     }

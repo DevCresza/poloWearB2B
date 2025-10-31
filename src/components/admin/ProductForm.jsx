@@ -83,7 +83,6 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
           ? JSON.parse(produto.grade_configuracao) 
           : produto.grade_configuracao || grade;
       } catch (e) {
-        console.error('Erro ao parsear grade:', e);
       }
 
       try {
@@ -91,7 +90,6 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
           ? JSON.parse(produto.fotos) 
           : produto.fotos || fotos;
       } catch (e) {
-        console.error('Erro ao parsear fotos:', e);
       }
 
       try {
@@ -99,7 +97,6 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
           ? JSON.parse(produto.variantes_cor) 
           : produto.variantes_cor || variantes;
       } catch (e) {
-        console.error('Erro ao parsear variantes:', e);
       }
 
       setFormData({
@@ -123,7 +120,6 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
       const fornecedoresList = await Fornecedor.list();
       setFornecedores(fornecedoresList);
     } catch (error) {
-      console.error('Erro ao carregar fornecedores:', error);
     }
   };
 
@@ -270,7 +266,6 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
       alert('Produto salvo com sucesso!');
       onSuccess();
     } catch (error) {
-      console.error('Erro ao salvar produto:', error);
       alert('Erro ao salvar produto. Verifique os campos e tente novamente.' + (error.message || ''));
     } finally {
       setSubmitting(false);

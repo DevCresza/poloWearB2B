@@ -68,7 +68,6 @@ export default function Catalogo() {
       });
       setCapsulas(capsulasList || []);
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
     }
@@ -155,7 +154,6 @@ export default function Catalogo() {
       const fotos = typeof produto.fotos === 'string' ? JSON.parse(produto.fotos) : produto.fotos;
       return fotos && fotos.length > 0 ? fotos[0] : null;
     } catch (e) {
-      console.error('Erro ao parsear fotos:', e);
       return null;
     }
   };
@@ -754,7 +752,6 @@ export default function Catalogo() {
                       ? JSON.parse(selectedProduto.variantes_cor) 
                       : selectedProduto.variantes_cor;
                   } catch (e) {
-                    console.error('Erro ao parsear variantes:', e);
                   }
                   
                   return variantes.length > 0 && (

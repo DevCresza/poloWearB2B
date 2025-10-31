@@ -36,7 +36,6 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
           quantidades = capsula.produtos_quantidades;
         }
       } catch (e) {
-        console.error('Erro ao parsear produtos_quantidades:', e);
         quantidades = {};
       }
 
@@ -55,7 +54,6 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
         const produtosList = await Produto.list();
         setAllProdutos(produtosList);
       } catch (error) {
-        console.error("Erro ao carregar produtos:", error);
       }
     };
     loadProdutos();
@@ -120,7 +118,6 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
       }
       onSuccess();
     } catch (error) {
-      console.error('Erro ao salvar cápsula:', error);
       alert('Falha ao salvar a cápsula.');
     } finally {
       setLoading(false);

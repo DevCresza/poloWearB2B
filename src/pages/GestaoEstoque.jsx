@@ -71,7 +71,6 @@ export default function GestaoEstoque() {
             movimentacoesList = [];
           }
         } else {
-          console.warn('Fornecedor não encontrado para usuário:', currentUser.id);
           produtosList = [];
           fornecedoresList = [];
           movimentacoesList = [];
@@ -87,7 +86,6 @@ export default function GestaoEstoque() {
       setFornecedores(fornecedoresList || []);
       setMovimentacoes(movimentacoesList || []);
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
     }

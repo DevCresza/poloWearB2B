@@ -29,7 +29,6 @@ export default function RecursoDetailsModal({ recurso, onClose, onEdit, onDelete
         alert('Recurso excluído com sucesso!');
         onDelete();
       } catch (error) {
-        console.error('Erro ao excluir:', error);
         alert('Erro ao excluir recurso.');
       }
     }
@@ -50,7 +49,6 @@ export default function RecursoDetailsModal({ recurso, onClose, onEdit, onDelete
               videoId = url.pathname.slice(1);
             }
           } catch (e) {
-            console.error('URL inválida:', e);
           }
 
           if (videoId) {

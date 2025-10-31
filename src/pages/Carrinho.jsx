@@ -44,7 +44,6 @@ export default function Carrinho() {
       const fornecedoresList = await Fornecedor.list();
       setFornecedores(fornecedoresList || []);
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
     }
@@ -69,7 +68,6 @@ export default function Carrinho() {
       const fotos = typeof item.fotos === 'string' ? JSON.parse(item.fotos) : item.fotos;
       return fotos && fotos.length > 0 ? fotos[0] : null;
     } catch (e) {
-      console.error('Erro ao parsear fotos:', e);
       return null;
     }
   };
@@ -228,7 +226,6 @@ export default function Carrinho() {
       try {
         await base44.functions.invoke('notificarPedidoFornecedor', { pedidoId: pedido.id });
       } catch (notifError) {
-        console.error('Erro ao enviar notificação ao fornecedor:', notifError);
       }
 
       const novoCarrinho = carrinho.filter(item => item.fornecedor_id !== fornecedorId);
@@ -249,7 +246,6 @@ export default function Carrinho() {
         navigate(createPageUrl('MeusPedidos'));
       }
     } catch (error) {
-      console.error('Erro ao finalizar compra:', error);
       alert('Erro ao processar o pedido. Tente novamente.');
     } finally {
       setFinalizando(prev => ({ ...prev, [fornecedorId]: false }));

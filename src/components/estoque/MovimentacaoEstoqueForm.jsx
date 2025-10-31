@@ -83,7 +83,6 @@ export default function MovimentacaoEstoqueForm({ produto, fornecedor, onClose, 
       alert('Movimentação registrada com sucesso!');
       onSuccess();
     } catch (error) {
-      console.error('Erro ao registrar movimentação:', error);
       alert('Erro ao registrar movimentação. Tente novamente.');
     } finally {
       setSalvando(false);

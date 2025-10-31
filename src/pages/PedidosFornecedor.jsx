@@ -91,7 +91,6 @@ export default function PedidosFornecedor() {
       const fornecedoresList = await Fornecedor.list(); // Fetch all suppliers
       setFornecedores(fornecedoresList);
     } catch (error) {
-      console.error('Erro ao carregar pedidos:', error);
     } finally {
       setLoading(false);
     }
@@ -145,7 +144,6 @@ export default function PedidosFornecedor() {
       setDataEntrega('');
       loadPedidos(); // Changed from loadData
     } catch (error) {
-      console.error('Erro ao aprovar pedido:', error);
       alert('Erro ao aprovar pedido');
     }
   };
@@ -188,7 +186,6 @@ export default function PedidosFornecedor() {
       setMotivoRecusa('');
       loadPedidos(); // Changed from loadData
     } catch (error) {
-      console.error('Erro ao recusar pedido:', error);
       alert('Erro ao recusar pedido');
     }
   };
@@ -277,7 +274,6 @@ export default function PedidosFornecedor() {
       resetFaturarForm();
       loadPedidos(); // Changed from loadData
     } catch (error) {
-      console.error('Erro ao faturar:', error);
       alert('Erro ao faturar pedido');
     } finally {
       setUploading(false);
@@ -327,7 +323,6 @@ export default function PedidosFornecedor() {
       resetEnvioForm();
       loadPedidos(); // Changed from loadData
     } catch (error) {
-      console.error('Erro ao atualizar envio:', error);
       alert('Erro ao atualizar informações de envio');
     }
   };
@@ -369,7 +364,6 @@ export default function PedidosFornecedor() {
       alert('Método de pagamento alterado!');
       loadPedidos(); // Changed from loadData
     } catch (error) {
-      console.error('Erro ao alterar método:', error);
       alert('Erro ao alterar método de pagamento');
     }
   };
@@ -395,7 +389,6 @@ export default function PedidosFornecedor() {
       window.URL.revokeObjectURL(url);
       a.remove();
     } catch (error) {
-      console.error('Erro ao exportar PDF:', error);
       alert('Erro ao exportar relatório');
     }
   };

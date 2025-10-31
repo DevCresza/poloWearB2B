@@ -69,7 +69,6 @@ export default function HistoricoCompras() {
 
       calculateStats(pedidosList, produtosList);
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
     }
@@ -103,7 +102,6 @@ export default function HistoricoCompras() {
           }
         });
       } catch (e) {
-        console.error('Erro ao processar itens:', e);
       }
     });
 
@@ -166,7 +164,6 @@ export default function HistoricoCompras() {
           }
         });
       } catch (e) {
-        console.error('Erro:', e);
       }
     });
 
@@ -249,7 +246,6 @@ export default function HistoricoCompras() {
 
       setSugestoesIA(response);
     } catch (error) {
-      console.error('Erro ao gerar sugestões:', error);
       alert('Não foi possível gerar sugestões no momento.');
     } finally {
       setLoadingSugestoes(false);
@@ -322,7 +318,6 @@ export default function HistoricoCompras() {
         );
       }
     } catch (error) {
-      console.error('Erro ao exportar:', error);
       alert('Erro ao exportar dados.');
     }
   };

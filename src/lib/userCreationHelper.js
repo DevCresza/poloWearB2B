@@ -61,14 +61,11 @@ export async function createUserWithAccess(userData) {
         });
 
         if (signUpError) {
-          console.error('❌ Erro ao criar no Supabase Auth:', signUpError);
           throw new Error(`Erro ao criar autenticação: ${signUpError.message}`);
         }
 
         authUserId = signUpData.user?.id;
-        console.log('✅ Usuário criado no Supabase Auth:', authUserId);
       } catch (authError) {
-        console.error('❌ Erro no Supabase Auth:', authError);
         throw authError;
       }
     }
@@ -105,18 +102,14 @@ export async function createUserWithAccess(userData) {
     let createdUser;
     try {
       createdUser = await UserTable.create(completeUserData);
-      console.log('✅ Usuário criado na tabela users:', createdUser.id);
     } catch (dbError) {
-      console.error('❌ Erro ao criar na tabela users:', dbError);
 
       // Se criou no Auth mas falhou no DB, tentar deletar do Auth
       if (isSupabaseConfigured() && authUserId) {
         try {
           // Como não temos admin API, fazer logout
           await supabase.auth.signOut();
-          console.log('🔄 Logout realizado devido a erro no DB');
         } catch (cleanupError) {
-          console.error('❌ Erro ao fazer cleanup:', cleanupError);
         }
       }
 
@@ -126,9 +119,7 @@ export async function createUserWithAccess(userData) {
     // 6. Enviar email com credenciais
     try {
       await sendWelcomeEmail(createdUser, password);
-      console.log('✅ Email de boas-vindas enviado para:', createdUser.email);
     } catch (emailError) {
-      console.error('⚠️ Erro ao enviar email (usuário criado com sucesso):', emailError);
       // Não falhar se o email não enviar
     }
 
@@ -139,7 +130,6 @@ export async function createUserWithAccess(userData) {
     };
 
   } catch (error) {
-    console.error('❌ Erro ao criar usuário:', error);
     return {
       success: false,
       error: error.message || 'Erro desconhecido ao criar usuário'

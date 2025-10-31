@@ -40,7 +40,6 @@ export const consultarCNPJ = async ({ cnpj }) => {
 export const exportPedidosPDF = async ({ pedidos, filters }) => {
   await delay();
 
-  console.log('Exportando pedidos para PDF:', pedidos?.length || 'todos');
 
   // Simula geração de PDF
   const pdfUrl = `https://exemplo.com/pedidos-${Date.now()}.pdf`;
@@ -56,7 +55,6 @@ export const exportPedidosPDF = async ({ pedidos, filters }) => {
 export const exportPedidosExcel = async ({ pedidos, filters }) => {
   await delay();
 
-  console.log('Exportando pedidos para Excel:', pedidos?.length || 'todos');
 
   // Simula geração de Excel
   const excelUrl = `https://exemplo.com/pedidos-${Date.now()}.xlsx`;
@@ -72,7 +70,6 @@ export const exportPedidosExcel = async ({ pedidos, filters }) => {
 export const exportPedidosFornecedor = async ({ fornecedor_id, filters }) => {
   await delay();
 
-  console.log('Exportando pedidos do fornecedor:', fornecedor_id);
 
   const pdfUrl = `https://exemplo.com/pedidos-fornecedor-${Date.now()}.pdf`;
 
@@ -87,7 +84,6 @@ export const exportPedidosFornecedor = async ({ fornecedor_id, filters }) => {
 export const exportLeadsCSV = async ({ leads, filters }) => {
   await delay();
 
-  console.log('Exportando leads para CSV:', leads?.length || 'todos');
 
   const csvUrl = `https://exemplo.com/leads-${Date.now()}.csv`;
 
@@ -102,7 +98,6 @@ export const exportLeadsCSV = async ({ leads, filters }) => {
 export const notificarPedidoFornecedor = async ({ pedido_id, fornecedor_id }) => {
   await delay();
 
-  console.log('Notificando fornecedor sobre pedido:', pedido_id);
 
   return {
     success: true,
@@ -115,7 +110,6 @@ export const notificarPedidoFornecedor = async ({ pedido_id, fornecedor_id }) =>
 export const notificarMudancaStatus = async ({ pedido_id, novo_status, destinatarios }) => {
   await delay();
 
-  console.log('Notificando mudança de status:', pedido_id, novo_status);
 
   return {
     success: true,
@@ -128,7 +122,6 @@ export const notificarMudancaStatus = async ({ pedido_id, novo_status, destinata
 export const enviarAlertaVencimento = async ({ titulo_id, cliente_id, dias_vencimento }) => {
   await delay();
 
-  console.log('Enviando alerta de vencimento:', titulo_id, dias_vencimento, 'dias');
 
   return {
     success: true,
@@ -141,7 +134,6 @@ export const enviarAlertaVencimento = async ({ titulo_id, cliente_id, dias_venci
 export const verificarVencimentosTitulos = async ({ dias_antecedencia = 5 }) => {
   await delay();
 
-  console.log('Verificando vencimentos com', dias_antecedencia, 'dias de antecedência');
 
   // Simula resultado
   const hoje = new Date();
@@ -166,7 +158,6 @@ export const verificarVencimentosTitulos = async ({ dias_antecedencia = 5 }) => 
 export const atualizarEstoque = async ({ produto_id, quantidade, tipo, motivo }) => {
   await delay();
 
-  console.log('Atualizando estoque:', produto_id, tipo, quantidade);
 
   // Simula atualização
   return {
@@ -181,8 +172,6 @@ export const atualizarEstoque = async ({ produto_id, quantidade, tipo, motivo })
 export const enviarWhatsApp = async ({ to, message, template_id, variables }) => {
   await delay();
 
-  console.log('Enviando WhatsApp para:', to);
-  console.log('Mensagem:', message);
 
   // Simula envio
   return {
@@ -198,7 +187,6 @@ export const enviarWhatsApp = async ({ to, message, template_id, variables }) =>
 export const verificarBloqueioClientes = async () => {
   await delay();
 
-  console.log('Verificando bloqueio de clientes');
 
   // Simula verificação
   return {

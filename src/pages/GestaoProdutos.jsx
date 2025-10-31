@@ -50,7 +50,6 @@ export default function GestaoProdutos() {
           produtosList = await Produto.filter({ fornecedor_id: fornecedor.id });
           fornecedoresList = [fornecedor];
         } else {
-          console.warn('Fornecedor não encontrado para usuário:', currentUser.id);
           produtosList = [];
           fornecedoresList = [];
         }
@@ -63,7 +62,6 @@ export default function GestaoProdutos() {
       setProdutos(produtosList || []);
       setFornecedores(fornecedoresList || []);
     } catch (error) {
-      console.error("Erro ao carregar dados:", error);
     } finally {
       setLoading(false);
     }
@@ -85,7 +83,6 @@ export default function GestaoProdutos() {
       await Produto.update(produto.id, { is_destaque: isChecked });
       loadData();
     } catch (error) {
-      console.error("Erro ao atualizar destaque:", error);
       alert("Falha ao atualizar o status de destaque do produto.");
     }
   };
@@ -95,7 +92,6 @@ export default function GestaoProdutos() {
       await Produto.update(produto.id, { ativo: isChecked });
       loadData();
     } catch (error) {
-      console.error("Erro ao atualizar status:", error);
       alert("Falha ao atualizar o status do produto.");
     }
   };
@@ -110,7 +106,6 @@ export default function GestaoProdutos() {
       alert('Produto excluído com sucesso!');
       loadData();
     } catch (error) {
-      console.error('Erro ao excluir produto:', error);
       alert('Falha ao excluir o produto. Verifique se não há pedidos vinculados.');
     }
   };
@@ -141,7 +136,6 @@ export default function GestaoProdutos() {
       const fotos = typeof produto.fotos === 'string' ? JSON.parse(produto.fotos) : produto.fotos;
       return fotos && fotos.length > 0 ? fotos[0] : null;
     } catch (e) {
-      console.error('Erro ao parsear fotos:', e);
       return null;
     }
   };
@@ -155,7 +149,6 @@ export default function GestaoProdutos() {
         : produto.grade_configuracao;
       return grade?.tamanhos_disponiveis?.join(', ') || 'N/A';
     } catch (e) {
-      console.error('Erro ao parsear grade:', e);
       return 'N/A';
     }
   };

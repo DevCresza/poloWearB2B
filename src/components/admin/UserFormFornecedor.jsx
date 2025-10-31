@@ -48,7 +48,6 @@ export default function UserFormFornecedor({ onSubmit, onCancel, loading }) {
         const fornecedoresList = await Fornecedor.list();
         setFornecedores(fornecedoresList || []);
       } catch (error) {
-        console.error('Erro ao carregar fornecedores:', error);
       }
     };
     loadFornecedores();
