@@ -1,0 +1,20 @@
+{
+  "name": "PoloWear B2B - Portal de Gestão Multimarcas",
+  "short_name": "PoloWear B2B",
+  "description": "Portal B2B POLO Wear - Sistema completo de gestão para fornecedores, clientes e franqueados",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#667eea",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "lang": "pt-BR"
+}

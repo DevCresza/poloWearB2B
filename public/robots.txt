@@ -1,0 +1,14 @@
+# robots.txt for PoloWear B2B Portal
+
+User-agent: *
+Disallow: /admin
+Disallow: /api
+Disallow: /*.json$
+
+# Allow home and public pages
+Allow: /
+Allow: /Home
+Allow: /Catalogo
+
+# Sitemap (opcional - criar depois se necessário)
+# Sitemap: https://seu-dominio.com/sitemap.xml

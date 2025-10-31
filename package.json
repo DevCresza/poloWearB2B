@@ -1,7 +1,8 @@
 {
-  "name": "base44-app",
+  "name": "polowear-b2b",
+  "description": "Portal B2B POLO Wear - Sistema completo de gestão multimarcas",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
