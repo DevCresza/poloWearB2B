@@ -47,7 +47,7 @@ export default function NewUserFlow({ onSuccess, onCancel }) {
 
     } catch (error) {
       const errorMessage = error.response?.data?.message || error.message || 'Ocorreu um erro desconhecido.';
-      toast.error('Falha ao criar usuário: ${errorMessage}');
+      toast.error(`Falha ao criar usuário: ${errorMessage}`);
     } finally {
       setLoading(false);
     }

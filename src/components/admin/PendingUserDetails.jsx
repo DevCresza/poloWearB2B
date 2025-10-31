@@ -19,7 +19,7 @@ export default function PendingUserDetails({ pendingUser, onClose, onUpdate, for
     setUpdating(true);
     try {
       await PendingUser.update(pendingUser.id, { status: newStatus });
-      toast.success('Status atualizado para: ${newStatus}');
+      toast.success(`Status atualizado para: ${newStatus}`);
       onUpdate();
       onClose();
     } catch (error) {

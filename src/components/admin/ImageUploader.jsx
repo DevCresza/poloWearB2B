@@ -19,7 +19,7 @@ export default function ImageUploader({ images = [], onImagesChange, maxImages =
 
     const remainingSlots = maxImages - images.length;
     if (remainingSlots <= 0) {
-      toast.info('Você pode adicionar no máximo ${maxImages} imagens');
+      toast.info(`Você pode adicionar no máximo ${maxImages} imagens`);
       return;
     }
 

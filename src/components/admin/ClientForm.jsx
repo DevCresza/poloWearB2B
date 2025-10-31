@@ -91,7 +91,7 @@ O usuário já pode fazer login no sistema!`);
       }
       
       const errorMessage = error.response?.data?.message || error.message || 'Ocorreu um erro desconhecido.';
-      toast.error('Falha ao salvar: ${errorMessage}');
+      toast.error(`Falha ao salvar: ${errorMessage}`);
     } finally {
       setLoading(false);
     }

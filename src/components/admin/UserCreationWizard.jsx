@@ -41,7 +41,7 @@ export default function UserCreationWizard({ onSuccess, onCancel }) {
 
     } catch (error) {
       const errorMessage = error.message || 'Ocorreu um erro desconhecido.';
-      toast.error('Falha ao criar usuário: ${errorMessage}');
+      toast.error(`Falha ao criar usuário: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
