@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from 'sonner';
 import {
   Package, TrendingUp, Calendar, Filter, Download,
   Search, BarChart3, DollarSign, ShoppingCart, Sparkles
@@ -246,7 +247,7 @@ export default function HistoricoCompras() {
 
       setSugestoesIA(response);
     } catch (error) {
-      alert('Não foi possível gerar sugestões no momento.');
+      toast.info('Não foi possível gerar sugestões no momento.');
     } finally {
       setLoadingSugestoes(false);
     }
@@ -318,7 +319,7 @@ export default function HistoricoCompras() {
         );
       }
     } catch (error) {
-      alert('Erro ao exportar dados.');
+      toast.error('Erro ao exportar dados.');
     }
   };
 

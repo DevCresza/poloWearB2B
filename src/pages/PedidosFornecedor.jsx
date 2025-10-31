@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Pedido } from '@/api/entities';
+import { toast } from 'sonner';
 import { Produto } from '@/api/entities'; // Not used in this file, but kept from original imports
 import { User } from '@/api/entities';
 import { Carteira } from '@/api/entities';
@@ -108,7 +109,7 @@ export default function PedidosFornecedor() {
 
   const handleAprovar = async () => {
     if (!dataEntrega) {
-      alert('Informe a data prevista de entrega');
+      toast.info('Informe a data prevista de entrega');
       return;
     }
 
@@ -139,18 +140,18 @@ export default function PedidosFornecedor() {
         `
       });
 
-      alert('Pedido aprovado com sucesso!');
+      toast.success('Pedido aprovado com sucesso!');
       setShowApprovalModal(false);
       setDataEntrega('');
       loadPedidos(); // Changed from loadData
     } catch (error) {
-      alert('Erro ao aprovar pedido');
+      toast.error('Erro ao aprovar pedido');
     }
   };
 
   const handleRecusar = async () => {
     if (!motivoRecusa) {
-      alert('Informe o motivo da recusa');
+      toast.info('Informe o motivo da recusa');
       return;
     }
 
@@ -181,18 +182,18 @@ export default function PedidosFornecedor() {
         `
       });
 
-      alert('Pedido recusado');
+      toast.info('Pedido recusado');
       setShowRejectModal(false);
       setMotivoRecusa('');
       loadPedidos(); // Changed from loadData
     } catch (error) {
-      alert('Erro ao recusar pedido');
+      toast.error('Erro ao recusar pedido');
     }
   };
 
   const handleFaturar = async () => {
     if (!nfFile || !nfNumero) {
-      alert('Envie a nota fiscal e informe o número');
+      toast.info('Envie a nota fiscal e informe o número');
       return;
     }
 
@@ -269,12 +270,12 @@ export default function PedidosFornecedor() {
         `
       });
 
-      alert('Pedido faturado com sucesso!');
+      toast.success('Pedido faturado com sucesso!');
       setShowFaturarModal(false);
       resetFaturarForm();
       loadPedidos(); // Changed from loadData
     } catch (error) {
-      alert('Erro ao faturar pedido');
+      toast.error('Erro ao faturar pedido');
     } finally {
       setUploading(false);
     }
@@ -282,7 +283,7 @@ export default function PedidosFornecedor() {
 
   const handleEnviar = async () => {
     if (!transportadora || !dataEnvio) {
-      alert('Preencha todos os campos obrigatórios');
+      toast.error('Preencha todos os campos obrigatórios');
       return;
     }
 
@@ -318,12 +319,12 @@ export default function PedidosFornecedor() {
         `
       });
 
-      alert('Informações de envio salvas!');
+      toast.info('Informações de envio salvas!');
       setShowEnvioModal(false);
       resetEnvioForm();
       loadPedidos(); // Changed from loadData
     } catch (error) {
-      alert('Erro ao atualizar informações de envio');
+      toast.error('Erro ao atualizar informações de envio');
     }
   };
 
@@ -361,17 +362,17 @@ export default function PedidosFornecedor() {
         `
       });
 
-      alert('Método de pagamento alterado!');
+      toast.info('Método de pagamento alterado!');
       loadPedidos(); // Changed from loadData
     } catch (error) {
-      alert('Erro ao alterar método de pagamento');
+      toast.error('Erro ao alterar método de pagamento');
     }
   };
 
   const handleExportPDF = async () => {
     try {
       if (!fornecedorAtual) {
-        alert('Fornecedor não identificado');
+        toast.info('Fornecedor não identificado');
         return;
       }
 
@@ -389,7 +390,7 @@ export default function PedidosFornecedor() {
       window.URL.revokeObjectURL(url);
       a.remove();
     } catch (error) {
-      alert('Erro ao exportar relatório');
+      toast.error('Erro ao exportar relatório');
     }
   };
 
@@ -774,7 +775,7 @@ export default function PedidosFornecedor() {
                         variant="outline"
                         onClick={() => {
                           // Abrir modal de detalhes
-                          alert('Modal de detalhes - TODO');
+                          toast.info('Modal de detalhes - TODO');
                         }}
                       >
                         <Eye className="w-4 h-4 mr-2" />

@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 // Utilitários para exportação de dados para CSV e PDF
 
 /**
@@ -8,7 +9,7 @@
  */
 export const exportToCSV = (data, columns, filename = 'export.csv') => {
   if (!data || data.length === 0) {
-    alert('Não há dados para exportar');
+    toast.info('Não há dados para exportar');
     return;
   }
 
@@ -65,7 +66,7 @@ export const exportToCSV = (data, columns, filename = 'export.csv') => {
  */
 export const exportToPDF = async (data, columns, title = 'Relatório', filename = 'export.pdf') => {
   if (!data || data.length === 0) {
-    alert('Não há dados para exportar');
+    toast.info('Não há dados para exportar');
     return;
   }
 
@@ -133,7 +134,7 @@ export const exportToPDF = async (data, columns, title = 'Relatório', filename 
     link.click();
     document.body.removeChild(link);
 
-    alert('PDF não disponível. Relatório exportado como TXT.');
+    toast.info('PDF não disponível. Relatório exportado como TXT.');
   }
 };
 

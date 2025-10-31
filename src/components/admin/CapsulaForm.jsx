@@ -11,6 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Search, Plus, Minus, Package } from 'lucide-react';
 import ImageUploader from './ImageUploader';
+import { toast } from 'sonner';
 
 export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
   const [formData, setFormData] = useState({
@@ -100,7 +101,7 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (formData.produto_ids.length === 0) {
-      alert('Selecione ao menos um produto para a cápsula.');
+      toast.info('Selecione ao menos um produto para a cápsula.');
       return;
     }
     setLoading(true);
@@ -118,7 +119,7 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
       }
       onSuccess();
     } catch (error) {
-      alert('Falha ao salvar a cápsula.');
+      toast.error('Falha ao salvar a cápsula.');
     } finally {
       setLoading(false);
     }

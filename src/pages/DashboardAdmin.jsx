@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from 'sonner';
 import {
   TrendingUp, TrendingDown, DollarSign, Package, Users, AlertTriangle,
   Calendar, BarChart3, PieChart as PieChartIcon, Download, Target, Clock
@@ -370,7 +371,7 @@ export default function DashboardAdmin() {
       window.URL.revokeObjectURL(url);
       a.remove();
     } catch (error) {
-      alert('Erro ao exportar relatório');
+      toast.error('Erro ao exportar relatório');
     }
   };
 

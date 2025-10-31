@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { RotateCw, ZoomIn, Save, X, Maximize2, Square } from 'lucide-react';
+import { toast } from 'sonner';
 
 /**
  * Editor de Imagem com Crop, Zoom e Rotação para fotos de produtos
@@ -96,7 +97,7 @@ export default function ImageEditor({
       onSave(croppedImageBlob);
       onClose();
     } catch (error) {
-      alert('Erro ao processar a imagem. Tente novamente.');
+      toast.error('Erro ao processar a imagem. Tente novamente.');
     } finally {
       setSaving(false);
     }

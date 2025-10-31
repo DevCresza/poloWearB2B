@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Pedido } from '@/api/entities';
 import { base44 } from '@/api/base44Client';
 import { Save, X, Upload, Calendar } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
   const [formData, setFormData] = useState({
@@ -44,10 +45,10 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
       }
 
       await Pedido.update(pedido.id, updateData);
-      alert(`${tipo === 'nf' ? 'Nota Fiscal' : 'Boleto'} enviado com sucesso!`);
+      toast.info('${tipo === ')nf' ? 'Nota Fiscal' : 'Boleto'} enviado com sucesso!`);
       onUpdate();
     } catch (error) {
-      alert('Erro ao fazer upload do arquivo.');
+      toast.error('Erro ao fazer upload do arquivo.');
     } finally {
       setUploadingNF(false);
       setUploadingBoleto(false);
@@ -59,7 +60,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
 
     // Validações
     if (formData.status === 'em_transporte' && (!formData.transportadora || !formData.codigo_rastreio)) {
-      alert('Por favor, informe a transportadora e o código de rastreio.');
+      toast.info('Por favor, informe a transportadora e o código de rastreio.');
       return;
     }
 
@@ -86,10 +87,10 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
       } catch (error) {
       }
 
-      alert('Pedido atualizado com sucesso!');
+      toast.success('Pedido atualizado com sucesso!');
       onUpdate();
     } catch (error) {
-      alert('Erro ao atualizar pedido. Tente novamente.');
+      toast.error('Erro ao atualizar pedido. Tente novamente.');
     } finally {
       setSalvando(false);
     }

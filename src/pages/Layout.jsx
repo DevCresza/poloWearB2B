@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
 import { User } from '@/api/entities';
+import { toast } from 'sonner';
 import {
   LayoutDashboard,
   LogOut,
@@ -67,7 +68,7 @@ export default function Layout({ children, currentPageName }) {
         await User.logout();
         navigate('/Login');
       } catch (error) {
-        alert('Não foi possível sair do sistema. Tente novamente.');
+        toast.info('Não foi possível sair do sistema. Tente novamente.');
       }
     }
   };

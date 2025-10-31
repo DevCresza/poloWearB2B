@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from 'sonner';
 import { 
   ShoppingCart, Trash2, Plus, Minus, Package, AlertTriangle, 
   CheckCircle, CreditCard, ArrowRight, Building, ArrowLeft
@@ -142,12 +143,12 @@ export default function Carrinho() {
 
   const finalizarCompraPorFornecedor = async (fornecedorId) => {
     if (!user.endereco_completo || !user.cep || !user.cidade || !user.estado) {
-      alert('Por favor, cadastre seu endereço de entrega completo no seu perfil antes de finalizar o pedido.');
+      toast.info('Por favor, cadastre seu endereço de entrega completo no seu perfil antes de finalizar o pedido.');
       return;
     }
 
     if (!metodoPagamento[fornecedorId]) {
-      alert('Por favor, selecione um método de pagamento para este fornecedor.');
+      toast.info('Por favor, selecione um método de pagamento para este fornecedor.');
       return;
     }
 
@@ -162,7 +163,7 @@ export default function Carrinho() {
       const fornecedor = fornecedores.find(f => f.id === fornecedorId);
       if (fornecedor && fornecedor.pedido_minimo_valor > 0) {
         if (grupo.total < fornecedor.pedido_minimo_valor) {
-          alert(
+          toast.error(
             `O pedido para ${fornecedor.nome_marca} não atingiu o valor mínimo de R$ ${fornecedor.pedido_minimo_valor.toFixed(2)}. ` +
             `Valor atual: R$ ${grupo.total.toFixed(2)}`
           );
@@ -234,8 +235,8 @@ export default function Carrinho() {
       const fornecedorNome = fornecedor?.nome_marca || 'Fornecedor';
       const contatoFornecedor = fornecedor?.contato_envio_whatsapp || fornecedor?.contato_comercial_whatsapp || 'Não disponível';
       const emailFornecedor = fornecedor?.contato_envio_email || fornecedor?.contato_comercial_email || 'Não disponível';
-      
-      alert(
+
+      toast.success(
         `✅ Pedido para ${fornecedorNome} criado com sucesso!\n\n` +
         `📧 Email: ${emailFornecedor}\n` +
         `📱 WhatsApp: ${contatoFornecedor}\n\n` +
@@ -246,7 +247,7 @@ export default function Carrinho() {
         navigate(createPageUrl('MeusPedidos'));
       }
     } catch (error) {
-      alert('Erro ao processar o pedido. Tente novamente.');
+      toast.error('Erro ao processar o pedido. Tente novamente.');
     } finally {
       setFinalizando(prev => ({ ...prev, [fornecedorId]: false }));
     }

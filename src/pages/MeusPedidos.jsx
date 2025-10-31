@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { toast } from 'sonner';
 import { 
   Package, Clock, CheckCircle, Truck, X, Eye, FileText, 
   Download, CreditCard, Calendar, MapPin, Receipt, Upload,
@@ -140,7 +141,7 @@ export default function MeusPedidos() {
       }
       
       await Pedido.update(pedidoId, updateData);
-      alert('Confirmação registrada com sucesso!');
+      toast.success('Confirmação registrada com sucesso!');
       loadData();
       
       if (showDetailsModal) {
@@ -148,7 +149,7 @@ export default function MeusPedidos() {
         setSelectedPedido(pedidoAtualizado);
       }
     } catch (error) {
-      alert('Erro ao registrar confirmação. Tente novamente.');
+      toast.error('Erro ao registrar confirmação. Tente novamente.');
     }
   };
 
@@ -166,11 +167,11 @@ export default function MeusPedidos() {
         comprovante_analisado: false
       });
       
-      alert('Comprovante enviado com sucesso! Aguarde análise do financeiro.');
+      toast.success('Comprovante enviado com sucesso! Aguarde análise do financeiro.');
       loadData();
       setShowFinanceiroModal(false);
     } catch (error) {
-      alert('Erro ao enviar comprovante. Tente novamente.');
+      toast.error('Erro ao enviar comprovante. Tente novamente.');
     } finally {
       setUploadingComprovante(false);
     }

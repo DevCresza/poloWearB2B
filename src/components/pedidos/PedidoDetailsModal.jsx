@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { toast } from 'sonner';
 import { 
   Package, MapPin, DollarSign, Calendar, FileText, 
   Download, CheckCircle, Clock, Truck, User, Building,
@@ -53,9 +54,9 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
 
       await Pedido.update(pedido.id, updateData);
       onUpdate();
-      alert('Confirmação registrada com sucesso!');
+      toast.success('Confirmação registrada com sucesso!');
     } catch (error) {
-      alert('Erro ao registrar confirmação');
+      toast.error('Erro ao registrar confirmação');
     } finally {
       setConfirmando(false);
     }

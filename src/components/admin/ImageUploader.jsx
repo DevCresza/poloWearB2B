@@ -4,6 +4,7 @@ import { Upload, X, GripVertical } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { uploadImage } from '@/lib/storageHelpers';
 import ImageEditor from '@/components/ImageEditor';
+import { toast } from 'sonner';
 
 export default function ImageUploader({ images = [], onImagesChange, maxImages = 4 }) {
   const [uploading, setUploading] = useState(false);
@@ -18,7 +19,7 @@ export default function ImageUploader({ images = [], onImagesChange, maxImages =
 
     const remainingSlots = maxImages - images.length;
     if (remainingSlots <= 0) {
-      alert(`Você pode adicionar no máximo ${maxImages} imagens`);
+      toast.info('Você pode adicionar no máximo ${maxImages} imagens');
       return;
     }
 
@@ -66,7 +67,7 @@ export default function ImageUploader({ images = [], onImagesChange, maxImages =
         setCurrentImageToEdit(null);
       }
     } catch (error) {
-      alert('Erro ao fazer upload da imagem: ' + error.message);
+      toast.error('Erro ao fazer upload da imagem: ') + error.message);
       setCurrentImageToEdit(null);
       setPendingFiles([]);
     } finally {

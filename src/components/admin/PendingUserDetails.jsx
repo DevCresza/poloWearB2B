@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { PendingUser } from '@/api/entities';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { toast } from 'sonner';
 import { 
   User, Building, MapPin, Phone, Mail, Shield, Settings, 
   Copy, ExternalLink, CheckCircle, Clock, UserCheck, Trash2
@@ -18,11 +19,11 @@ export default function PendingUserDetails({ pendingUser, onClose, onUpdate, for
     setUpdating(true);
     try {
       await PendingUser.update(pendingUser.id, { status: newStatus });
-      alert(`Status atualizado para: ${newStatus}`);
+      toast.success('Status atualizado para: ${newStatus}');
       onUpdate();
       onClose();
     } catch (error) {
-      alert('Falha ao atualizar status.');
+      toast.error('Falha ao atualizar status.');
     } finally {
       setUpdating(false);
     }
@@ -32,11 +33,11 @@ export default function PendingUserDetails({ pendingUser, onClose, onUpdate, for
     if (confirm('Tem certeza que deseja excluir este usuário pendente?')) {
       try {
         await PendingUser.delete(pendingUser.id);
-        alert('Usuário pendente excluído com sucesso.');
+        toast.success('Usuário pendente excluído com sucesso.');
         onUpdate();
         onClose();
       } catch (error) {
-        alert('Falha ao excluir usuário.');
+        toast.error('Falha ao excluir usuário.');
       }
     }
   };

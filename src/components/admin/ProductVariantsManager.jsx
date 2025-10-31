@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Image as ImageIcon, Upload } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import ColorPicker from '@/components/ColorPicker';
+import { toast } from 'sonner';
 
 export default function ProductVariantsManager({ variantes, onChange, gradeConfig }) {
   const [uploadingImages, setUploadingImages] = useState({});
@@ -51,7 +52,7 @@ export default function ProductVariantsManager({ variantes, onChange, gradeConfi
       
       updateVariante(varianteId, 'fotos_urls', novasFotos);
     } catch (error) {
-      alert('Erro ao fazer upload das imagens');
+      toast.error('Erro ao fazer upload das imagens');
     } finally {
       setUploadingImages(prev => ({ ...prev, [varianteId]: false }));
     }

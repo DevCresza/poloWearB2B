@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from 'sonner';
 import { 
   Target, TrendingUp, TrendingDown, Plus, Edit, Calendar,
   DollarSign, Package, AlertTriangle, CheckCircle
@@ -155,7 +156,7 @@ export default function GestaoMetas() {
       });
       loadData();
     } catch (error) {
-      alert('Erro ao salvar meta');
+      toast.error('Erro ao salvar meta');
     }
   };
 

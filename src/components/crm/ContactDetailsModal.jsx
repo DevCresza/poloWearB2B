@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Card, CardContent } from '@/components/ui/card';
+import { toast } from 'sonner';
 import { 
   User, Mail, Phone, Building, MapPin, Calendar, 
   FileText, Save, X, MessageCircle, Store, DollarSign
@@ -23,10 +24,10 @@ export default function ContactDetailsModal({ contact, onClose, onUpdate }) {
         observacoes,
         ultimo_contato: new Date().toISOString()
       });
-      alert('Observações salvas com sucesso!');
+      toast.success('Observações salvas com sucesso!');
       onUpdate();
     } catch (error) {
-      alert('Erro ao salvar observações.');
+      toast.error('Erro ao salvar observações.');
     } finally {
       setSaving(false);
     }

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Recurso } from '@/api/entities';
+import { toast } from 'sonner';
 import { 
   FileText, Video, Image as ImageIcon, CheckSquare, TrendingUp,
   Download, Eye, Play, Calendar, User, X, Edit, Trash2
@@ -26,10 +27,10 @@ export default function RecursoDetailsModal({ recurso, onClose, onEdit, onDelete
     if (confirm('Tem certeza que deseja excluir este recurso?')) {
       try {
         await Recurso.delete(recurso.id);
-        alert('Recurso excluído com sucesso!');
+        toast.success('Recurso excluído com sucesso!');
         onDelete();
       } catch (error) {
-        alert('Erro ao excluir recurso.');
+        toast.error('Erro ao excluir recurso.');
       }
     }
   };

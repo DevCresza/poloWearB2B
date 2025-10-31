@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { RotateCw, ZoomIn, Save, X } from 'lucide-react';
+import { toast } from 'sonner';
 
 /**
  * Editor de Avatar com Crop, Zoom e Rotação
@@ -88,7 +89,7 @@ export default function AvatarEditor({ open, onClose, imageSrc, onSave }) {
       onSave(croppedImageBlob);
       onClose();
     } catch (error) {
-      alert('Erro ao processar a imagem. Tente novamente.');
+      toast.error('Erro ao processar a imagem. Tente novamente.');
     } finally {
       setSaving(false);
     }

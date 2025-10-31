@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { toast } from 'sonner';
 import {
   User as UserIcon, Building, MapPin, Phone, Mail, CreditCard,
   ShoppingBag, Calendar, Edit, Save, X, Shield, Package, DollarSign, Loader2, Camera, Upload
@@ -67,11 +68,11 @@ export default function MeuPerfil() {
     setSalvando(true);
     try {
       await User.updateProfile(formData);
-      alert('Perfil atualizado com sucesso!');
+      toast.success('Perfil atualizado com sucesso!');
       setEditando(false);
       loadData();
     } catch (error) {
-      alert('Erro ao atualizar perfil.');
+      toast.error('Erro ao atualizar perfil.');
     } finally {
       setSalvando(false);
     }
@@ -99,7 +100,7 @@ export default function MeuPerfil() {
         }));
 
       } catch (error) {
-        alert('CEP não encontrado. Verifique o número digitado.');
+        toast.error('CEP não encontrado. Verifique o número digitado.');
       } finally {
         setBuscandoCep(false);
       }
@@ -113,14 +114,14 @@ export default function MeuPerfil() {
     // Validar tipo de arquivo
     const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
     if (!validTypes.includes(file.type)) {
-      alert('Tipo de arquivo inválido. Use JPEG, PNG, WebP ou GIF.');
+      toast.error('Tipo de arquivo inválido. Use JPEG, PNG, WebP ou GIF.');
       return;
     }
 
     // Validar tamanho (máx 10MB antes de editar)
     const maxSize = 10 * 1024 * 1024; // 10MB
     if (file.size > maxSize) {
-      alert('Arquivo muito grande. O tamanho máximo é 10MB.');
+      toast.info('Arquivo muito grande. O tamanho máximo é 10MB.');
       return;
     }
 
@@ -150,10 +151,10 @@ export default function MeuPerfil() {
       // Mostrar preview
       setAvatarPreview(result.url);
 
-      alert('Avatar atualizado com sucesso!');
+      toast.success('Avatar atualizado com sucesso!');
       loadData(); // Recarregar dados do usuário
     } catch (error) {
-      alert('Erro ao atualizar avatar: ' + error.message);
+      toast.error('Erro ao atualizar avatar: ') + error.message);
     } finally {
       setUploadingAvatar(false);
       setSelectedImage(null);

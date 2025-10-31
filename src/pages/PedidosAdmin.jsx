@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from 'sonner';
 import { 
   Package, Clock, CheckCircle, Truck, X, Eye, Edit, FileText, DollarSign, Download, 
   CreditCard, Calendar, MapPin, Receipt, Search, Filter, List, Columns
@@ -99,7 +100,7 @@ export default function PedidosAdmin() {
         );
       }
     } catch (error) {
-      alert('Erro ao exportar dados.');
+      toast.error('Erro ao exportar dados.');
     }
   };
 
@@ -109,7 +110,7 @@ export default function PedidosAdmin() {
       await Pedido.update(pedidoId, { status: newStatus });
       await loadData();
     } catch (error) {
-      alert('Falha ao atualizar status.');
+      toast.error('Falha ao atualizar status.');
     } finally {
       setUpdatingPedidoId(null);
     }
@@ -125,7 +126,7 @@ export default function PedidosAdmin() {
       await Pedido.update(pedidoId, updateData);
       await loadData();
     } catch (error) {
-      alert('Falha ao atualizar status do pagamento.');
+      toast.error('Falha ao atualizar status do pagamento.');
     } finally {
       setUpdatingPedidoId(null);
     }

@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Edit, Trash2, MessageCircle, Copy } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function ConfigWhatsApp() {
   const [templates, setTemplates] = useState([]);
@@ -51,7 +52,7 @@ export default function ConfigWhatsApp() {
       setFormData({ nome: '', titulo: '', mensagem: '', ativo: true });
       loadTemplates();
     } catch (error) {
-      alert('Erro ao salvar template');
+      toast.error('Erro ao salvar template');
     }
   };
 
@@ -72,13 +73,13 @@ export default function ConfigWhatsApp() {
       await WhatsappTemplate.delete(id);
       loadTemplates();
     } catch (error) {
-      alert('Erro ao excluir template');
+      toast.error('Erro ao excluir template');
     }
   };
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
-    alert('Mensagem copiada!');
+    toast.info('Mensagem copiada!');
   };
 
   const variaveis = [

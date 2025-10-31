@@ -4,6 +4,7 @@ import { Fornecedor } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge'; // Added Badge import
 import { Building, Plus } from 'lucide-react';
 import FornecedorForm from '../components/admin/FornecedorForm';

@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { Fornecedor } from '@/api/entities';
 import { Eye, EyeOff, Building, Settings, Package, BarChart } from 'lucide-react';
+import { toast } from 'sonner';
 
 const permissoesPadraoFornecedor = {
   ver_dashboard: true,
@@ -56,7 +57,7 @@ export default function UserFormFornecedor({ onSubmit, onCancel, loading }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.fornecedor_id) {
-      alert('Selecione um fornecedor');
+      toast.info('Selecione um fornecedor');
       return;
     }
     const userData = {

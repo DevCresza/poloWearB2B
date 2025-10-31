@@ -13,6 +13,7 @@ import { Plus, Package, Edit, Star, Search, AlertTriangle, Eye, Trash2, Download
 import { exportToCSV, exportToPDF, formatCurrency } from '@/utils/exportUtils';
 import ProductForm from '../components/admin/ProductForm';
 import { Switch } from '@/components/ui/switch';
+import { toast } from 'sonner';
 
 export default function GestaoProdutos() {
   const [produtos, setProdutos] = useState([]);
@@ -83,7 +84,7 @@ export default function GestaoProdutos() {
       await Produto.update(produto.id, { is_destaque: isChecked });
       loadData();
     } catch (error) {
-      alert("Falha ao atualizar o status de destaque do produto.");
+      toast.error('Falha ao atualizar o status de destaque do produto.');
     }
   };
 
@@ -92,7 +93,7 @@ export default function GestaoProdutos() {
       await Produto.update(produto.id, { ativo: isChecked });
       loadData();
     } catch (error) {
-      alert("Falha ao atualizar o status do produto.");
+      toast.error('Falha ao atualizar o status do produto.');
     }
   };
 
@@ -103,10 +104,10 @@ export default function GestaoProdutos() {
 
     try {
       await Produto.delete(produto.id);
-      alert('Produto excluído com sucesso!');
+      toast.success('Produto excluído com sucesso!');
       loadData();
     } catch (error) {
-      alert('Falha ao excluir o produto. Verifique se não há pedidos vinculados.');
+      toast.error('Falha ao excluir o produto. Verifique se não há pedidos vinculados.');
     }
   };
 

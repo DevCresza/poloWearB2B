@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
 import {
   DollarSign, Calendar, AlertTriangle, CheckCircle, Clock,
   Upload, Download, Filter, TrendingUp, TrendingDown, FileText
@@ -122,7 +123,7 @@ export default function CarteiraFinanceira() {
 
   const handleUploadComprovante = async () => {
     if (!comprovanteFile || !selectedTitulo) {
-      alert('Selecione um arquivo');
+      toast.info('Selecione um arquivo');
       return;
     }
 
@@ -158,13 +159,13 @@ export default function CarteiraFinanceira() {
         `
       });
 
-      alert('Comprovante enviado com sucesso! Aguarde a análise.');
+      toast.success('Comprovante enviado com sucesso! Aguarde a análise.');
       setShowUploadModal(false);
       setComprovanteFile(null);
       setSelectedTitulo(null);
       loadData();
     } catch (error) {
-      alert('Erro ao enviar comprovante. Tente novamente.');
+      toast.error('Erro ao enviar comprovante. Tente novamente.');
     } finally {
       setUploadingComprovante(false);
     }
@@ -214,10 +215,10 @@ export default function CarteiraFinanceira() {
           : `Seu comprovante de pagamento foi recusado.\n\nMotivo: ${updateData.motivo_recusa_comprovante}\n\nPor favor, envie um novo comprovante.`
       });
 
-      alert(aprovado ? 'Comprovante aprovado!' : 'Comprovante recusado!');
+      toast.success(aprovado ? 'Comprovante aprovado!' : 'Comprovante recusado!');
       loadData();
     } catch (error) {
-      alert('Erro ao processar comprovante');
+      toast.error('Erro ao processar comprovante');
     }
   };
 
@@ -293,7 +294,7 @@ export default function CarteiraFinanceira() {
         );
       }
     } catch (error) {
-      alert('Erro ao exportar dados.');
+      toast.error('Erro ao exportar dados.');
     }
   };
 

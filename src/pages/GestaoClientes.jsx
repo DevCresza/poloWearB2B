@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Search, Users, Plus, Edit, UserCheck, MessageSquare, Trash2 } from 'lucide-react';
 import ClientForm from '../components/admin/ClientForm';
 import WhatsappModal from '../components/crm/WhatsappModal';
+import { toast } from 'sonner';
 
 export default function GestaoClientes() {
   const [users, setUsers] = useState([]);
@@ -73,10 +74,10 @@ export default function GestaoClientes() {
     if (window.confirm(`Tem certeza que deseja excluir o usuário "${userName}"? Esta ação não pode ser desfeita.`)) {
       try {
         await User.delete(userId);
-        alert('Usuário excluído com sucesso.');
+        toast.success('Usuário excluído com sucesso.');
         loadUsers();
       } catch (error) {
-        alert('Falha ao excluir o usuário. Tente novamente.');
+        toast.error('Falha ao excluir o usuário. Tente novamente.');
       }
     }
   };

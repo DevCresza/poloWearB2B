@@ -10,6 +10,7 @@ import { PendingUser } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { User } from '@/api/entities';
 import { Users, Building, Shield, Info, ExternalLink } from 'lucide-react';
+import { toast } from 'sonner';
 
 const permissionsTemplates = {
   multimarca: {
@@ -133,7 +134,7 @@ export default function NewUserForm({ onSuccess, onCancel }) {
 
       await PendingUser.create(dataToSave);
       
-      alert(`Usuário "${formData.full_name}" foi registrado com sucesso!
+      toast.info('Usuário ')${formData.full_name}" foi registrado com sucesso!
 
 ✅ CONFIGURADO:
 • Email: ${formData.email}
@@ -145,7 +146,7 @@ As informações detalhadas estão na aba "Usuários Pendentes".`);
       
       onSuccess();
     } catch (error) {
-      alert('Falha ao registrar usuário. Tente novamente.');
+      toast.error('Falha ao registrar usuário. Tente novamente.');
     } finally {
       setLoading(false);
     }

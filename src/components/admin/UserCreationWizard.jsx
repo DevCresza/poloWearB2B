@@ -10,6 +10,7 @@ import UserFormMultimarca from './UserFormMultimarca';
 import UserFormFornecedor from './UserFormFornecedor';
 import UserFormAdmin from './UserFormAdmin';
 import { createUserWithAccess } from '@/lib/userCreationHelper';
+import { toast } from 'sonner';
 
 export default function UserCreationWizard({ onSuccess, onCancel }) {
   const [step, setStep] = useState('type'); // 'type', 'form', 'success'
@@ -40,7 +41,7 @@ export default function UserCreationWizard({ onSuccess, onCancel }) {
 
     } catch (error) {
       const errorMessage = error.message || 'Ocorreu um erro desconhecido.';
-      alert(`Falha ao criar usuário: ${errorMessage}`);
+      toast.error('Falha ao criar usuário: ${errorMessage}');
     } finally {
       setLoading(false);
     }

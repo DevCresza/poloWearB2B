@@ -10,6 +10,7 @@ import { Produto } from '@/api/entities';
 import { User } from '@/api/entities';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Package, Save, X, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function MovimentacaoEstoqueForm({ produto, fornecedor, onClose, onSuccess }) {
   const [formData, setFormData] = useState({
@@ -25,13 +26,13 @@ export default function MovimentacaoEstoqueForm({ produto, fornecedor, onClose, 
     e.preventDefault();
 
     if (!formData.quantidade || !formData.motivo) {
-      alert('Por favor, preencha todos os campos obrigatórios.');
+      toast.error('Por favor, preencha todos os campos obrigatórios.');
       return;
     }
 
     const quantidade = parseInt(formData.quantidade);
     if (isNaN(quantidade) || quantidade === 0) {
-      alert('Quantidade inválida.');
+      toast.info('Quantidade inválida.');
       return;
     }
 
@@ -80,10 +81,10 @@ export default function MovimentacaoEstoqueForm({ produto, fornecedor, onClose, 
         estoque_atual_grades: estoqueNovo
       });
 
-      alert('Movimentação registrada com sucesso!');
+      toast.success('Movimentação registrada com sucesso!');
       onSuccess();
     } catch (error) {
-      alert('Erro ao registrar movimentação. Tente novamente.');
+      toast.error('Erro ao registrar movimentação. Tente novamente.');
     } finally {
       setSalvando(false);
     }

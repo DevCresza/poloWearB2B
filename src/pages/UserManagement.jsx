@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Shield, LogIn, Users as UsersIcon, Plus, Edit, ExternalLink, Copy, CheckCircle, Clock, UserCheck, Eye, Settings, Trash2 } from 'lucide-react';
 import UserCreationWizard from '../components/admin/UserCreationWizard';
 import PendingUserDetails from '../components/admin/PendingUserDetails';
+import { toast } from 'sonner';
 import ClientForm from '../components/admin/ClientForm'; // New import for editing users
 
 export default function UserManagement() {
@@ -93,7 +94,7 @@ export default function UserManagement() {
       await User.update(userId, { role: newRole });
       await loadData();
     } catch (error) {
-      alert('Não foi possível atualizar a função do usuário.');
+      toast.info('Não foi possível atualizar a função do usuário.');
     } finally {
       setUpdatingUserId(null);
     }
@@ -122,16 +123,16 @@ export default function UserManagement() {
 
   const handleDelete = async (userId, userName) => {
     if (currentUser.id === userId) {
-      alert("Você não pode excluir a si mesmo.");
+      toast.info('Você não pode excluir a si mesmo.');
       return;
     }
     if (window.confirm(`Tem certeza que deseja excluir o usuário "${userName}"? Esta ação não pode ser desfeita.`)) {
       try {
         await User.delete(userId);
-        alert('Usuário excluído com sucesso.');
+        toast.success('Usuário excluído com sucesso.');
         loadData();
       } catch (error) {
-        alert('Falha ao excluir o usuário. Tente novamente.');
+        toast.error('Falha ao excluir o usuário. Tente novamente.');
       }
     }
   };

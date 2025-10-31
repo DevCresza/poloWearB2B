@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Plus, Edit, Trash2, Image, Sparkles } from 'lucide-react';
 import CapsulaForm from '../components/admin/CapsulaForm';
+import { toast } from 'sonner';
 
 export default function GestaoCapsulas() {
   const [capsulas, setCapsulas] = useState([]);
@@ -37,7 +38,7 @@ export default function GestaoCapsulas() {
         await Capsula.delete(capsulaId);
         loadCapsulas();
       } catch (error) {
-        alert('Falha ao excluir a cápsula.');
+        toast.error('Falha ao excluir a cápsula.');
       }
     }
   };

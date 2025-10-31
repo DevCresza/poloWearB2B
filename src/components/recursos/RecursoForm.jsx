@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Recurso } from '@/api/entities';
 import { UploadFile } from '@/api/integrations';
 import { Save, X, Upload, Plus, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function RecursoForm({ recurso, onClose, onSuccess }) {
   const [formData, setFormData] = useState(recurso || {
@@ -47,7 +48,7 @@ export default function RecursoForm({ recurso, onClose, onSuccess }) {
       const fileUrl = result.url || result.file_url;
       setFormData({ ...formData, [field]: fileUrl });
     } catch (error) {
-      alert('Erro ao fazer upload do arquivo.');
+      toast.error('Erro ao fazer upload do arquivo.');
     } finally {
       setUploadingFile(false);
       setUploadingThumb(false);
@@ -72,7 +73,7 @@ export default function RecursoForm({ recurso, onClose, onSuccess }) {
     e.preventDefault();
 
     if (!formData.titulo || !formData.tipo || !formData.disponivel_para) {
-      alert('Por favor, preencha todos os campos obrigatórios.');
+      toast.error('Por favor, preencha todos os campos obrigatórios.');
       return;
     }
 
@@ -99,10 +100,10 @@ export default function RecursoForm({ recurso, onClose, onSuccess }) {
         await Recurso.create(dados);
       }
 
-      alert(recurso ? 'Conteúdo atualizado com sucesso!' : 'Conteúdo criado com sucesso!');
+      toast.success(recurso ? 'Conteúdo atualizado com sucesso!' : 'Conteúdo criado com sucesso!');
       onSuccess();
     } catch (error) {
-      alert('Erro ao salvar Conteúdo. Tente novamente.');
+      toast.error('Erro ao salvar Conteúdo. Tente novamente.');
     } finally {
       setSalvando(false);
     }

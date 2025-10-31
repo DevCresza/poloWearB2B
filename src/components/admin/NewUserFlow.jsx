@@ -7,6 +7,7 @@ import UserTypeSelector from './UserTypeSelector';
 import UserFormMultimarca from './UserFormMultimarca';
 import UserFormFornecedor from './UserFormFornecedor';
 import UserFormAdmin from './UserFormAdmin';
+import { toast } from 'sonner';
 
 export default function NewUserFlow({ onSuccess, onCancel }) {
   const [step, setStep] = useState('type'); // 'type', 'form', 'success'
@@ -46,7 +47,7 @@ export default function NewUserFlow({ onSuccess, onCancel }) {
 
     } catch (error) {
       const errorMessage = error.response?.data?.message || error.message || 'Ocorreu um erro desconhecido.';
-      alert(`Falha ao criar usuário: ${errorMessage}`);
+      toast.error('Falha ao criar usuário: ${errorMessage}');
     } finally {
       setLoading(false);
     }

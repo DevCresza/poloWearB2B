@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ImageUploader from './ImageUploader';
+import { toast } from 'sonner';
 import ProductVariantsManager from './ProductVariantsManager'; // New import
 import { Switch } from '@/components/ui/switch'; // New import
 import { Package, DollarSign, Palette, Ruler, Video, Calendar, AlertTriangle, Save, X } from 'lucide-react';
@@ -219,22 +220,22 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
     try {
       // Validações
       if (!formData.nome || !formData.fornecedor_id) {
-        alert('Preencha os campos obrigatórios: Nome do Produto e Fornecedor.');
+        toast.error('Preencha os campos obrigatórios: Nome do Produto e Fornecedor.');
         return;
       }
 
       if (formData.tem_variantes_cor) {
         if (!formData.variantes_cor || formData.variantes_cor.length === 0) {
-          alert('Adicione pelo menos uma variante de cor, ou desative "Produto tem variantes de cor".');
+          toast.info('Adicione pelo menos uma variante de cor, ou desative ')Produto tem variantes de cor".');
           return;
         }
         const variantesInvalidas = formData.variantes_cor.filter(v => !v.cor_nome || !v.cor_codigo_hex);
         if (variantesInvalidas.length > 0) {
-          alert('Todas as variantes precisam ter um nome e um código HEX de cor.');
+          toast.info('Todas as variantes precisam ter um nome e um código HEX de cor.');
           return;
         }
       } else if (formData.estoque_atual_grades < 0) {
-        alert('O estoque atual não pode ser negativo.');
+        toast.info('O estoque atual não pode ser negativo.');
         return;
       }
 
@@ -263,10 +264,10 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
         await Produto.create(dataToSave);
       }
       
-      alert('Produto salvo com sucesso!');
+      toast.success('Produto salvo com sucesso!');
       onSuccess();
     } catch (error) {
-      alert('Erro ao salvar produto. Verifique os campos e tente novamente.' + (error.message || ''));
+      toast.error(`Erro ao salvar produto. Verifique os campos e tente novamente. ${error.message || ''}`);
     } finally {
       setSubmitting(false);
     }

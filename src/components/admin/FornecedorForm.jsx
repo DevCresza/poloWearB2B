@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { toast } from 'sonner';
 import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox import
 import { Fornecedor } from '@/api/entities';
 import { User } from '@/api/entities';
@@ -82,14 +83,14 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
     try {
       if (fornecedor) {
         await Fornecedor.update(fornecedor.id, formData);
-        alert('Fornecedor atualizado com sucesso!');
+        toast.success('Fornecedor atualizado com sucesso!');
       } else {
         await Fornecedor.create(formData);
-        alert('Fornecedor criado com sucesso!');
+        toast.success('Fornecedor criado com sucesso!');
       }
       onSuccess();
     } catch (error) {
-      alert('Erro ao salvar fornecedor. Tente novamente.');
+      toast.error('Erro ao salvar fornecedor. Tente novamente.');
     } finally {
       setLoading(false);
     }

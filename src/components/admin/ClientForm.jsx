@@ -8,6 +8,7 @@ import { User } from '@/api/entities';
 import { PendingUser } from '@/api/entities';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Eye, EyeOff, Users, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function ClientForm({ user, onSuccess, onCancel }) {
   const [formData, setFormData] = useState({
@@ -53,7 +54,7 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
 
         await PendingUser.create(pendingUserData);
         
-        alert(`Usuário "${formData.full_name}" foi registrado com sucesso!
+        toast.info('Usuário ')${formData.full_name}" foi registrado com sucesso!
 
 ✅ O QUE FOI FEITO:
 • Usuário salvo no sistema
@@ -76,7 +77,7 @@ O usuário já pode fazer login no sistema!`);
         }
 
         await User.update(user.id, dataToSubmit);
-        alert('Usuário atualizado com sucesso!');
+        toast.success('Usuário atualizado com sucesso!');
       }
       
       onSuccess();
@@ -85,12 +86,12 @@ O usuário já pode fazer login no sistema!`);
       
       if (!useAlternativeMethod && !user) {
         setUseAlternativeMethod(true);
-        alert('Erro no método padrão. Tentando método alternativo...');
+        toast.error('Erro no método padrão. Tentando método alternativo...');
         return;
       }
       
       const errorMessage = error.response?.data?.message || error.message || 'Ocorreu um erro desconhecido.';
-      alert(`Falha ao salvar: ${errorMessage}`);
+      toast.error('Falha ao salvar: ${errorMessage}');
     } finally {
       setLoading(false);
     }

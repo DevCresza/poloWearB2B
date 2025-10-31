@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { Contact } from '@/api/entities';
 import { SendEmail } from '@/api/integrations';
 import { Store, ArrowRight, CheckCircle, Phone, Mail, Building, MapPin, User, CreditCard, Truck } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function CadastroCompra() {
   // Detectar se é formulário de registro (view=register)
@@ -88,10 +89,10 @@ export default function CadastroCompra() {
           endereco_estado: data.uf || prev.endereco_estado
         }));
       } else {
-        alert('CEP não encontrado.');
+        toast.error('CEP não encontrado.');
       }
     } catch (error) {
-      alert('Erro ao buscar CEP. Verifique sua conexão.');
+      toast.error('Erro ao buscar CEP. Verifique sua conexão.');
     }
   };
 
@@ -113,10 +114,10 @@ export default function CadastroCompra() {
           entrega_estado: data.uf || prev.entrega_estado
         }));
       } else {
-        alert('CEP não encontrado.');
+        toast.error('CEP não encontrado.');
       }
     } catch (error) {
-      alert('Erro ao buscar CEP. Verifique sua conexão.');
+      toast.error('Erro ao buscar CEP. Verifique sua conexão.');
     }
   };
 
@@ -126,7 +127,7 @@ export default function CadastroCompra() {
     // Validação básica
     if (!formData.nome_loja || !formData.cnpj || !formData.nome_responsavel || 
         !formData.email_responsavel || !formData.telefone_responsavel) {
-      alert('Por favor, preencha todos os campos obrigatórios.');
+      toast.error('Por favor, preencha todos os campos obrigatórios.');
       return;
     }
     
@@ -247,7 +248,7 @@ Data: ${new Date().toLocaleString('pt-BR')}`
       setSuccess(true);
       
     } catch (error) {
-      alert('Erro ao enviar solicitação. Tente novamente.');
+      toast.error('Erro ao enviar solicitação. Tente novamente.');
     } finally {
       setLoading(false);
     }

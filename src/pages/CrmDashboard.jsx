@@ -12,6 +12,7 @@ import WhatsappModal from '../components/crm/WhatsappModal';
 import CrmHeader from '../components/crm/CrmHeader';
 import { Users, Clock, MessageCircle, CheckCircle, X, Download } from 'lucide-react';
 import { exportToCSV, exportToPDF, formatDateTime } from '@/utils/exportUtils';
+import { toast } from 'sonner';
 
 
 export default function CrmDashboard() {
@@ -124,7 +125,7 @@ export default function CrmDashboard() {
         );
       }
     } catch (error) {
-      alert('Erro ao exportar dados.');
+      toast.error('Erro ao exportar dados.');
     }
   };
 
@@ -170,11 +171,11 @@ export default function CrmDashboard() {
         observacoes: (contact.observacoes || '') + '\n[Sistema] Usuário criado e email de boas-vindas enviado.'
       });
 
-      alert('Cliente criado com sucesso! Um email de boas-vindas foi enviado.');
+      toast.success('Cliente criado com sucesso! Um email de boas-vindas foi enviado.');
       loadContacts();
 
     } catch (error) {
-      alert('Erro ao criar cliente. Verifique se o email já não está cadastrado no sistema.');
+      toast.error('Erro ao criar cliente. Verifique se o email já não está cadastrado no sistema.');
     }
   };
 
