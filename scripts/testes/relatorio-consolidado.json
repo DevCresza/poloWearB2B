@@ -1,0 +1,26 @@
+{
+  "data_execucao": "2025-10-30T19:37:13.848Z",
+  "testes_executados": 3,
+  "resultados": [
+    {
+      "nivel": "Admin",
+      "total": 30,
+      "passou": 30,
+      "falhou": 0,
+      "taxa_sucesso": "100.00%"
+    },
+    {
+      "nivel": "Fornecedor",
+      "total": 20,
+      "passou": 5,
+      "falhou": 15,
+      "taxa_sucesso": "25.00%"
+    }
+  ],
+  "totais": {
+    "total": 50,
+    "passou": 35,
+    "falhou": 15
+  },
+  "taxa_sucesso_geral": "70.00%"
+}

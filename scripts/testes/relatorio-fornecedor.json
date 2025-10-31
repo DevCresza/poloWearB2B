@@ -1,0 +1,112 @@
+{
+  "nivel": "FORNECEDOR",
+  "data": "2025-10-30T15:43:34.078Z",
+  "fornecedor": "MX Confecções",
+  "resultados": {
+    "total": 20,
+    "passed": 5,
+    "failed": 15,
+    "tests": [
+      {
+        "name": "1.1 - Login Fornecedor",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "1.2 - Buscar Dados do Fornecedor",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "1.3 - Buscar Fornecedor Associado",
+        "passed": false,
+        "message": "Cannot coerce the result to a single JSON object"
+      },
+      {
+        "name": "2.1 - Listar APENAS Produtos Próprios",
+        "passed": false,
+        "message": "invalid input syntax for type uuid: \"undefined\""
+      },
+      {
+        "name": "2.2 - Criar Produto Próprio",
+        "passed": false,
+        "message": "null value in column \"fornecedor_id\" of relation \"produtos\" violates not-null constraint"
+      },
+      {
+        "name": "2.3 - Atualizar Produto Próprio",
+        "passed": false,
+        "message": "Produto não foi criado"
+      },
+      {
+        "name": "2.4 - Atualizar Estoque",
+        "passed": false,
+        "message": "Produto não foi criado"
+      },
+      {
+        "name": "2.5 - Destacar Produto",
+        "passed": false,
+        "message": "Produto não foi criado"
+      },
+      {
+        "name": "3.1 - Listar APENAS Pedidos Próprios",
+        "passed": false,
+        "message": "invalid input syntax for type uuid: \"undefined\""
+      },
+      {
+        "name": "3.2 - Filtrar Pedidos por Status",
+        "passed": false,
+        "message": "invalid input syntax for type uuid: \"undefined\""
+      },
+      {
+        "name": "3.3 - Contar Pedidos Pendentes",
+        "passed": false,
+        "message": ""
+      },
+      {
+        "name": "4.1 - Registrar Entrada de Estoque",
+        "passed": false,
+        "message": "Produto não foi criado"
+      },
+      {
+        "name": "4.2 - Listar Movimentações do Produto",
+        "passed": false,
+        "message": "Produto não foi criado"
+      },
+      {
+        "name": "5.1 - Total de Produtos Ativos",
+        "passed": false,
+        "message": ""
+      },
+      {
+        "name": "5.2 - Produtos com Estoque Baixo",
+        "passed": false,
+        "message": "invalid input syntax for type uuid: \"undefined\""
+      },
+      {
+        "name": "5.3 - Valor Total do Estoque",
+        "passed": false,
+        "message": "invalid input syntax for type uuid: \"undefined\""
+      },
+      {
+        "name": "6.1 - NÃO deve acessar produtos de outros fornecedores",
+        "passed": false,
+        "message": "Cannot read properties of null (reading 'id')"
+      },
+      {
+        "name": "6.2 - NÃO deve modificar usuários",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "7.1 - Deletar Movimentação Teste",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "7.2 - Deletar Produto Teste",
+        "passed": true,
+        "message": "Passou"
+      }
+    ]
+  }
+}

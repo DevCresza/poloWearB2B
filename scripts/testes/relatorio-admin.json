@@ -1,0 +1,161 @@
+{
+  "nivel": "ADMIN",
+  "data": "2025-10-30T15:43:19.986Z",
+  "resultados": {
+    "total": 30,
+    "passed": 30,
+    "failed": 0,
+    "tests": [
+      {
+        "name": "1.1 - Login Admin",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "1.2 - Verificar Sessão",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "1.3 - Buscar Dados do Admin",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "2.1 - Listar Todos os Usuários",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "2.2 - Filtrar Usuários por Tipo",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "2.3 - Contar Usuários Ativos",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "3.1 - Listar Todos os Produtos",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "3.2 - Criar Novo Produto",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "3.3 - Atualizar Produto",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "3.4 - Filtrar Produtos por Marca",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "3.5 - Deletar Produto Teste",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "4.1 - Listar Todos os Fornecedores",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "4.2 - Buscar Fornecedor por ID",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "5.1 - Listar Todos os Pedidos",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "5.2 - Criar Novo Pedido",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "5.3 - Atualizar Status do Pedido",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "5.4 - Filtrar Pedidos por Status",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "6.1 - Criar Novo Contato",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "6.2 - Listar Contatos",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "6.3 - Filtrar Contatos por Status",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "7.1 - Criar Título a Receber",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "7.2 - Listar Títulos Pendentes",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "7.3 - Marcar Título como Pago",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "8.1 - Criar Meta Mensal",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "8.2 - Atualizar Progresso da Meta",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "8.3 - Listar Metas Ativas",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "9.1 - Deletar Pedido Teste",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "9.2 - Deletar Contato Teste",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "9.3 - Deletar Título Teste",
+        "passed": true,
+        "message": "Passou"
+      },
+      {
+        "name": "9.4 - Deletar Meta Teste",
+        "passed": true,
+        "message": "Passou"
+      }
+    ]
+  }
+}
