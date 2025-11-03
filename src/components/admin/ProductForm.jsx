@@ -94,9 +94,17 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
       }
 
       try {
-        variantes = typeof produto.variantes_cor === 'string' 
-          ? JSON.parse(produto.variantes_cor) 
+        variantes = typeof produto.variantes_cor === 'string'
+          ? JSON.parse(produto.variantes_cor)
           : produto.variantes_cor || variantes;
+
+        // Converter cor_hex antigo para cor_codigo_hex (compatibilidade)
+        if (variantes && Array.isArray(variantes)) {
+          variantes = variantes.map(v => ({
+            ...v,
+            cor_codigo_hex: v.cor_codigo_hex || v.cor_hex || '#000000'
+          }));
+        }
       } catch (e) {
       }
 
@@ -229,11 +237,20 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
           toast.info('Adicione pelo menos uma variante de cor, ou desative "Produto tem variantes de cor".');
           return;
         }
-        const variantesInvalidas = formData.variantes_cor.filter(v => !v.cor_nome || !v.cor_codigo_hex);
+        // Converter cor_hex para cor_codigo_hex se necessário (compatibilidade)
+        const variantesNormalizadas = formData.variantes_cor.map(v => ({
+          ...v,
+          cor_codigo_hex: v.cor_codigo_hex || v.cor_hex || '#000000'
+        }));
+
+        const variantesInvalidas = variantesNormalizadas.filter(v => !v.cor_nome || !v.cor_codigo_hex);
         if (variantesInvalidas.length > 0) {
           toast.info('Todas as variantes precisam ter um nome e um código HEX de cor.');
           return;
         }
+
+        // Atualizar formData com variantes normalizadas
+        formData.variantes_cor = variantesNormalizadas;
       } else if (formData.estoque_atual_grades < 0) {
         toast.info('O estoque atual não pode ser negativo.');
         return;
