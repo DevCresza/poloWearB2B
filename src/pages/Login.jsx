@@ -41,7 +41,7 @@ export default function Login() {
                 <LogIn className="w-8 h-8 text-white" />
               </div>
             </div>
-            <CardTitle className="text-2xl text-center">Polo Wear Multimarcas</CardTitle>
+            <CardTitle className="text-2xl text-center">Polo Wear B2B</CardTitle>
             <CardDescription className="text-center">
               Entre com suas credenciais para acessar o sistema
             </CardDescription>
