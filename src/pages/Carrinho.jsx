@@ -389,12 +389,18 @@ export default function Carrinho() {
                               <div className="flex flex-wrap gap-2 mt-2">
                                 <Badge variant="outline">{item.marca}</Badge>
                                 <Badge variant="outline">
-                                  {item.tipo_venda === 'grade' 
-                                    ? `Grade ${item.total_pecas_grade} pç` 
+                                  {item.tipo_venda === 'grade'
+                                    ? `Grade ${item.total_pecas_grade} pç`
                                     : 'Unitário'}
                                 </Badge>
                                 {item.cor_selecionada && (
-                                  <Badge variant="outline">{item.cor_selecionada.cor_nome}</Badge>
+                                  <Badge variant="outline" className="flex items-center gap-1.5">
+                                    <div
+                                      className="w-3 h-3 rounded-full border border-gray-300"
+                                      style={{ backgroundColor: item.cor_selecionada.cor_codigo_hex || item.cor_selecionada.cor_hex || '#000000' }}
+                                    />
+                                    {item.cor_selecionada.cor_nome}
+                                  </Badge>
                                 )}
                               </div>
                               <p className="text-sm text-gray-600 mt-2">

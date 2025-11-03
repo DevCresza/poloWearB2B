@@ -265,9 +265,12 @@ export default function Catalogo() {
     const ehLancamento = isLancamento(produto);
 
     return (
-      <Card className="hover:shadow-xl transition-all cursor-pointer bg-white border-0 shadow-md group h-full flex flex-col">
+      <Card className="hover:shadow-xl transition-all bg-white border-0 shadow-md group h-full flex flex-col">
         <div className="p-4 sm:p-5 flex flex-col h-full">
-          <div className="aspect-[3/4] bg-gray-100 rounded-xl overflow-hidden mb-4 relative">
+          <div
+            className="aspect-[3/4] bg-gray-100 rounded-xl overflow-hidden mb-4 relative cursor-pointer"
+            onClick={() => openProductDetails(produto)}
+          >
             {getPrimeiraFoto(produto) ? (
               <img
                 src={getPrimeiraFoto(produto)}
@@ -319,7 +322,10 @@ export default function Catalogo() {
           </div>
           
           <div className="space-y-2 sm:space-y-3 flex-1 flex flex-col">
-            <h3 className="font-bold text-gray-900 line-clamp-2 text-sm sm:text-base lg:text-lg min-h-[2.5rem] sm:min-h-[3rem]">
+            <h3
+              className="font-bold text-gray-900 line-clamp-2 text-sm sm:text-base lg:text-lg min-h-[2.5rem] sm:min-h-[3rem] cursor-pointer hover:text-blue-600 transition-colors"
+              onClick={() => openProductDetails(produto)}
+            >
               {produto.nome}
             </h3>
             
@@ -350,10 +356,10 @@ export default function Catalogo() {
             {produto.tem_variantes_cor && variantes.length > 0 && (
               <div className="flex flex-wrap gap-1 sm:gap-1.5">
                 {variantes.slice(0, 6).map((v, idx) => (
-                  <div 
+                  <div
                     key={idx}
                     className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border-2 border-gray-300 shadow-sm"
-                    style={{ backgroundColor: v.cor_hex }}
+                    style={{ backgroundColor: v.cor_codigo_hex || v.cor_hex || '#000000' }}
                     title={`${v.cor_nome}: ${v.estoque_grades || 0} grades`}
                   />
                 ))}
@@ -780,9 +786,9 @@ export default function Catalogo() {
                                 ${semEstoque ? 'opacity-50 cursor-not-allowed' : 'hover:border-blue-400 cursor-pointer'}
                               `}
                             >
-                              <div 
+                              <div
                                 className="w-8 h-8 rounded-full border-2 border-gray-300 flex-shrink-0"
-                                style={{ backgroundColor: v.cor_hex }}
+                                style={{ backgroundColor: v.cor_codigo_hex || v.cor_hex || '#000000' }}
                               />
                               <div className="text-left flex-1">
                                 <div className="font-medium text-sm">{v.cor_nome}</div>
@@ -925,40 +931,53 @@ export default function Catalogo() {
                 )}
 
                 {/* Add to Cart Button */}
-                {selectedProduto.tem_variantes_cor && !selectedVariantColor ? (
+                <Button
+                  onClick={() => adicionarAoCarrinho(selectedProduto, quantidadeModal, selectedVariantColor)}
+                  disabled={(() => {
+                    // Desabilitar se tem variantes e não selecionou cor
+                    if (selectedProduto.tem_variantes_cor && !selectedVariantColor) {
+                      return true;
+                    }
+
+                    // Desabilitar se controla estoque e está sem estoque
+                    if (selectedProduto.controla_estoque && !selectedProduto.permite_venda_sem_estoque) {
+                      if (selectedProduto.tem_variantes_cor && selectedVariantColor) {
+                        return (selectedVariantColor.estoque_grades || 0) <= 0;
+                      } else if (!selectedProduto.tem_variantes_cor) {
+                        return (selectedProduto.estoque_atual_grades || 0) <= 0;
+                      }
+                    }
+                    return false;
+                  })()}
+                  className="w-full h-14 text-lg bg-blue-600 hover:bg-blue-700"
+                >
+                  <ShoppingCart className="w-5 h-5 mr-2" />
+                  {(() => {
+                    // Mensagem se tem variantes e não selecionou cor
+                    if (selectedProduto.tem_variantes_cor && !selectedVariantColor) {
+                      return 'Selecione uma Cor';
+                    }
+
+                    // Mensagem se está sem estoque
+                    if (selectedProduto.controla_estoque && !selectedProduto.permite_venda_sem_estoque) {
+                      if (selectedProduto.tem_variantes_cor && selectedVariantColor) {
+                        return (selectedVariantColor.estoque_grades || 0) <= 0 ? 'Produto Esgotado' : 'Adicionar ao Carrinho';
+                      } else if (!selectedProduto.tem_variantes_cor) {
+                        return (selectedProduto.estoque_atual_grades || 0) <= 0 ? 'Produto Esgotado' : 'Adicionar ao Carrinho';
+                      }
+                    }
+                    return 'Adicionar ao Carrinho';
+                  })()}
+                </Button>
+
+                {/* Alert quando não selecionou cor */}
+                {selectedProduto.tem_variantes_cor && !selectedVariantColor && (
                   <Alert className="border-yellow-200 bg-yellow-50">
                     <AlertTriangle className="h-4 w-4 text-yellow-600" />
                     <AlertDescription className="text-yellow-800">
                       Por favor, selecione uma cor antes de adicionar ao carrinho.
                     </AlertDescription>
                   </Alert>
-                ) : (
-                  <Button
-                    onClick={() => adicionarAoCarrinho(selectedProduto, quantidadeModal, selectedVariantColor)}
-                    disabled={(() => {
-                      if (selectedProduto.controla_estoque && !selectedProduto.permite_venda_sem_estoque) {
-                        if (selectedProduto.tem_variantes_cor && selectedVariantColor) {
-                          return (selectedVariantColor.estoque_grades || 0) <= 0;
-                        } else if (!selectedProduto.tem_variantes_cor) {
-                          return (selectedProduto.estoque_atual_grades || 0) <= 0;
-                        }
-                      }
-                      return false;
-                    })()}
-                    className="w-full h-14 text-lg bg-blue-600 hover:bg-blue-700"
-                  >
-                    <ShoppingCart className="w-5 h-5 mr-2" />
-                    {(() => {
-                      if (selectedProduto.controla_estoque && !selectedProduto.permite_venda_sem_estoque) {
-                        if (selectedProduto.tem_variantes_cor && selectedVariantColor) {
-                          return (selectedVariantColor.estoque_grades || 0) <= 0 ? 'Produto Esgotado' : 'Adicionar ao Carrinho';
-                        } else if (!selectedProduto.tem_variantes_cor) {
-                          return (selectedProduto.estoque_atual_grades || 0) <= 0 ? 'Produto Esgotado' : 'Adicionar ao Carrinho';
-                        }
-                      }
-                      return 'Adicionar ao Carrinho';
-                    })()}
-                  </Button>
                 )}
               </div>
             </div>
