@@ -30,7 +30,7 @@ export default function Home() {
         <Card className="bg-zinc-900 border-zinc-800 rounded-3xl p-8 md:p-12 mb-8 shadow-2xl">
           <div className="space-y-6">
             {/* Botão Principal - Acessar Minha Conta */}
-            <Link to={createPageUrl('CadastroCompra') + '?view=login'} className="block">
+            <Link to={createPageUrl('Login')} className="block">
               <Button className="w-full h-20 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-xl font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 border-2 border-blue-500">
                 <div className="flex items-center justify-center gap-4">
                   <LogIn className="w-8 h-8" />
