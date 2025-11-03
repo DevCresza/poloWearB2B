@@ -723,55 +723,67 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
 
               {!formData.tem_variantes_cor && (
                 <>
-                  <div className="grid md:grid-cols-3 gap-4 mt-4">
-                    <div>
-                      <Label htmlFor="estoque_atual_grades_single">Estoque Atual (Grades) *</Label>
-                      <Input
-                        id="estoque_atual_grades_single"
-                        type="number"
-                        value={formData.estoque_atual_grades || 0}
-                        onChange={(e) => setFormData({ ...formData, estoque_atual_grades: parseInt(e.target.value) || 0 })}
-                        min="0"
-                      />
-                    </div>
+                  {formData.disponibilidade === 'pronta_entrega' ? (
+                    <>
+                      <div className="grid md:grid-cols-3 gap-4 mt-4">
+                        <div>
+                          <Label htmlFor="estoque_atual_grades_single">Estoque Atual (Grades) *</Label>
+                          <Input
+                            id="estoque_atual_grades_single"
+                            type="number"
+                            value={formData.estoque_atual_grades || 0}
+                            onChange={(e) => setFormData({ ...formData, estoque_atual_grades: parseInt(e.target.value) || 0 })}
+                            min="0"
+                          />
+                        </div>
 
-                    <div>
-                      <Label htmlFor="estoque_minimo_grades_single">Estoque Mínimo (Grades)</Label>
-                      <Input
-                        id="estoque_minimo_grades_single"
-                        type="number"
-                        value={formData.estoque_minimo_grades || 0}
-                        onChange={(e) => setFormData({ ...formData, estoque_minimo_grades: parseInt(e.target.value) || 0 })}
-                        min="0"
-                      />
-                      <p className="text-sm text-gray-500">
-                          Alerta será exibido quando o estoque atingir este valor
+                        <div>
+                          <Label htmlFor="estoque_minimo_grades_single">Estoque Mínimo (Grades)</Label>
+                          <Input
+                            id="estoque_minimo_grades_single"
+                            type="number"
+                            value={formData.estoque_minimo_grades || 0}
+                            onChange={(e) => setFormData({ ...formData, estoque_minimo_grades: parseInt(e.target.value) || 0 })}
+                            min="0"
+                          />
+                          <p className="text-sm text-gray-500">
+                            Alerta será exibido quando o estoque atingir este valor
+                          </p>
+                        </div>
+
+                        <div className="flex items-center space-x-2 pt-6">
+                          <Checkbox
+                            id="permite_venda_sem_estoque_single"
+                            checked={formData.permite_venda_sem_estoque}
+                            onCheckedChange={(checked) => setFormData({ ...formData, permite_venda_sem_estoque: checked })}
+                          />
+                          <label
+                            htmlFor="permite_venda_sem_estoque_single"
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                          >
+                            Permitir Pré-Venda
+                          </label>
+                        </div>
+                      </div>
+
+                      {formData.estoque_atual_grades <= formData.estoque_minimo_grades && (
+                        <Alert className="border-yellow-200 bg-yellow-50 mt-4">
+                          <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                          <AlertDescription className="text-yellow-800">
+                            Estoque baixo! Considere reabastecer este produto.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </>
+                  ) : (
+                    <div className="mt-4">
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p className="text-sm text-blue-800">
+                          Este produto está em <strong>Programação</strong>. O estoque não é controlado para produtos em programação.
                         </p>
+                      </div>
                     </div>
-
-                    <div className="flex items-center space-x-2 pt-6">
-                      <Checkbox
-                        id="permite_venda_sem_estoque_single"
-                        checked={formData.permite_venda_sem_estoque}
-                        onCheckedChange={(checked) => setFormData({ ...formData, permite_venda_sem_estoque: checked })}
-                      />
-                      <label
-                        htmlFor="permite_venda_sem_estoque_single"
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                      >
-                        Permitir Pré-Venda
-                      </label>
-                    </div>
-                  </div>
-
-                  {formData.estoque_atual_grades <= formData.estoque_minimo_grades && (
-                      <Alert className="border-yellow-200 bg-yellow-50 mt-4">
-                        <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                        <AlertDescription className="text-yellow-800">
-                          Estoque baixo! Considere reabastecer este produto.
-                        </AlertDescription>
-                      </Alert>
-                    )}
+                  )}
                 </>
               )}
             </CardContent>
@@ -783,6 +795,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
               variantes={formData.variantes_cor}
               onChange={(variantes) => setFormData({ ...formData, variantes_cor: variantes })}
               gradeConfig={formData.grade_configuracao}
+              disponibilidade={formData.disponibilidade}
             />
           )}
 

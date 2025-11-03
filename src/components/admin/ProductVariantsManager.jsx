@@ -9,14 +9,14 @@ import { base44 } from '@/api/base44Client';
 import ColorPicker from '@/components/ColorPicker';
 import { toast } from 'sonner';
 
-export default function ProductVariantsManager({ variantes, onChange, gradeConfig }) {
+export default function ProductVariantsManager({ variantes, onChange, gradeConfig, disponibilidade }) {
   const [uploadingImages, setUploadingImages] = useState({});
 
   const addVariante = () => {
     const novaVariante = {
       id: Date.now().toString(),
       cor_nome: '',
-      cor_hex: '#000000',
+      cor_codigo_hex: '#000000',
       fotos_urls: [],
       estoque_grades: 0,
       estoque_minimo: 0
@@ -112,32 +112,45 @@ export default function ProductVariantsManager({ variantes, onChange, gradeConfi
 
                   <div>
                     <ColorPicker
-                      value={variante.cor_hex || '#000000'}
-                      onChange={(color) => updateVariante(variante.id, 'cor_hex', color)}
+                      value={variante.cor_codigo_hex || '#000000'}
+                      onChange={(color) => updateVariante(variante.id, 'cor_codigo_hex', color)}
                       label="Cor da Variante"
                     />
                   </div>
 
-                  {/* Estoque */}
-                  <div>
-                    <Label>Estoque Atual (Grades) *</Label>
-                    <Input
-                      type="number"
-                      value={variante.estoque_grades}
-                      onChange={(e) => updateVariante(variante.id, 'estoque_grades', parseInt(e.target.value) || 0)}
-                      min="0"
-                    />
-                  </div>
+                  {/* Estoque - Somente para Pronta Entrega */}
+                  {disponibilidade === 'pronta_entrega' && (
+                    <>
+                      <div>
+                        <Label>Estoque Atual (Grades) *</Label>
+                        <Input
+                          type="number"
+                          value={variante.estoque_grades}
+                          onChange={(e) => updateVariante(variante.id, 'estoque_grades', parseInt(e.target.value) || 0)}
+                          min="0"
+                        />
+                      </div>
 
-                  <div>
-                    <Label>Estoque Mínimo (Grades)</Label>
-                    <Input
-                      type="number"
-                      value={variante.estoque_minimo}
-                      onChange={(e) => updateVariante(variante.id, 'estoque_minimo', parseInt(e.target.value) || 0)}
-                      min="0"
-                    />
-                  </div>
+                      <div>
+                        <Label>Estoque Mínimo (Grades)</Label>
+                        <Input
+                          type="number"
+                          value={variante.estoque_minimo}
+                          onChange={(e) => updateVariante(variante.id, 'estoque_minimo', parseInt(e.target.value) || 0)}
+                          min="0"
+                        />
+                      </div>
+                    </>
+                  )}
+                  {disponibilidade === 'programacao' && (
+                    <div className="col-span-2">
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <p className="text-sm text-blue-800">
+                          Este produto está em <strong>Programação</strong>. O estoque não é controlado para produtos em programação.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Fotos da Variante */}
