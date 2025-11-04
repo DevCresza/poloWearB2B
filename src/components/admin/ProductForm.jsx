@@ -110,6 +110,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
 
       setFormData({
         ...produto,
+        fornecedor_id: produto.fornecedor_id || '', // Garantir que o fornecedor_id seja preservado
         grade_configuracao: grade,
         fotos: fotos,
         variantes_cor: variantes,
@@ -360,14 +361,17 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="fornecedor">Fornecedor *</Label>
-                  <Select value={formData.fornecedor_id || ''} onValueChange={(value) => setFormData({...formData, fornecedor_id: value})}>
+                  <Select
+                    value={formData.fornecedor_id || undefined}
+                    onValueChange={(value) => setFormData({...formData, fornecedor_id: value})}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione o fornecedor" />
                     </SelectTrigger>
                     <SelectContent>
                       {fornecedores.map(f => (
                         <SelectItem key={f.id} value={f.id}>
-                          {f.nome_fantasia || f.razao_social}
+                          {f.nome_fantasia || f.razao_social || f.nome_marca}
                         </SelectItem>
                       ))}
                     </SelectContent>

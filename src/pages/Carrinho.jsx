@@ -393,16 +393,21 @@ export default function Carrinho() {
                                     ? `Grade ${item.total_pecas_grade} pç`
                                     : 'Unitário'}
                                 </Badge>
-                                {item.cor_selecionada && (
-                                  <Badge variant="outline" className="flex items-center gap-1.5">
-                                    <div
-                                      className="w-3 h-3 rounded-full border border-gray-300"
-                                      style={{ backgroundColor: item.cor_selecionada.cor_codigo_hex || item.cor_selecionada.cor_hex || '#000000' }}
-                                    />
-                                    {item.cor_selecionada.cor_nome}
-                                  </Badge>
-                                )}
                               </div>
+                              {/* Cor Selecionada - Destacada */}
+                              {item.cor_selecionada && item.cor_selecionada.cor_nome && (
+                                <div className="mt-2 inline-flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
+                                  <span className="text-xs font-medium text-gray-600">Cor:</span>
+                                  <div
+                                    className="w-5 h-5 rounded-full border-2 border-gray-300 shadow-sm"
+                                    style={{ backgroundColor: item.cor_selecionada.cor_codigo_hex || item.cor_selecionada.cor_hex || '#000000' }}
+                                    title={item.cor_selecionada.cor_nome}
+                                  />
+                                  <span className="text-sm font-semibold text-gray-900">
+                                    {item.cor_selecionada.cor_nome}
+                                  </span>
+                                </div>
+                              )}
                               <p className="text-sm text-gray-600 mt-2">
                                 R$ {preco.toFixed(2)} cada
                               </p>

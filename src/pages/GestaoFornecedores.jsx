@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge'; // Added Badge import
-import { Building, Plus } from 'lucide-react';
+import { Building, Plus, Trash2 } from 'lucide-react';
 import FornecedorForm from '../components/admin/FornecedorForm';
 
 export default function GestaoFornecedores() {
@@ -39,6 +39,20 @@ export default function GestaoFornecedores() {
     setShowForm(false);
     setEditingFornecedor(null);
     loadFornecedores();
+  };
+
+  const handleDelete = async (fornecedor) => {
+    if (!confirm(`Tem certeza que deseja excluir o fornecedor "${fornecedor.nome_marca}"?\n\nEsta ação não pode ser desfeita.`)) {
+      return;
+    }
+
+    try {
+      await Fornecedor.delete(fornecedor.id);
+      toast.success(`Fornecedor "${fornecedor.nome_marca}" excluído com sucesso!`);
+      loadFornecedores();
+    } catch (error) {
+      toast.error(`Erro ao excluir fornecedor: ${error.message}`);
+    }
   };
 
   return (
@@ -103,9 +117,19 @@ export default function GestaoFornecedores() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Button variant="outline" size="sm" onClick={() => handleEdit(fornecedor)}>
-                          Editar
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => handleEdit(fornecedor)}>
+                            Editar
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDelete(fornecedor)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
