@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { User } from '@/api/entities';
-import { PendingUser } from '@/api/entities';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Eye, EyeOff, Users, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -19,7 +18,6 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
   });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [useAlternativeMethod, setUseAlternativeMethod] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -37,35 +35,35 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
     setLoading(true);
 
     try {
-      if (useAlternativeMethod || !user) {
-        // Usar método alternativo - salvar como usuário pendente
-        const pendingUserData = {
+      if (!user) {
+        // Criar novo usuário com acesso imediato ao sistema
+        const tipoNegocio = formData.role === 'admin' ? 'admin' : 'multimarca';
+        const userData = {
           full_name: formData.full_name,
           email: formData.email,
+          password: formData.password,
           telefone: formData.telefone || '',
           role: formData.role,
-          tipo_negocio: formData.role === 'admin' ? 'admin' : 'multimarca',
+          tipo_negocio: tipoNegocio,
           categoria_cliente: 'multimarca',
-          status: 'pendente',
-          password_temporaria: formData.password || '',
-          permissoes: {}
-          // created_at é gerado automaticamente pelo banco
+          ativo: true, // Cliente ativo pode fazer login
+          bloqueado: false
         };
 
-        await PendingUser.create(pendingUserData);
+        await User.create(userData);
 
-        toast.info(`Usuário "${formData.full_name}" foi registrado com sucesso!
+        toast.success(`Cliente "${formData.full_name}" criado com sucesso!
 
-✅ O QUE FOI FEITO:
-• Usuário salvo no sistema
-• Credenciais de acesso geradas
-• Email com instruções enviado para: ${formData.email}
-• Perfil: ${formData.role === 'admin' ? 'Administrador' : 'Usuário'}
+✅ Cliente pode agora:
+• Fazer login no sistema
+• Navegar pelo catálogo
+• Realizar pedidos
+• Acessar histórico de compras
 
-O usuário já pode fazer login no sistema!`);
-        
+📧 Credenciais enviadas para: ${formData.email}`);
+
       } else {
-        // Tentar método tradicional apenas para edição
+        // Editar usuário existente
         const dataToSubmit = {
           full_name: formData.full_name,
           email: formData.email,
@@ -77,19 +75,12 @@ O usuário já pode fazer login no sistema!`);
         }
 
         await User.update(user.id, dataToSubmit);
-        toast.success('Usuário atualizado com sucesso!');
+        toast.success('Cliente atualizado com sucesso!');
       }
-      
+
       onSuccess();
 
     } catch (error) {
-      
-      if (!useAlternativeMethod && !user) {
-        setUseAlternativeMethod(true);
-        toast.error('Erro no método padrão. Tentando método alternativo...');
-        return;
-      }
-      
       const errorMessage = error.response?.data?.message || error.message || 'Ocorreu um erro desconhecido.';
       toast.error(`Falha ao salvar: ${errorMessage}`);
     } finally {
@@ -102,10 +93,10 @@ O usuário já pode fazer login no sistema!`);
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Users className="w-5 h-5" />
-          {user ? 'Editar Usuário' : 'Novo Usuário'}
+          {user ? 'Editar Cliente' : 'Novo Cliente'}
         </CardTitle>
         <CardDescription>
-          {user ? 'Editando usuário existente' : 'Sistema alternativo para contornar problemas técnicos'}
+          {user ? 'Editando informações do cliente' : 'Cadastrar novo cliente com acesso ao sistema'}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -113,7 +104,7 @@ O usuário já pode fazer login no sistema!`);
           <Alert className="mb-6 border-blue-200 bg-blue-50">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription className="text-blue-800">
-              <strong>Criação de Usuário:</strong> Este usuário será registrado no sistema com acesso imediato. Um email com as credenciais será enviado automaticamente.
+              <strong>Criação de Cliente:</strong> Este cliente terá acesso imediato ao sistema para fazer login, navegar pelo catálogo e realizar pedidos. Um email com as credenciais será enviado automaticamente.
             </AlertDescription>
           </Alert>
         )}
@@ -179,7 +170,7 @@ O usuário já pode fazer login no sistema!`);
               Cancelar
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? 'Salvando...' : (user ? 'Atualizar Usuário' : 'Criar Usuário Pendente')}
+              {loading ? 'Salvando...' : (user ? 'Atualizar Cliente' : 'Criar Cliente')}
             </Button>
           </div>
         </form>
