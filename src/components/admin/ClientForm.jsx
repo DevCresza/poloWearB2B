@@ -14,7 +14,7 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
     full_name: '',
     email: '',
     password: '',
-    role: 'user'
+    role: 'multimarca'
   });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -44,15 +44,14 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
         }
 
         // Criar novo usuário com acesso imediato ao sistema
-        const tipoNegocio = formData.role === 'admin' ? 'admin' : 'multimarca';
         const userData = {
           full_name: formData.full_name,
           email: formData.email,
           password: formData.password,
           telefone: formData.telefone || null,
-          role: formData.role,
-          tipo_negocio: tipoNegocio,
-          categoria_cliente: 'multimarca',
+          role: formData.role, // multimarca, fornecedor, franqueado, ou admin
+          tipo_negocio: formData.role, // Mesmo valor de role
+          categoria_cliente: formData.role === 'admin' ? 'admin' : formData.role,
           ativo: true,
           bloqueado: false,
           permissoes: {},
@@ -63,13 +62,19 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
 
         await User.signup(userData);
 
-        toast.success(`Cliente "${formData.full_name}" criado com sucesso!
+        const tipoLabel = {
+          multimarca: 'Cliente Multimarca',
+          fornecedor: 'Fornecedor',
+          franqueado: 'Franqueado',
+          admin: 'Administrador'
+        }[formData.role] || 'Cliente';
 
-✅ Cliente pode agora:
-• Fazer login no sistema
-• Navegar pelo catálogo
-• Realizar pedidos
-• Acessar histórico de compras
+        toast.success(`${tipoLabel} "${formData.full_name}" criado com sucesso!
+
+✅ Acesso ao sistema:
+• Login: ${formData.email}
+• Senha: ${formData.password}
+• Tipo: ${tipoLabel}
 
 📧 Credenciais enviadas para: ${formData.email}`);
 
@@ -166,11 +171,13 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="role">Função no Sistema *</Label>
+              <Label htmlFor="role">Tipo de Cliente *</Label>
               <Select value={formData.role} onValueChange={value => setFormData({...formData, role: value})}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="user">Usuário</SelectItem>
+                  <SelectItem value="multimarca">Multimarca</SelectItem>
+                  <SelectItem value="fornecedor">Fornecedor</SelectItem>
+                  <SelectItem value="franqueado">Franqueado</SelectItem>
                   <SelectItem value="admin">Administrador</SelectItem>
                 </SelectContent>
               </Select>
