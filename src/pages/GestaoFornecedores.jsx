@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Fornecedor } from '@/api/entities';
+import { Fornecedor, Produto } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -42,11 +42,27 @@ export default function GestaoFornecedores() {
   };
 
   const handleDelete = async (fornecedor) => {
-    if (!confirm(`Tem certeza que deseja excluir o fornecedor "${fornecedor.nome_marca}"?\n\nEsta ação não pode ser desfeita.`)) {
-      return;
-    }
-
     try {
+      // Verificar se existem produtos vinculados a este fornecedor
+      const produtosVinculados = await Produto.list({
+        filters: { fornecedor_id: fornecedor.id }
+      });
+
+      if (produtosVinculados && produtosVinculados.length > 0) {
+        toast.error(
+          `Não é possível excluir o fornecedor "${fornecedor.nome_marca}".\n\n` +
+          `Existem ${produtosVinculados.length} produto(s) vinculado(s) a este fornecedor.\n\n` +
+          `Remova ou reatribua os produtos antes de excluir o fornecedor.`,
+          { duration: 6000 }
+        );
+        return;
+      }
+
+      // Se não houver produtos vinculados, pedir confirmação
+      if (!confirm(`Tem certeza que deseja excluir o fornecedor "${fornecedor.nome_marca}"?\n\nEsta ação não pode ser desfeita.`)) {
+        return;
+      }
+
       await Fornecedor.delete(fornecedor.id);
       toast.success(`Fornecedor "${fornecedor.nome_marca}" excluído com sucesso!`);
       loadFornecedores();
