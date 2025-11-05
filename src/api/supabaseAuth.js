@@ -114,17 +114,23 @@ export const supabaseAuth = {
         if (authError) throw authError;
 
         // Criar registro na tabela users
-        const { data: newUser, error: createError } = await supabase
+        const { data: insertData, error: createError } = await supabase
           .from('users')
           .insert([{
             id: authData.user.id,
             email,
             ...otherData,
           }])
-          .select()
-          .single();
+          .select();
 
         if (createError) throw createError;
+
+        // Retornar o primeiro (e único) usuário criado
+        const newUser = insertData && insertData.length > 0 ? insertData[0] : null;
+
+        if (!newUser) {
+          throw new Error('Usuário criado mas não foi possível recuperar os dados');
+        }
 
         return newUser;
       } catch (error) {
