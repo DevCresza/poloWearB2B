@@ -267,4 +267,54 @@ export const supabaseAuth = {
 
     return await this.list(options);
   },
+
+  // Update - Atualizar usuário (para admin)
+  async update(userId, updates) {
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .update(updates)
+          .eq('id', userId)
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        return data;
+      } catch (error) {
+        throw new Error(error.message);
+      }
+    }
+
+    // Fallback para Mock
+    if (mockAuth.update) {
+      return await mockAuth.update(userId, updates);
+    }
+    throw new Error('Método não implementado');
+  },
+
+  // Delete - Excluir usuário (para admin)
+  async delete(userId) {
+    if (isSupabaseConfigured()) {
+      try {
+        const { error } = await supabase
+          .from('users')
+          .delete()
+          .eq('id', userId);
+
+        if (error) throw error;
+
+        return true;
+      } catch (error) {
+        throw new Error(error.message);
+      }
+    }
+
+    // Fallback para Mock
+    if (mockAuth.delete) {
+      return await mockAuth.delete(userId);
+    }
+    throw new Error('Método não implementado');
+  },
 };

@@ -36,21 +36,32 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
 
     try {
       if (!user) {
+        // Validar senha
+        if (!formData.password || formData.password.length < 6) {
+          toast.error('A senha deve ter pelo menos 6 caracteres.');
+          setLoading(false);
+          return;
+        }
+
         // Criar novo usuário com acesso imediato ao sistema
         const tipoNegocio = formData.role === 'admin' ? 'admin' : 'multimarca';
         const userData = {
           full_name: formData.full_name,
           email: formData.email,
           password: formData.password,
-          telefone: formData.telefone || '',
+          telefone: formData.telefone || null,
           role: formData.role,
           tipo_negocio: tipoNegocio,
           categoria_cliente: 'multimarca',
-          ativo: true, // Cliente ativo pode fazer login
-          bloqueado: false
+          ativo: true,
+          bloqueado: false,
+          permissoes: {},
+          limite_credito: 0,
+          total_em_aberto: 0,
+          total_vencido: 0
         };
 
-        await User.create(userData);
+        await User.signup(userData);
 
         toast.success(`Cliente "${formData.full_name}" criado com sucesso!
 
@@ -134,7 +145,7 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
 
           <div className="grid md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <Label htmlFor="password">Senha {!user && '*'}</Label>
+              <Label htmlFor="password">Senha {!user && '*'} {!user && <span className="text-xs text-gray-500">(mínimo 6 caracteres)</span>}</Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -142,7 +153,8 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
                   value={formData.password}
                   onChange={e => setFormData({...formData, password: e.target.value})}
                   required={!user}
-                  placeholder={user ? "Deixe em branco para manter a atual" : "Senha temporária"}
+                  minLength={6}
+                  placeholder={user ? "Deixe em branco para manter a atual" : "Mínimo 6 caracteres"}
                 />
                 <button
                   type="button"
