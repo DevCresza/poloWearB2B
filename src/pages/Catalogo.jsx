@@ -153,7 +153,11 @@ export default function Catalogo() {
     try {
       if (!produto.fotos) return null;
       const fotos = typeof produto.fotos === 'string' ? JSON.parse(produto.fotos) : produto.fotos;
-      return fotos && fotos.length > 0 ? fotos[0] : null;
+      if (!fotos || fotos.length === 0) return null;
+
+      // Suporta fotos como strings ou objetos com metadados
+      const primeiraFoto = fotos[0];
+      return typeof primeiraFoto === 'string' ? primeiraFoto : primeiraFoto?.url || null;
     } catch (e) {
       return null;
     }
@@ -294,12 +298,6 @@ export default function Catalogo() {
                   Destaque
                 </Badge>
               )}
-              {ehLancamento && (
-                <Badge className="bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-lg text-[10px] sm:text-xs">
-                  <Sparkles className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
-                  Lançamento
-                </Badge>
-              )}
               {produto.disponibilidade === 'pronta_entrega' && (
                 <Badge className="bg-green-500 text-white shadow-lg text-[10px] sm:text-xs">
                   <Truck className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
@@ -310,12 +308,6 @@ export default function Catalogo() {
                 <Badge className="bg-purple-500 text-white shadow-lg text-[10px] sm:text-xs">
                   <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
                   Pré-Venda
-                </Badge>
-              )}
-              {produto.disponibilidade === 'sob_encomenda' && (
-                <Badge className="bg-orange-500 text-white shadow-lg text-[10px] sm:text-xs">
-                  <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
-                  Sob Encomenda
                 </Badge>
               )}
             </div>
@@ -376,6 +368,22 @@ export default function Catalogo() {
                 )}
               </div>
             )}
+
+            {/* Badges de Lançamento e Disponibilidade abaixo das cores */}
+            <div className="flex items-center gap-1.5">
+              {ehLancamento && (
+                <Badge className="bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-sm text-[9px] px-1.5 py-0.5">
+                  <Sparkles className="w-2 h-2 mr-0.5" />
+                  Lançamento
+                </Badge>
+              )}
+              {produto.disponibilidade === 'sob_encomenda' && (
+                <Badge className="bg-orange-500 text-white shadow-sm text-[9px] px-1.5 py-0.5">
+                  <Clock className="w-2 h-2 mr-0.5" />
+                  Sob Encomenda
+                </Badge>
+              )}
+            </div>
             
             <div className="flex gap-2 pt-2 mt-auto">
               <Button 
@@ -644,15 +652,15 @@ export default function Catalogo() {
               <div className="space-y-4">
                 {(() => {
                   let fotosParaMostrar = [];
-                  
+
                   if (selectedProduto.tem_variantes_cor && selectedVariantColor) {
-                    fotosParaMostrar = Array.isArray(selectedVariantColor.fotos_urls) 
-                      ? selectedVariantColor.fotos_urls 
+                    fotosParaMostrar = Array.isArray(selectedVariantColor.fotos_urls)
+                      ? selectedVariantColor.fotos_urls
                       : [];
                   } else {
                     try {
-                      const fotos = typeof selectedProduto.fotos === 'string' 
-                        ? JSON.parse(selectedProduto.fotos) 
+                      const fotos = typeof selectedProduto.fotos === 'string'
+                        ? JSON.parse(selectedProduto.fotos)
                         : selectedProduto.fotos;
                       fotosParaMostrar = Array.isArray(fotos) ? fotos : [];
                     } catch (e) {
@@ -660,13 +668,16 @@ export default function Catalogo() {
                     }
                   }
 
+                  // Extrair URLs (suporta strings e objetos com metadados)
+                  const getFotoUrl = (foto) => typeof foto === 'string' ? foto : foto?.url || foto;
+
                   if (fotosParaMostrar.length > 0) {
                     return (
                       <>
                         {/* Foto Principal */}
                         <div className="aspect-square bg-gray-100 rounded-xl overflow-hidden">
                           <img
-                            src={fotosParaMostrar[fotoAtualIndex] || fotosParaMostrar[0]}
+                            src={getFotoUrl(fotosParaMostrar[fotoAtualIndex] || fotosParaMostrar[0])}
                             alt={selectedProduto.nome}
                             className="w-full h-full object-cover"
                           />
@@ -684,7 +695,7 @@ export default function Catalogo() {
                                 }`}
                               >
                                 <img
-                                  src={foto}
+                                  src={getFotoUrl(foto)}
                                   alt={`${selectedProduto.nome} ${index + 1}`}
                                   className="w-full h-full object-cover"
                                 />

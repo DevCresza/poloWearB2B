@@ -38,13 +38,19 @@ export const Core = {
   UploadFile: async ({ file, folder = 'uploads' }) => {
     await delay();
 
-
-    // Simula URL do arquivo
-    const fileUrl = `https://storage.exemplo.com/${folder}/${Date.now()}-${file.name || 'file'}`;
+    // Para imagens, cria um Object URL que funciona localmente
+    let fileUrl;
+    if (file.type && file.type.startsWith('image/')) {
+      fileUrl = URL.createObjectURL(file);
+    } else {
+      // Para outros arquivos, simula URL
+      fileUrl = `https://storage.exemplo.com/${folder}/${Date.now()}-${file.name || 'file'}`;
+    }
 
     return {
       success: true,
-      url: fileUrl,
+      file_url: fileUrl, // Mudado de 'url' para 'file_url' para compatibilidade
+      url: fileUrl, // Mantido também para compatibilidade retroativa
       filename: file.name || 'file',
       size: file.size || 0,
       mime_type: file.type || 'application/octet-stream',

@@ -50,7 +50,11 @@ export default function ImageUploader({ images = [], onImagesChange, maxImages =
       // Upload da imagem editada
       const result = await uploadImage(file, 'produtos');
 
-      // Adicionar URL ao array de imagens
+      if (!result.success) {
+        throw new Error(result.error || 'Erro ao fazer upload');
+      }
+
+      // Adicionar URL ao array de imagens (como string simples, pois são fotos gerais)
       onImagesChange([...images, result.url]);
 
       // Se houver mais arquivos pendentes, processar o próximo
@@ -109,49 +113,70 @@ export default function ImageUploader({ images = [], onImagesChange, maxImages =
               ref={provided.innerRef}
               className="grid grid-cols-2 md:grid-cols-4 gap-4"
             >
-              {images.map((image, index) => (
-                <Draggable key={image} draggableId={image} index={index}>
-                  {(provided, snapshot) => (
-                    <div
-                      ref={provided.innerRef}
-                      {...provided.draggableProps}
-                      className={`relative group ${snapshot.isDragging ? 'z-50' : ''}`}
-                      onMouseEnter={() => setHoveredImage(index)}
-                      onMouseLeave={() => setHoveredImage(null)}
-                    >
-                      <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200">
-                        <img
-                          src={image}
-                          alt={`Produto ${index + 1}`}
-                          className="w-full h-full object-cover transition-transform group-hover:scale-110"
-                        />
-                      </div>
-                      
-                      {/* Drag Handle */}
+              {images.map((image, index) => {
+                // Suportar tanto strings (formato antigo) quanto objetos (com metadados)
+                const imageUrl = typeof image === 'string' ? image : image.url;
+                const imageData = typeof image === 'string' ? null : image;
+                const hasColorTag = imageData && imageData.cor_nome;
+
+                return (
+                  <Draggable key={imageUrl} draggableId={imageUrl} index={index}>
+                    {(provided, snapshot) => (
                       <div
-                        {...provided.dragHandleProps}
-                        className="absolute top-2 left-2 p-1.5 bg-white rounded-md shadow-md cursor-move opacity-0 group-hover:opacity-100 transition-opacity"
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        className={`relative group ${snapshot.isDragging ? 'z-50' : ''}`}
+                        onMouseEnter={() => setHoveredImage(index)}
+                        onMouseLeave={() => setHoveredImage(null)}
                       >
-                        <GripVertical className="w-4 h-4 text-gray-600" />
-                      </div>
+                        <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200">
+                          <img
+                            src={imageUrl}
+                            alt={`Produto ${index + 1}`}
+                            className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                          />
+                        </div>
 
-                      {/* Remove Button */}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveImage(index)}
-                        className="absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+                        {/* Drag Handle */}
+                        <div
+                          {...provided.dragHandleProps}
+                          className="absolute top-2 left-2 p-1.5 bg-white rounded-md shadow-md cursor-move opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <GripVertical className="w-4 h-4 text-gray-600" />
+                        </div>
 
-                      {/* Image Number Badge */}
-                      <div className="absolute bottom-2 left-2 px-2 py-1 bg-black bg-opacity-60 text-white text-xs rounded">
-                        {index + 1}º
+                        {/* Remove Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveImage(index)}
+                          className="absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+
+                        {/* Color Tag Badge - Sempre visível se houver */}
+                        {hasColorTag && (
+                          <div className="absolute top-2 left-1/2 transform -translate-x-1/2 px-2 py-1 rounded-full shadow-lg flex items-center gap-1.5"
+                               style={{ backgroundColor: 'rgba(255, 255, 255, 0.95)' }}>
+                            <div
+                              className="w-3 h-3 rounded-full border border-gray-300"
+                              style={{ backgroundColor: imageData.cor_codigo_hex }}
+                            />
+                            <span className="text-xs font-medium text-gray-800">
+                              {imageData.cor_nome}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Image Number Badge */}
+                        <div className="absolute bottom-2 left-2 px-2 py-1 bg-black bg-opacity-60 text-white text-xs rounded">
+                          {index + 1}º
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </Draggable>
-              ))}
+                    )}
+                  </Draggable>
+                );
+              })}
               {provided.placeholder}
             </div>
           )}

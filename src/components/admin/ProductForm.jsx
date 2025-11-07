@@ -104,6 +104,28 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
             ...v,
             cor_codigo_hex: v.cor_codigo_hex || v.cor_hex || '#000000'
           }));
+
+          // Consolidar fotos das variantes no array principal de fotos
+          variantes.forEach(variante => {
+            if (variante.fotos_urls && Array.isArray(variante.fotos_urls)) {
+              variante.fotos_urls.forEach(fotoUrl => {
+                // Verificar se foto já existe
+                const photoExists = fotos.some(p => {
+                  const existingUrl = typeof p === 'string' ? p : p.url;
+                  return existingUrl === fotoUrl;
+                });
+
+                if (!photoExists && fotos.length < 10) {
+                  // Adicionar como objeto com metadados da cor
+                  fotos.push({
+                    url: fotoUrl,
+                    cor_nome: variante.cor_nome,
+                    cor_codigo_hex: variante.cor_codigo_hex
+                  });
+                }
+              });
+            }
+          });
         }
       } catch (e) {
       }
@@ -844,6 +866,20 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
               onChange={(variantes) => setFormData({ ...formData, variantes_cor: variantes })}
               gradeConfig={formData.grade_configuracao}
               disponibilidade={formData.disponibilidade}
+              onPhotoAdded={(photoData) => {
+                // Adiciona a foto das variantes também ao array principal de fotos
+                const currentPhotos = formData.fotos || [];
+                // Verificar se já existe (comparando URL)
+                const photoUrl = typeof photoData === 'string' ? photoData : photoData.url;
+                const photoExists = currentPhotos.some(p => {
+                  const existingUrl = typeof p === 'string' ? p : p.url;
+                  return existingUrl === photoUrl;
+                });
+
+                if (!photoExists && currentPhotos.length < 10) {
+                  setFormData({ ...formData, fotos: [...currentPhotos, photoData] });
+                }
+              }}
             />
           )}
 

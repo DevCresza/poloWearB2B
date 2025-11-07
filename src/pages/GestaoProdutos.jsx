@@ -135,7 +135,11 @@ export default function GestaoProdutos() {
     try {
       if (!produto.fotos) return null;
       const fotos = typeof produto.fotos === 'string' ? JSON.parse(produto.fotos) : produto.fotos;
-      return fotos && fotos.length > 0 ? fotos[0] : null;
+      if (!fotos || fotos.length === 0) return null;
+
+      // Suporta fotos como strings ou objetos com metadados
+      const primeiraFoto = fotos[0];
+      return typeof primeiraFoto === 'string' ? primeiraFoto : primeiraFoto?.url || null;
     } catch (e) {
       return null;
     }

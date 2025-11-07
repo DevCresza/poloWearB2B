@@ -4,13 +4,22 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Image as ImageIcon, Upload } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
+import { Plus, Trash2, Upload, X, GripVertical } from 'lucide-react';
+import { uploadImage } from '@/lib/storageHelpers';
+import ImageEditor from '@/components/ImageEditor';
 import ColorPicker from '@/components/ColorPicker';
 import { toast } from 'sonner';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
-export default function ProductVariantsManager({ variantes, onChange, gradeConfig, disponibilidade }) {
+export default function ProductVariantsManager({ variantes = [], onChange, gradeConfig, disponibilidade, onPhotoAdded }) {
   const [uploadingImages, setUploadingImages] = useState({});
+  const [showEditor, setShowEditor] = useState(false);
+  const [currentImageToEdit, setCurrentImageToEdit] = useState(null);
+  const [currentVarianteId, setCurrentVarianteId] = useState(null);
+  const [pendingFiles, setPendingFiles] = useState([]);
+
+  // Garantir que variantes seja sempre um array
+  const variantesArray = Array.isArray(variantes) ? variantes : [];
 
   const addVariante = () => {
     const novaVariante = {
@@ -21,52 +30,140 @@ export default function ProductVariantsManager({ variantes, onChange, gradeConfi
       estoque_grades: 0,
       estoque_minimo: 0
     };
-    onChange([...variantes, novaVariante]);
+    onChange([...variantesArray, novaVariante]);
   };
 
   const removeVariante = (id) => {
-    onChange(variantes.filter(v => v.id !== id));
+    onChange(variantesArray.filter(v => v.id !== id));
   };
 
   const updateVariante = (id, field, value) => {
-    onChange(variantes.map(v => 
+    const novasVariantes = variantesArray.map(v =>
       v.id === id ? { ...v, [field]: value } : v
-    ));
+    );
+
+    console.log('🔄 Atualizando variante:', {
+      id,
+      field,
+      value,
+      varianteAtualizada: novasVariantes.find(v => v.id === id)
+    });
+
+    onChange(novasVariantes);
   };
 
-  const handleImageUpload = async (varianteId, files) => {
-    if (!files || files.length === 0) return;
+  const handleFileSelect = (varianteId, e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
 
-    setUploadingImages(prev => ({ ...prev, [varianteId]: true }));
+    const variante = variantes.find(v => v.id === varianteId);
+    const currentPhotos = variante.fotos_urls || [];
+    const maxImages = 4;
+    const remainingSlots = maxImages - currentPhotos.length;
 
+    if (remainingSlots <= 0) {
+      toast.info(`Você pode adicionar no máximo ${maxImages} imagens por cor`);
+      return;
+    }
+
+    const filesToProcess = files.slice(0, remainingSlots);
+
+    // Converter primeiro arquivo para base64 e abrir editor
+    const file = filesToProcess[0];
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setCurrentImageToEdit(reader.result);
+      setCurrentVarianteId(varianteId);
+      setPendingFiles(filesToProcess.slice(1)); // Guardar resto para processar depois
+      setShowEditor(true);
+    };
+    reader.readAsDataURL(file);
+
+    // Limpar input
+    e.target.value = '';
+  };
+
+  const handleSaveEditedImage = async (croppedImageBlob) => {
+    setUploadingImages(prev => ({ ...prev, [currentVarianteId]: true }));
     try {
-      const uploadPromises = Array.from(files).map(async (file) => {
-        const { file_url } = await base44.integrations.Core.UploadFile({ file });
-        return file_url;
+      // Converter Blob para File
+      const file = new File([croppedImageBlob], `variante-${Date.now()}.jpg`, {
+        type: 'image/jpeg'
       });
 
-      const uploadedUrls = await Promise.all(uploadPromises);
+      // Upload da imagem editada
+      const result = await uploadImage(file, 'produtos');
 
-      const variante = variantes.find(v => v.id === varianteId);
-      const novasFotos = [...(variante.fotos_urls || []), ...uploadedUrls];
+      if (!result.success) {
+        throw new Error(result.error || 'Erro ao fazer upload');
+      }
 
-      updateVariante(varianteId, 'fotos_urls', novasFotos);
+      // Adicionar URL ao array de imagens da variante
+      const variante = variantesArray.find(v => v.id === currentVarianteId);
+      const novasFotos = [...(variante.fotos_urls || []), result.url];
 
-      // Feedback de sucesso
-      toast.success(`${uploadedUrls.length} foto(s) adicionada(s) com sucesso!`);
+      console.log('📸 Adicionando foto à variante:', {
+        varianteId: currentVarianteId,
+        corNome: variante.cor_nome,
+        fotosAntes: variante.fotos_urls?.length || 0,
+        fotosDepois: novasFotos.length,
+        novaUrl: result.url
+      });
+
+      updateVariante(currentVarianteId, 'fotos_urls', novasFotos);
+
+      // Notificar o componente pai para adicionar também às fotos principais com metadados da cor
+      if (onPhotoAdded) {
+        onPhotoAdded({
+          url: result.url,
+          cor_nome: variante.cor_nome,
+          cor_codigo_hex: variante.cor_codigo_hex
+        });
+      }
+
+      toast.success('Foto adicionada com sucesso!');
+
+      // Se houver mais arquivos pendentes, processar o próximo
+      if (pendingFiles.length > 0) {
+        const nextFile = pendingFiles[0];
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setCurrentImageToEdit(reader.result);
+          setPendingFiles(pendingFiles.slice(1));
+          setShowEditor(true);
+        };
+        reader.readAsDataURL(nextFile);
+      } else {
+        setCurrentImageToEdit(null);
+        setCurrentVarianteId(null);
+      }
     } catch (error) {
-      console.error('Erro ao fazer upload das imagens:', error);
-      toast.error('Erro ao fazer upload das imagens. Tente novamente.');
+      console.error('Erro ao fazer upload da imagem:', error);
+      toast.error(`Erro ao fazer upload: ${error.message}`);
+      setCurrentImageToEdit(null);
+      setCurrentVarianteId(null);
+      setPendingFiles([]);
     } finally {
-      setUploadingImages(prev => ({ ...prev, [varianteId]: false }));
+      setUploadingImages(prev => ({ ...prev, [currentVarianteId]: false }));
     }
   };
 
   const removeImage = (varianteId, imageUrl) => {
-    const variante = variantes.find(v => v.id === varianteId);
+    const variante = variantesArray.find(v => v.id === varianteId);
     const novasFotos = variante.fotos_urls.filter(url => url !== imageUrl);
     updateVariante(varianteId, 'fotos_urls', novasFotos);
     toast.success('Foto removida com sucesso!');
+  };
+
+  const handleDragEnd = (varianteId, result) => {
+    if (!result.destination) return;
+
+    const variante = variantesArray.find(v => v.id === varianteId);
+    const items = Array.from(variante.fotos_urls || []);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+
+    updateVariante(varianteId, 'fotos_urls', items);
   };
 
   return (
@@ -81,12 +178,12 @@ export default function ProductVariantsManager({ variantes, onChange, gradeConfi
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {variantes.length === 0 ? (
+        {variantesArray.length === 0 ? (
           <p className="text-gray-500 text-center py-8">
             Nenhuma variante cadastrada. Clique em "Adicionar Cor" para começar.
           </p>
         ) : (
-          variantes.map((variante, index) => (
+          variantesArray.map((variante, index) => (
             <Card key={variante.id} className="border-2">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-4">
@@ -162,53 +259,112 @@ export default function ProductVariantsManager({ variantes, onChange, gradeConfi
                 <div className="mt-4">
                   <div className="flex items-center justify-between mb-2">
                     <Label>Fotos desta Cor</Label>
-                    {variante.fotos_urls && variante.fotos_urls.length > 0 && (
-                      <span className="text-sm text-gray-600">
-                        {variante.fotos_urls.length} foto(s)
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-2">
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      onChange={(e) => handleImageUpload(variante.id, e.target.files)}
-                      className="hidden"
-                      id={`upload-variante-${variante.id}`}
-                    />
-                    <label htmlFor={`upload-variante-${variante.id}`}>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={uploadingImages[variante.id]}
-                        onClick={() => document.getElementById(`upload-variante-${variante.id}`).click()}
-                        className="cursor-pointer"
-                      >
-                        <Upload className="w-4 h-4 mr-2" />
-                        {uploadingImages[variante.id] ? 'Enviando...' : 'Upload de Fotos'}
-                      </Button>
-                    </label>
+                    <div className="flex items-center gap-2">
+                      {variante.fotos_urls?.length > 0 && (
+                        <span className="text-sm text-gray-600">
+                          {variante.fotos_urls.length} de 4 imagens
+                        </span>
+                      )}
+                      {variante.fotos_urls?.length > 1 && (
+                        <span className="text-xs text-gray-500">Arraste para reordenar</span>
+                      )}
+                    </div>
                   </div>
 
-                  {variante.fotos_urls && variante.fotos_urls.length > 0 && (
-                    <div className="grid grid-cols-4 gap-2 mt-3">
-                      {variante.fotos_urls.map((url, idx) => (
-                        <div key={idx} className="relative group">
-                          <img
-                            src={url}
-                            alt={`${variante.cor_nome} ${idx + 1}`}
-                            className="w-full h-24 object-cover rounded-lg"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeImage(variante.id, url)}
-                            className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
+                  {/* Grid de Imagens com Drag & Drop */}
+                  {(() => {
+                    const fotos = variante.fotos_urls || [];
+                    console.log(`Variante ${variante.cor_nome}:`, {
+                      fotos_urls: fotos,
+                      length: fotos.length,
+                      isArray: Array.isArray(fotos)
+                    });
+
+                    return Array.isArray(fotos) && fotos.length > 0 ? (
+                      <DragDropContext onDragEnd={(result) => handleDragEnd(variante.id, result)}>
+                        <Droppable droppableId={`variante-${variante.id}`} direction="horizontal">
+                          {(provided) => (
+                            <div
+                              {...provided.droppableProps}
+                              ref={provided.innerRef}
+                              className="grid grid-cols-4 gap-3 mb-3"
+                            >
+                              {fotos.map((url, idx) => (
+                              <Draggable key={url} draggableId={url} index={idx}>
+                                {(provided, snapshot) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    className={`relative group ${snapshot.isDragging ? 'z-50' : ''}`}
+                                  >
+                                    <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200">
+                                      <img
+                                        src={url}
+                                        alt={`${variante.cor_nome} ${idx + 1}`}
+                                        className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                                      />
+                                    </div>
+
+                                    {/* Drag Handle */}
+                                    <div
+                                      {...provided.dragHandleProps}
+                                      className="absolute top-2 left-2 p-1.5 bg-white rounded-md shadow-md cursor-move opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                      <GripVertical className="w-4 h-4 text-gray-600" />
+                                    </div>
+
+                                    {/* Remove Button */}
+                                    <button
+                                      type="button"
+                                      onClick={() => removeImage(variante.id, url)}
+                                      className="absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+
+                                    {/* Image Number Badge */}
+                                    <div className="absolute bottom-2 left-2 px-2 py-1 bg-black bg-opacity-60 text-white text-xs rounded">
+                                      {idx + 1}º
+                                    </div>
+                                  </div>
+                                )}
+                              </Draggable>
+                            ))}
+                              {provided.placeholder}
+                            </div>
+                          )}
+                        </Droppable>
+                      </DragDropContext>
+                    ) : null;
+                  })()}
+
+                  {/* Botão de Upload */}
+                  {(!variante.fotos_urls || variante.fotos_urls.length < 4) && (
+                    <div className="mt-2">
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        onChange={(e) => handleFileSelect(variante.id, e)}
+                        className="hidden"
+                        id={`upload-variante-${variante.id}`}
+                        disabled={uploadingImages[variante.id]}
+                      />
+                      <label htmlFor={`upload-variante-${variante.id}`}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={uploadingImages[variante.id]}
+                          onClick={() => document.getElementById(`upload-variante-${variante.id}`).click()}
+                          className="w-full cursor-pointer"
+                        >
+                          <Upload className="w-4 h-4 mr-2" />
+                          {uploadingImages[variante.id]
+                            ? 'Enviando...'
+                            : `Adicionar Imagens (${4 - (variante.fotos_urls?.length || 0)} restantes)`
+                          }
+                        </Button>
+                      </label>
                     </div>
                   )}
                 </div>
@@ -230,6 +386,22 @@ export default function ProductVariantsManager({ variantes, onChange, gradeConfi
           ))
         )}
       </CardContent>
+
+      {/* Editor de Imagem */}
+      {currentImageToEdit && (
+        <ImageEditor
+          open={showEditor}
+          onClose={() => {
+            setShowEditor(false);
+            setCurrentImageToEdit(null);
+            setCurrentVarianteId(null);
+            setPendingFiles([]);
+          }}
+          imageSrc={currentImageToEdit}
+          onSave={handleSaveEditedImage}
+          aspectRatio={1}
+        />
+      )}
     </Card>
   );
 }
