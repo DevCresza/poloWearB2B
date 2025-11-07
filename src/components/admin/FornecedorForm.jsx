@@ -81,6 +81,25 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
     setLoading(true);
 
     try {
+      // Validações obrigatórias
+      if (!formData.razao_social) {
+        toast.error('Por favor, preencha a Razão Social.');
+        setLoading(false);
+        return;
+      }
+
+      if (!formData.responsavel_user_id) {
+        toast.error('Por favor, selecione um Responsável (Admin).');
+        setLoading(false);
+        return;
+      }
+
+      if (!formData.pedido_minimo_valor || formData.pedido_minimo_valor <= 0) {
+        toast.error('Por favor, informe um valor de pedido mínimo válido.');
+        setLoading(false);
+        return;
+      }
+
       if (fornecedor) {
         await Fornecedor.update(fornecedor.id, formData);
         toast.success('Fornecedor atualizado com sucesso!');
@@ -91,6 +110,7 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
       onSuccess();
     } catch (error) {
       toast.error('Erro ao salvar fornecedor. Tente novamente.');
+      console.error('Erro ao salvar fornecedor:', error);
     } finally {
       setLoading(false);
     }

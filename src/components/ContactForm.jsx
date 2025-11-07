@@ -44,9 +44,39 @@ export default function ContactForm() {
     e.preventDefault();
     setIsSubmitting(true);
     setErrorMessage('');
-    
+
     try {
-      
+      // Validações obrigatórias
+      if (!formData.nome) {
+        toast.error('Por favor, preencha seu nome.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (!formData.email) {
+        toast.error('Por favor, preencha seu email.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (!formData.telefone) {
+        toast.error('Por favor, preencha seu telefone.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (!formData.estado) {
+        toast.error('Por favor, selecione seu estado.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (!formData.cidade) {
+        toast.error('Por favor, preencha sua cidade.');
+        setIsSubmitting(false);
+        return;
+      }
+
       // Salvar no CRM (Contact)
       const novoContato = await Contact.create({
         ...formData,
@@ -84,6 +114,8 @@ Data: ${new Date().toLocaleString('pt-BR')}`
         });
       } catch (emailError) {
         // Não falha o processo se o email não enviar
+        console.error('Erro ao enviar email de notificação:', emailError);
+        toast.warning('Contato salvo com sucesso, mas o email de notificação não foi enviado.');
       }
       
       setShowSuccessDialog(true);

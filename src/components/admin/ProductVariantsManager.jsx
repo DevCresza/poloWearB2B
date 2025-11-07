@@ -142,11 +142,11 @@ export default function ProductVariantsManager({ variantes, onChange, gradeConfi
                       </div>
                     </>
                   )}
-                  {disponibilidade === 'programacao' && (
+                  {(disponibilidade === 'pre_venda' || disponibilidade === 'sob_encomenda') && (
                     <div className="col-span-2">
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                         <p className="text-sm text-blue-800">
-                          Este produto está em <strong>Programação</strong>. O estoque não é controlado para produtos em programação.
+                          Este produto está em <strong>Pré-Venda/Sob Encomenda</strong>. O estoque não é controlado para produtos neste modo.
                         </p>
                       </div>
                     </div>

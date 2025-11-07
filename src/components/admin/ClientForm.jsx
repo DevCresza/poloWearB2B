@@ -43,6 +43,22 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
           return;
         }
 
+        // Verificar se email já existe (apenas ao criar novo usuário)
+        try {
+          const existingUsers = await User.list({
+            filters: { email: formData.email }
+          });
+
+          if (existingUsers && existingUsers.length > 0) {
+            toast.error('Este email já está cadastrado no sistema.');
+            setLoading(false);
+            return;
+          }
+        } catch (error) {
+          console.error('Erro ao verificar email duplicado:', error);
+          // Continuar mesmo se falhar a verificação
+        }
+
         // Criar novo usuário com acesso imediato ao sistema
         const userData = {
           full_name: formData.full_name,

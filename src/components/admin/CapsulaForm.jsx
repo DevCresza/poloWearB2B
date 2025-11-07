@@ -37,6 +37,7 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
           quantidades = capsula.produtos_quantidades;
         }
       } catch (e) {
+        console.error('Erro ao fazer parse de produtos_quantidades:', e);
         quantidades = {};
       }
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,6 +21,8 @@ export default function MovimentacaoEstoqueForm({ produto, fornecedor, onClose, 
     documento: ''
   });
   const [salvando, setSalvando] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [pendingSubmit, setPendingSubmit] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -37,13 +39,19 @@ export default function MovimentacaoEstoqueForm({ produto, fornecedor, onClose, 
     }
 
     // Validar saída
-    if ((formData.tipo_movimentacao === 'saida' || formData.tipo_movimentacao === 'perda') && 
+    if ((formData.tipo_movimentacao === 'saida' || formData.tipo_movimentacao === 'perda') &&
         Math.abs(quantidade) > produto.estoque_atual_grades) {
-      if (!confirm('A quantidade a ser retirada é maior que o estoque atual. Deseja continuar?')) {
-        return;
-      }
+      // Mostrar dialog de confirmação
+      setPendingSubmit({ quantidade, formData });
+      setShowConfirmDialog(true);
+      return;
     }
 
+    // Se não precisa de confirmação, executar diretamente
+    await executeSubmit(quantidade);
+  };
+
+  const executeSubmit = async (quantidade) => {
     setSalvando(true);
 
     try {
@@ -88,6 +96,19 @@ export default function MovimentacaoEstoqueForm({ produto, fornecedor, onClose, 
     } finally {
       setSalvando(false);
     }
+  };
+
+  const handleConfirmSubmit = async () => {
+    setShowConfirmDialog(false);
+    if (pendingSubmit) {
+      await executeSubmit(pendingSubmit.quantidade);
+      setPendingSubmit(null);
+    }
+  };
+
+  const handleCancelSubmit = () => {
+    setShowConfirmDialog(false);
+    setPendingSubmit(null);
   };
 
   const getTipoInfo = (tipo) => {
@@ -272,6 +293,39 @@ export default function MovimentacaoEstoqueForm({ produto, fornecedor, onClose, 
           </div>
         </form>
       </DialogContent>
+
+      {/* Dialog de confirmação */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-orange-600" />
+              Confirmar Retirada
+            </DialogTitle>
+            <DialogDescription>
+              A quantidade a ser retirada é maior que o estoque atual.
+              Isso resultará em estoque negativo.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Alert className="border-orange-200 bg-orange-50">
+              <AlertTriangle className="h-4 w-4 text-orange-600" />
+              <AlertDescription className="text-orange-800">
+                <strong>Atenção:</strong> Esta ação não é recomendada e pode causar problemas
+                no controle de estoque.
+              </AlertDescription>
+            </Alert>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCancelSubmit}>
+              Cancelar
+            </Button>
+            <Button onClick={handleConfirmSubmit} variant="destructive">
+              Continuar Mesmo Assim
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

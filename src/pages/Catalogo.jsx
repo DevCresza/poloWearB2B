@@ -306,10 +306,16 @@ export default function Catalogo() {
                   Pronta Entrega
                 </Badge>
               )}
-              {produto.disponibilidade === 'programacao' && (
+              {produto.disponibilidade === 'pre_venda' && (
                 <Badge className="bg-purple-500 text-white shadow-lg text-[10px] sm:text-xs">
                   <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
-                  Programação
+                  Pré-Venda
+                </Badge>
+              )}
+              {produto.disponibilidade === 'sob_encomenda' && (
+                <Badge className="bg-orange-500 text-white shadow-lg text-[10px] sm:text-xs">
+                  <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
+                  Sob Encomenda
                 </Badge>
               )}
             </div>
@@ -505,7 +511,8 @@ export default function Catalogo() {
                 <SelectContent>
                   <SelectItem value="all">Todas</SelectItem>
                   <SelectItem value="pronta_entrega">Pronta Entrega</SelectItem>
-                  <SelectItem value="programacao">Programação</SelectItem>
+                  <SelectItem value="pre_venda">Pré-Venda</SelectItem>
+                  <SelectItem value="sob_encomenda">Sob Encomenda</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -711,10 +718,16 @@ export default function Catalogo() {
                         Destaque
                       </Badge>
                     )}
-                    {selectedProduto.disponibilidade === 'programacao' && (
+                    {selectedProduto.disponibilidade === 'pre_venda' && (
                       <Badge className="bg-purple-100 text-purple-800">
                         <Calendar className="w-3 h-3 mr-1" />
-                        Programação
+                        Pré-Venda
+                      </Badge>
+                    )}
+                    {selectedProduto.disponibilidade === 'sob_encomenda' && (
+                      <Badge className="bg-orange-100 text-orange-800">
+                        <Calendar className="w-3 h-3 mr-1" />
+                        Sob Encomenda
                       </Badge>
                     )}
                   </div>
@@ -854,10 +867,10 @@ export default function Catalogo() {
                   </div>
                 )}
 
-                {/* Programação Info */}
-                {selectedProduto.disponibilidade === 'programacao' && (
+                {/* Pré-Venda / Sob Encomenda Info */}
+                {(selectedProduto.disponibilidade === 'pre_venda' || selectedProduto.disponibilidade === 'sob_encomenda') && (
                   <div className="bg-purple-50 p-4 rounded-xl space-y-2 text-sm border border-purple-200">
-                    <h4 className="font-semibold text-purple-900">Informações de Programação:</h4>
+                    <h4 className="font-semibold text-purple-900">Informações de {selectedProduto.disponibilidade === 'pre_venda' ? 'Pré-Venda' : 'Sob Encomenda'}:</h4>
                     {selectedProduto.data_inicio_venda && (
                       <p className="text-purple-800">
                         <strong>Início das vendas:</strong> {new Date(selectedProduto.data_inicio_venda).toLocaleDateString('pt-BR')}

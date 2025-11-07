@@ -56,10 +56,23 @@ export default function UserFormFornecedor({ onSubmit, onCancel, loading }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.fornecedor_id) {
-      toast.info('Selecione um fornecedor');
+
+    // Validações obrigatórias
+    if (!formData.full_name) {
+      toast.error('Por favor, preencha o nome completo.');
       return;
     }
+
+    if (!formData.email) {
+      toast.error('Por favor, preencha o email.');
+      return;
+    }
+
+    if (!formData.fornecedor_id) {
+      toast.error('Por favor, selecione um fornecedor.');
+      return;
+    }
+
     const userData = {
       ...formData,
       tipo_negocio: 'fornecedor'

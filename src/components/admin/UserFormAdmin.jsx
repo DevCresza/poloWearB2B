@@ -39,8 +39,26 @@ export default function UserFormAdmin({ onSubmit, onCancel, loading }) {
   });
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Verificar se email já existe (apenas ao criar novo usuário)
+    try {
+      const { User } = await import('@/api/entities');
+      const existingUsers = await User.list({
+        filters: { email: formData.email }
+      });
+
+      if (existingUsers && existingUsers.length > 0) {
+        const { toast } = await import('sonner');
+        toast.error('Este email já está cadastrado no sistema.');
+        return;
+      }
+    } catch (error) {
+      console.error('Erro ao verificar email duplicado:', error);
+      // Continuar mesmo se falhar a verificação
+    }
+
     const userData = {
       ...formData,
       tipo_negocio: 'admin',
@@ -148,6 +166,8 @@ export default function UserFormAdmin({ onSubmit, onCancel, loading }) {
                     value={formData.password}
                     onChange={e => setFormData({...formData, password: e.target.value})}
                     required
+                    minLength={6}
+                    placeholder="Mínimo 6 caracteres"
                   />
                   <button
                     type="button"

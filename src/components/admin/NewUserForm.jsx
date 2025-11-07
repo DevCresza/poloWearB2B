@@ -117,6 +117,48 @@ export default function NewUserForm({ onSuccess, onCancel }) {
     setLoading(true);
 
     try {
+      // Validações obrigatórias
+      if (!formData.full_name) {
+        toast.error('Por favor, preencha o nome completo.');
+        setLoading(false);
+        return;
+      }
+
+      if (!formData.email) {
+        toast.error('Por favor, preencha o email.');
+        setLoading(false);
+        return;
+      }
+
+      if (!formData.role) {
+        toast.error('Por favor, selecione o perfil de acesso.');
+        setLoading(false);
+        return;
+      }
+
+      // Validar fornecedor_id se o role for 'fornecedor'
+      if (formData.role === 'fornecedor' && !formData.fornecedor_id) {
+        toast.error('Por favor, selecione um fornecedor para este usuário.');
+        setLoading(false);
+        return;
+      }
+
+      // Verificar se email já existe (apenas ao criar novo usuário)
+      try {
+        const existingUsers = await User.list({
+          filters: { email: formData.email }
+        });
+
+        if (existingUsers && existingUsers.length > 0) {
+          toast.error('Este email já está cadastrado no sistema.');
+          setLoading(false);
+          return;
+        }
+      } catch (error) {
+        console.error('Erro ao verificar email duplicado:', error);
+        // Continuar mesmo se falhar a verificação
+      }
+
       // Preparar dados para salvar
       const dataToSave = {
         ...formData,
@@ -128,13 +170,10 @@ export default function NewUserForm({ onSuccess, onCancel }) {
       if (!dataToSave.fornecedor_id) {
         delete dataToSave.fornecedor_id;
       }
-      if (!dataToSave.contact_id) {
-        delete dataToSave.contact_id;
-      }
 
       await PendingUser.create(dataToSave);
-      
-      toast.info('Usuário ')${formData.full_name}" foi registrado com sucesso!
+
+      toast.success(`Usuário "${formData.full_name}" foi registrado com sucesso!
 
 ✅ CONFIGURADO:
 • Email: ${formData.email}

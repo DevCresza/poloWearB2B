@@ -227,15 +227,35 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
     setSubmitting(true);
 
     try {
-      // Validações
-      if (!formData.nome || !formData.fornecedor_id) {
-        toast.error('Preencha os campos obrigatórios: Nome do Produto e Fornecedor.');
+      // Validações obrigatórias
+      if (!formData.nome) {
+        toast.error('Por favor, preencha o nome do produto.');
+        setSubmitting(false);
+        return;
+      }
+
+      if (!formData.fornecedor_id) {
+        toast.error('Por favor, selecione um fornecedor.');
+        setSubmitting(false);
+        return;
+      }
+
+      if (!formData.categoria) {
+        toast.error('Por favor, selecione uma categoria.');
+        setSubmitting(false);
+        return;
+      }
+
+      if (!formData.preco_por_peca || formData.preco_por_peca <= 0) {
+        toast.error('Por favor, informe um preço de venda válido (maior que zero).');
+        setSubmitting(false);
         return;
       }
 
       if (formData.tem_variantes_cor) {
         if (!formData.variantes_cor || formData.variantes_cor.length === 0) {
-          toast.info('Adicione pelo menos uma variante de cor, ou desative "Produto tem variantes de cor".');
+          toast.error('Adicione pelo menos uma variante de cor, ou desative "Produto tem variantes de cor".');
+          setSubmitting(false);
           return;
         }
         // Converter cor_hex para cor_codigo_hex se necessário (compatibilidade)
@@ -246,14 +266,16 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
 
         const variantesInvalidas = variantesNormalizadas.filter(v => !v.cor_nome || !v.cor_codigo_hex);
         if (variantesInvalidas.length > 0) {
-          toast.info('Todas as variantes precisam ter um nome e um código HEX de cor.');
+          toast.error('Todas as variantes precisam ter um nome e um código HEX de cor.');
+          setSubmitting(false);
           return;
         }
 
         // Atualizar formData com variantes normalizadas
         formData.variantes_cor = variantesNormalizadas;
       } else if (formData.estoque_atual_grades < 0) {
-        toast.info('O estoque atual não pode ser negativo.');
+        toast.error('O estoque atual não pode ser negativo.');
+        setSubmitting(false);
         return;
       }
 
@@ -263,12 +285,15 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
         grade_configuracao: JSON.stringify(formData.grade_configuracao),
         fotos: JSON.stringify(formData.fotos),
         variantes_cor: formData.tem_variantes_cor ? JSON.stringify(formData.variantes_cor) : null,
-        // Se tem variantes, o estoque geral é a soma das variantes
-        estoque_atual_grades: formData.tem_variantes_cor
+        // Se tem variantes e disponibilidade é pronta_entrega, calcular estoque
+        // Caso contrário, usar 0 ou o estoque informado
+        estoque_atual_grades: formData.tem_variantes_cor && formData.disponibilidade === 'pronta_entrega'
           ? formData.variantes_cor.reduce((sum, v) => sum + (v.estoque_grades || 0), 0)
-          : formData.estoque_atual_grades,
-        // Set controla_estoque to true if stock or variants are managed
-        controla_estoque: true,
+          : formData.disponibilidade === 'pronta_entrega'
+            ? formData.estoque_atual_grades
+            : 0,
+        // Set controla_estoque to true only for pronta_entrega
+        controla_estoque: formData.disponibilidade === 'pronta_entrega',
         // Convert empty date strings to null (PostgreSQL DATE columns don't accept empty strings)
         data_inicio_venda: formData.data_inicio_venda || null,
         data_limite_venda: formData.data_limite_venda || null,
@@ -448,12 +473,13 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="pronta_entrega">Pronta Entrega</SelectItem>
-                        <SelectItem value="programacao">Programação</SelectItem>
+                        <SelectItem value="pre_venda">Pré-Venda</SelectItem>
+                        <SelectItem value="sob_encomenda">Sob Encomenda</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {formData.disponibilidade === 'programacao' && (
+                  {(formData.disponibilidade === 'pre_venda' || formData.disponibilidade === 'sob_encomenda') && (
                     <>
                       <div className="space-y-2">
                         <Label htmlFor="data_inicio_venda">Data Início Venda</Label>
@@ -606,6 +632,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                       id="preco_por_peca"
                       type="number"
                       step="0.01"
+                      min="0.01"
                       required
                       value={formData.preco_por_peca || 0}
                       onChange={(e) => {
@@ -800,7 +827,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                     <div className="mt-4">
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                         <p className="text-sm text-blue-800">
-                          Este produto está em <strong>Programação</strong>. O estoque não é controlado para produtos em programação.
+                          Este produto está em <strong>Pré-Venda/Sob Encomenda</strong>. O estoque não é controlado para produtos neste modo.
                         </p>
                       </div>
                     </div>

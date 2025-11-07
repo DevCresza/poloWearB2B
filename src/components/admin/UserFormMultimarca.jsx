@@ -146,6 +146,8 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
                     value={formData.password}
                     onChange={e => setFormData({...formData, password: e.target.value})}
                     required
+                    minLength={6}
+                    placeholder="Mínimo 6 caracteres"
                   />
                   <button
                     type="button"

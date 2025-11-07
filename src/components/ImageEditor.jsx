@@ -109,37 +109,39 @@ export default function ImageEditor({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh]">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <ZoomIn className="w-5 h-5" />
             Editar Foto do Produto
           </DialogTitle>
         </DialogHeader>
 
-        {/* Área de Crop */}
-        <div className="relative h-[500px] bg-gray-900 rounded-lg overflow-hidden">
-          <Cropper
-            image={imageSrc}
-            crop={crop}
-            zoom={zoom}
-            rotation={rotation}
-            aspect={currentAspect}
-            cropShape="rect"
-            showGrid={true}
-            onCropChange={setCrop}
-            onCropComplete={onCropComplete}
-            onZoomChange={setZoom}
-            onRotationChange={setRotation}
-          />
-        </div>
+        {/* Container scrollável para o conteúdo */}
+        <div className="flex-1 overflow-y-auto space-y-4">
+          {/* Área de Crop */}
+          <div className="relative h-[400px] bg-gray-900 rounded-lg overflow-hidden">
+            <Cropper
+              image={imageSrc}
+              crop={crop}
+              zoom={zoom}
+              rotation={rotation}
+              aspect={currentAspect}
+              cropShape="rect"
+              showGrid={true}
+              onCropChange={setCrop}
+              onCropComplete={onCropComplete}
+              onZoomChange={setZoom}
+              onRotationChange={setRotation}
+            />
+          </div>
 
-        {/* Controles */}
-        <div className="space-y-4 py-4 max-h-60 overflow-y-auto">
+          {/* Controles */}
+          <div className="space-y-4 pb-4">
           {/* Proporção */}
           <div className="space-y-2">
             <Label>Proporção da Imagem</Label>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
                 variant={currentAspect === 1 ? "default" : "outline"}
@@ -232,9 +234,10 @@ export default function ImageEditor({
               {rotation}°
             </div>
           </div>
+          </div>
         </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="flex-shrink-0 gap-2">
           <Button
             type="button"
             variant="outline"
