@@ -46,13 +46,17 @@ export default function ProductVariantsManager({ variantes, onChange, gradeConfi
       });
 
       const uploadedUrls = await Promise.all(uploadPromises);
-      
+
       const variante = variantes.find(v => v.id === varianteId);
       const novasFotos = [...(variante.fotos_urls || []), ...uploadedUrls];
-      
+
       updateVariante(varianteId, 'fotos_urls', novasFotos);
+
+      // Feedback de sucesso
+      toast.success(`${uploadedUrls.length} foto(s) adicionada(s) com sucesso!`);
     } catch (error) {
-      toast.error('Erro ao fazer upload das imagens');
+      console.error('Erro ao fazer upload das imagens:', error);
+      toast.error('Erro ao fazer upload das imagens. Tente novamente.');
     } finally {
       setUploadingImages(prev => ({ ...prev, [varianteId]: false }));
     }
@@ -62,6 +66,7 @@ export default function ProductVariantsManager({ variantes, onChange, gradeConfi
     const variante = variantes.find(v => v.id === varianteId);
     const novasFotos = variante.fotos_urls.filter(url => url !== imageUrl);
     updateVariante(varianteId, 'fotos_urls', novasFotos);
+    toast.success('Foto removida com sucesso!');
   };
 
   return (
@@ -155,7 +160,14 @@ export default function ProductVariantsManager({ variantes, onChange, gradeConfi
 
                 {/* Fotos da Variante */}
                 <div className="mt-4">
-                  <Label>Fotos desta Cor</Label>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label>Fotos desta Cor</Label>
+                    {variante.fotos_urls && variante.fotos_urls.length > 0 && (
+                      <span className="text-sm text-gray-600">
+                        {variante.fotos_urls.length} foto(s)
+                      </span>
+                    )}
+                  </div>
                   <div className="mt-2">
                     <input
                       type="file"
