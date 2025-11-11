@@ -38,6 +38,7 @@ export default function Catalogo() {
   const [carrinho, setCarrinho] = useState([]);
   const [quantidadeModal, setQuantidadeModal] = useState(1);
   const [selectedVariantColor, setSelectedVariantColor] = useState(null);
+  const [quantidadesPorCor, setQuantidadesPorCor] = useState({}); // { cor_id: quantidade }
   const [adicionandoCarrinho, setAdicionandoCarrinho] = useState({});
   const [fotoAtualIndex, setFotoAtualIndex] = useState(0);
 
@@ -252,6 +253,7 @@ export default function Catalogo() {
     setSelectedProduto(produto);
     setQuantidadeModal(produto.pedido_minimo_grades || 1);
     setSelectedVariantColor(null);
+    setQuantidadesPorCor({}); // Reset quantidades por cor
     setFotoAtualIndex(0); // Reset foto para primeira
     setShowDetailsModal(true);
   };
@@ -854,44 +856,98 @@ export default function Catalogo() {
                   
                   return variantes.length > 0 && (
                     <div>
-                      <Label className="mb-3 block font-semibold">Selecione a Cor *</Label>
-                      <div className="grid grid-cols-2 gap-3">
+                      <Label className="mb-3 block font-semibold">Selecione as Quantidades por Cor</Label>
+                      <p className="text-sm text-gray-600 mb-3">
+                        Escolha a quantidade desejada de cada cor. Você pode adicionar múltiplas cores de uma vez.
+                      </p>
+                      <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
                         {variantes.map((v, idx) => {
                           const estoqueVariante = v.estoque_grades || 0;
-                          const isSelected = selectedVariantColor?.cor_nome === v.cor_nome;
-                          const semEstoque = estoqueVariante <= 0 && selectedProduto.controla_estoque && !selectedProduto.permite_venda_sem_estoque;
+                          const qtdSelecionada = quantidadesPorCor[v.id] || 0;
+                          const semEstoque = selectedProduto.disponibilidade === 'pronta_entrega' &&
+                                           estoqueVariante <= 0 &&
+                                           selectedProduto.controla_estoque &&
+                                           !selectedProduto.permite_venda_sem_estoque;
 
                           return (
-                            <button
+                            <div
                               key={idx}
-                              onClick={() => {
-                                if (!semEstoque) {
-                                  setSelectedVariantColor(v);
-                                  setFotoAtualIndex(0); // Reset foto ao trocar cor
-                                }
-                              }}
-                              disabled={semEstoque}
                               className={`
                                 flex items-center gap-3 p-3 rounded-lg border-2 transition-all
-                                ${isSelected ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white'}
-                                ${semEstoque ? 'opacity-50 cursor-not-allowed' : 'hover:border-blue-400 cursor-pointer'}
+                                ${qtdSelecionada > 0 ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white'}
+                                ${semEstoque ? 'opacity-50' : ''}
                               `}
                             >
                               <div
-                                className="w-8 h-8 rounded-full border-2 border-gray-300 flex-shrink-0"
+                                className="w-8 h-8 rounded-full border-2 border-gray-300 flex-shrink-0 cursor-pointer"
                                 style={{ backgroundColor: v.cor_codigo_hex || v.cor_hex || '#000000' }}
+                                onClick={() => {
+                                  setSelectedVariantColor(v);
+                                  setFotoAtualIndex(0);
+                                }}
+                                title="Clique para ver fotos desta cor"
                               />
                               <div className="text-left flex-1">
                                 <div className="font-medium text-sm">{v.cor_nome}</div>
-                                <div className={`text-xs ${estoqueVariante > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                  {estoqueVariante > 0 ? `${estoqueVariante} grades` : 'Sem estoque'}
-                                </div>
+                                {selectedProduto.disponibilidade === 'pronta_entrega' && (
+                                  <div className={`text-xs ${estoqueVariante > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {estoqueVariante > 0 ? `${estoqueVariante} em estoque` : 'Sem estoque'}
+                                  </div>
+                                )}
                               </div>
-                              {isSelected && <Check className="w-5 h-5 text-blue-600" />}
-                            </button>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  disabled={semEstoque}
+                                  onClick={() => {
+                                    const novaQtd = Math.max(0, qtdSelecionada - 1);
+                                    setQuantidadesPorCor(prev => ({
+                                      ...prev,
+                                      [v.id]: novaQtd
+                                    }));
+                                  }}
+                                >
+                                  <Minus className="w-4 h-4" />
+                                </Button>
+                                <span className="w-12 text-center font-semibold">
+                                  {qtdSelecionada}
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  disabled={semEstoque}
+                                  onClick={() => {
+                                    const novaQtd = qtdSelecionada + 1;
+                                    setQuantidadesPorCor(prev => ({
+                                      ...prev,
+                                      [v.id]: novaQtd
+                                    }));
+                                  }}
+                                >
+                                  <Plus className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
                           );
                         })}
                       </div>
+
+                      {/* Total de grades selecionadas */}
+                      {Object.values(quantidadesPorCor).reduce((sum, qtd) => sum + qtd, 0) > 0 && (
+                        <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <div className="flex justify-between items-center">
+                            <span className="font-semibold text-gray-900">Total:</span>
+                            <span className="text-lg font-bold text-blue-600">
+                              {Object.values(quantidadesPorCor).reduce((sum, qtd) => sum + qtd, 0)} {selectedProduto.tipo_venda === 'grade' ? 'grades' : 'unidades'}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
@@ -967,8 +1023,8 @@ export default function Catalogo() {
                   </div>
                 )}
                 
-                {/* Quantity Selector */}
-                {(!selectedProduto.tem_variantes_cor || selectedVariantColor) && (
+                {/* Quantity Selector - Só para produtos sem variantes */}
+                {!selectedProduto.tem_variantes_cor && (
                   <div className="space-y-3">
                     <Label className="font-semibold">Quantidade de {selectedProduto.tipo_venda === 'grade' ? 'Grades' : 'Unidades'}:</Label>
                     <div className="flex items-center gap-4">
@@ -1023,20 +1079,78 @@ export default function Catalogo() {
 
                 {/* Add to Cart Button */}
                 <Button
-                  onClick={() => adicionarAoCarrinho(selectedProduto, quantidadeModal, selectedVariantColor)}
+                  onClick={() => {
+                    if (selectedProduto.tem_variantes_cor) {
+                      // Adicionar múltiplas cores ao carrinho
+                      const variantesComQuantidade = Object.entries(quantidadesPorCor).filter(([_, qtd]) => qtd > 0);
+
+                      if (variantesComQuantidade.length === 0) {
+                        toast.info('Selecione pelo menos uma cor com quantidade maior que zero');
+                        return;
+                      }
+
+                      let variantes = [];
+                      try {
+                        variantes = typeof selectedProduto.variantes_cor === 'string'
+                          ? JSON.parse(selectedProduto.variantes_cor)
+                          : selectedProduto.variantes_cor;
+                      } catch (e) {
+                        variantes = [];
+                      }
+
+                      variantesComQuantidade.forEach(([varianteId, quantidade]) => {
+                        const variante = variantes.find(v => v.id === varianteId);
+                        if (variante) {
+                          adicionarAoCarrinho(selectedProduto, quantidade, variante);
+                        }
+                      });
+
+                      toast.success(`${variantesComQuantidade.length} cor(es) adicionada(s) ao carrinho!`);
+                      setShowDetailsModal(false);
+                    } else {
+                      // Produto sem variantes, adiciona normalmente
+                      adicionarAoCarrinho(selectedProduto, quantidadeModal, null);
+                    }
+                  }}
                   disabled={(() => {
-                    // Desabilitar se tem variantes e não selecionou cor
-                    if (selectedProduto.tem_variantes_cor && !selectedVariantColor) {
-                      return true;
+                    // Se tem variantes de cor, verifica se selecionou pelo menos uma quantidade
+                    if (selectedProduto.tem_variantes_cor) {
+                      const totalSelecionado = Object.values(quantidadesPorCor).reduce((sum, qtd) => sum + qtd, 0);
+                      if (totalSelecionado === 0) {
+                        return true;
+                      }
+
+                      // Verificar estoque se controla estoque
+                      if (selectedProduto.controla_estoque && !selectedProduto.permite_venda_sem_estoque) {
+                        let variantes = [];
+                        try {
+                          variantes = typeof selectedProduto.variantes_cor === 'string'
+                            ? JSON.parse(selectedProduto.variantes_cor)
+                            : selectedProduto.variantes_cor;
+                        } catch (e) {
+                          variantes = [];
+                        }
+
+                        // Verifica se alguma cor selecionada está sem estoque
+                        const algumaSemEstoque = Object.entries(quantidadesPorCor).some(([varianteId, qtd]) => {
+                          if (qtd > 0) {
+                            const variante = variantes.find(v => v.id === varianteId);
+                            return variante && (variante.estoque_grades || 0) <= 0;
+                          }
+                          return false;
+                        });
+
+                        if (algumaSemEstoque) {
+                          return true;
+                        }
+                      }
+
+                      return false;
                     }
 
-                    // Desabilitar se controla estoque e está sem estoque
+                    // Produto sem variantes - lógica antiga
                     if (selectedProduto.controla_estoque && !selectedProduto.permite_venda_sem_estoque) {
-                      if (selectedProduto.tem_variantes_cor && selectedVariantColor) {
-                        return (selectedVariantColor.estoque_grades || 0) <= 0;
-                      } else if (!selectedProduto.tem_variantes_cor) {
-                        return (selectedProduto.estoque_atual_grades || 0) <= 0;
-                      }
+                      return (selectedProduto.estoque_atual_grades || 0) <= 0;
                     }
                     return false;
                   })()}
@@ -1044,29 +1158,55 @@ export default function Catalogo() {
                 >
                   <ShoppingCart className="w-5 h-5 mr-2" />
                   {(() => {
-                    // Mensagem se tem variantes e não selecionou cor
-                    if (selectedProduto.tem_variantes_cor && !selectedVariantColor) {
-                      return 'Selecione uma Cor';
+                    // Produto com variantes de cor
+                    if (selectedProduto.tem_variantes_cor) {
+                      const totalSelecionado = Object.values(quantidadesPorCor).reduce((sum, qtd) => sum + qtd, 0);
+
+                      if (totalSelecionado === 0) {
+                        return 'Selecione Quantidades';
+                      }
+
+                      // Verificar se alguma cor selecionada está sem estoque
+                      if (selectedProduto.controla_estoque && !selectedProduto.permite_venda_sem_estoque) {
+                        let variantes = [];
+                        try {
+                          variantes = typeof selectedProduto.variantes_cor === 'string'
+                            ? JSON.parse(selectedProduto.variantes_cor)
+                            : selectedProduto.variantes_cor;
+                        } catch (e) {
+                          variantes = [];
+                        }
+
+                        const algumaSemEstoque = Object.entries(quantidadesPorCor).some(([varianteId, qtd]) => {
+                          if (qtd > 0) {
+                            const variante = variantes.find(v => v.id === varianteId);
+                            return variante && (variante.estoque_grades || 0) <= 0;
+                          }
+                          return false;
+                        });
+
+                        if (algumaSemEstoque) {
+                          return 'Cor Selecionada Esgotada';
+                        }
+                      }
+
+                      return `Adicionar ${totalSelecionado} ao Carrinho`;
                     }
 
-                    // Mensagem se está sem estoque
+                    // Produto sem variantes - lógica antiga
                     if (selectedProduto.controla_estoque && !selectedProduto.permite_venda_sem_estoque) {
-                      if (selectedProduto.tem_variantes_cor && selectedVariantColor) {
-                        return (selectedVariantColor.estoque_grades || 0) <= 0 ? 'Produto Esgotado' : 'Adicionar ao Carrinho';
-                      } else if (!selectedProduto.tem_variantes_cor) {
-                        return (selectedProduto.estoque_atual_grades || 0) <= 0 ? 'Produto Esgotado' : 'Adicionar ao Carrinho';
-                      }
+                      return (selectedProduto.estoque_atual_grades || 0) <= 0 ? 'Produto Esgotado' : 'Adicionar ao Carrinho';
                     }
                     return 'Adicionar ao Carrinho';
                   })()}
                 </Button>
 
-                {/* Alert quando não selecionou cor */}
-                {selectedProduto.tem_variantes_cor && !selectedVariantColor && (
+                {/* Alert quando não selecionou quantidades */}
+                {selectedProduto.tem_variantes_cor && Object.values(quantidadesPorCor).reduce((sum, qtd) => sum + qtd, 0) === 0 && (
                   <Alert className="border-yellow-200 bg-yellow-50">
                     <AlertTriangle className="h-4 w-4 text-yellow-600" />
                     <AlertDescription className="text-yellow-800">
-                      Por favor, selecione uma cor antes de adicionar ao carrinho.
+                      Por favor, selecione as quantidades desejadas para cada cor.
                     </AlertDescription>
                   </Alert>
                 )}
