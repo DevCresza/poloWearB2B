@@ -667,20 +667,30 @@ export default function Catalogo() {
               <div className="space-y-4">
                 {(() => {
                   let fotosParaMostrar = [];
+                  let fotosPrincipais = [];
+
+                  // Sempre tentar pegar as fotos principais
+                  try {
+                    const fotos = typeof selectedProduto.fotos === 'string'
+                      ? JSON.parse(selectedProduto.fotos)
+                      : selectedProduto.fotos;
+                    fotosPrincipais = Array.isArray(fotos) ? fotos : [];
+                  } catch (e) {
+                    fotosPrincipais = [];
+                  }
 
                   if (selectedProduto.tem_variantes_cor && selectedVariantColor) {
+                    // Tentar pegar fotos da variante
                     fotosParaMostrar = Array.isArray(selectedVariantColor.fotos_urls)
                       ? selectedVariantColor.fotos_urls
                       : [];
-                  } else {
-                    try {
-                      const fotos = typeof selectedProduto.fotos === 'string'
-                        ? JSON.parse(selectedProduto.fotos)
-                        : selectedProduto.fotos;
-                      fotosParaMostrar = Array.isArray(fotos) ? fotos : [];
-                    } catch (e) {
-                      fotosParaMostrar = [];
+
+                    // Se a variante não tem fotos, usar as fotos principais
+                    if (fotosParaMostrar.length === 0) {
+                      fotosParaMostrar = fotosPrincipais;
                     }
+                  } else {
+                    fotosParaMostrar = fotosPrincipais;
                   }
 
                   // Extrair URLs (suporta strings e objetos com metadados)
