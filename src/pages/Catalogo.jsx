@@ -696,24 +696,46 @@ export default function Catalogo() {
                   // Extrair URLs (suporta strings e objetos com metadados)
                   const getFotoUrl = (foto) => typeof foto === 'string' ? foto : foto?.url || foto;
 
-                  if (fotosParaMostrar.length > 0) {
+                  // Extrair ID do YouTube
+                  const getYouTubeVideoId = (url) => {
+                    if (!url) return null;
+                    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+                    const match = url.match(regExp);
+                    return (match && match[2].length === 11) ? match[2] : null;
+                  };
+
+                  const youtubeVideoId = getYouTubeVideoId(selectedProduto.video_url);
+                  const totalMedias = fotosParaMostrar.length + (youtubeVideoId ? 1 : 0);
+
+                  if (fotosParaMostrar.length > 0 || youtubeVideoId) {
                     return (
                       <>
-                        {/* Foto Principal */}
+                        {/* Foto/Vídeo Principal */}
                         <div className="aspect-square bg-gray-100 rounded-xl overflow-hidden">
-                          <img
-                            src={getFotoUrl(fotosParaMostrar[fotoAtualIndex] || fotosParaMostrar[0])}
-                            alt={selectedProduto.nome}
-                            className="w-full h-full object-cover"
-                          />
+                          {fotoAtualIndex < fotosParaMostrar.length ? (
+                            <img
+                              src={getFotoUrl(fotosParaMostrar[fotoAtualIndex] || fotosParaMostrar[0])}
+                              alt={selectedProduto.nome}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : youtubeVideoId ? (
+                            <iframe
+                              className="w-full h-full"
+                              src={`https://www.youtube.com/embed/${youtubeVideoId}`}
+                              title="Vídeo do Produto"
+                              frameBorder="0"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              allowFullScreen
+                            />
+                          ) : null}
                         </div>
 
-                        {/* Miniaturas - TODAS as fotos */}
-                        {fotosParaMostrar.length > 1 && (
+                        {/* Miniaturas - TODAS as fotos + vídeo */}
+                        {totalMedias > 1 && (
                           <div className="grid grid-cols-4 gap-2">
                             {fotosParaMostrar.map((foto, index) => (
                               <button
-                                key={index}
+                                key={`foto-${index}`}
                                 onClick={() => setFotoAtualIndex(index)}
                                 className={`aspect-square bg-gray-100 rounded-lg overflow-hidden border-2 transition-all hover:border-blue-500 ${
                                   fotoAtualIndex === index ? 'border-blue-500 ring-2 ring-blue-300' : 'border-transparent'
@@ -726,6 +748,26 @@ export default function Catalogo() {
                                 />
                               </button>
                             ))}
+                            {youtubeVideoId && (
+                              <button
+                                key="video"
+                                onClick={() => setFotoAtualIndex(fotosParaMostrar.length)}
+                                className={`aspect-square bg-gray-100 rounded-lg overflow-hidden border-2 transition-all hover:border-blue-500 relative ${
+                                  fotoAtualIndex === fotosParaMostrar.length ? 'border-blue-500 ring-2 ring-blue-300' : 'border-transparent'
+                                }`}
+                              >
+                                <img
+                                  src={`https://img.youtube.com/vi/${youtubeVideoId}/mqdefault.jpg`}
+                                  alt="Vídeo do Produto"
+                                  className="w-full h-full object-cover"
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
+                                  <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8 5v14l11-7z"/>
+                                  </svg>
+                                </div>
+                              </button>
+                            )}
                           </div>
                         )}
                       </>
