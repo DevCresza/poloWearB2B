@@ -66,18 +66,25 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
       const newProductIds = prev.produto_ids.includes(productId)
         ? prev.produto_ids.filter(id => id !== productId)
         : [...prev.produto_ids, productId];
-      
+
       // Se desmarcar, remover da quantidade
       const newQuantidades = { ...prev.produtos_quantidades };
       if (!newProductIds.includes(productId)) {
         delete newQuantidades[productId];
       } else if (!newQuantidades[productId]) {
-        // Se marcar e não tem quantidade, definir 1 como padrão
-        newQuantidades[productId] = 1;
+        // Verificar se produto tem variantes
+        const produto = allProdutos.find(p => p.id === productId);
+        if (produto?.tem_variantes_cor) {
+          // Inicializar com array vazio de variantes
+          newQuantidades[productId] = { variantes: [] };
+        } else {
+          // Definir quantidade padrão de 1
+          newQuantidades[productId] = 1;
+        }
       }
 
-      return { 
-        ...prev, 
+      return {
+        ...prev,
         produto_ids: newProductIds,
         produtos_quantidades: newQuantidades
       };
@@ -175,7 +182,10 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
                 <div className="space-y-3">
                   {filteredProdutos.map(produto => {
                     const isSelected = formData.produto_ids.includes(produto.id);
-                    const quantidade = formData.produtos_quantidades[produto.id] || 1;
+                    const qtdData = formData.produtos_quantidades[produto.id];
+                    // Para produtos sem variantes, qtdData é um número
+                    // Para produtos com variantes, qtdData é um objeto { variantes: [...] }
+                    const quantidade = typeof qtdData === 'number' ? qtdData : 1;
 
                     return (
                       <div key={produto.id} className="p-3 rounded-md bg-white shadow-sm hover:shadow-md transition-shadow">
@@ -207,38 +217,183 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
                             <div className="text-xs text-gray-500">{produto.marca}</div>
                             
                             {isSelected && (
-                              <div className="mt-2 flex items-center gap-2">
-                                <Label className="text-xs">Qtd. Mínima:</Label>
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 w-7 p-0"
-                                    onClick={() => handleQuantidadeChange(produto.id, quantidade - 1)}
-                                  >
-                                    <Minus className="w-3 h-3" />
-                                  </Button>
-                                  <Input
-                                    type="number"
-                                    min="1"
-                                    value={quantidade}
-                                    onChange={(e) => handleQuantidadeChange(produto.id, e.target.value)}
-                                    className="w-16 h-7 text-center"
-                                  />
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 w-7 p-0"
-                                    onClick={() => handleQuantidadeChange(produto.id, quantidade + 1)}
-                                  >
-                                    <Plus className="w-3 h-3" />
-                                  </Button>
-                                </div>
-                                <span className="text-xs text-gray-500">
-                                  {produto.tipo_venda === 'grade' ? 'grades' : 'unidades'}
-                                </span>
+                              <div className="mt-2 space-y-2">
+                                {/* Se produto tem variantes de cor, mostrar seleção por cor */}
+                                {produto.tem_variantes_cor && (() => {
+                                  let variantes = [];
+                                  try {
+                                    variantes = typeof produto.variantes_cor === 'string'
+                                      ? JSON.parse(produto.variantes_cor)
+                                      : produto.variantes_cor || [];
+                                  } catch (e) {
+                                    variantes = [];
+                                  }
+
+                                  if (variantes.length > 0) {
+                                    const quantidadesVariantes = formData.produtos_quantidades[produto.id]?.variantes || [];
+
+                                    return (
+                                      <div className="space-y-2 bg-gray-50 p-2 rounded">
+                                        <Label className="text-xs font-semibold">Quantidades por Cor:</Label>
+                                        {variantes.map((variante) => {
+                                          const qtdVariante = quantidadesVariantes.find(v => v.cor_id === variante.id)?.quantidade || 0;
+
+                                          return (
+                                            <div key={variante.id} className="flex items-center gap-2">
+                                              <div
+                                                className="w-4 h-4 rounded-full border border-gray-300"
+                                                style={{ backgroundColor: variante.cor_codigo_hex || variante.cor_hex || '#000' }}
+                                                title={variante.cor_nome}
+                                              />
+                                              <span className="text-xs min-w-[80px]">{variante.cor_nome}</span>
+                                              <div className="flex items-center gap-1">
+                                                <Button
+                                                  type="button"
+                                                  variant="outline"
+                                                  size="sm"
+                                                  className="h-6 w-6 p-0"
+                                                  onClick={() => {
+                                                    const newQuantidadesVariantes = qtdVariante > 0
+                                                      ? quantidadesVariantes.map(v =>
+                                                          v.cor_id === variante.id
+                                                            ? { ...v, quantidade: Math.max(0, v.quantidade - 1) }
+                                                            : v
+                                                        ).filter(v => v.quantidade > 0)
+                                                      : quantidadesVariantes;
+
+                                                    setFormData(prev => ({
+                                                      ...prev,
+                                                      produtos_quantidades: {
+                                                        ...prev.produtos_quantidades,
+                                                        [produto.id]: {
+                                                          variantes: newQuantidadesVariantes
+                                                        }
+                                                      }
+                                                    }));
+                                                  }}
+                                                >
+                                                  <Minus className="w-3 h-3" />
+                                                </Button>
+                                                <Input
+                                                  type="number"
+                                                  min="0"
+                                                  value={qtdVariante}
+                                                  onChange={(e) => {
+                                                    const newQtd = parseInt(e.target.value) || 0;
+                                                    let newQuantidadesVariantes = [...quantidadesVariantes];
+
+                                                    if (newQtd === 0) {
+                                                      newQuantidadesVariantes = newQuantidadesVariantes.filter(v => v.cor_id !== variante.id);
+                                                    } else {
+                                                      const existingIndex = newQuantidadesVariantes.findIndex(v => v.cor_id === variante.id);
+                                                      if (existingIndex >= 0) {
+                                                        newQuantidadesVariantes[existingIndex].quantidade = newQtd;
+                                                      } else {
+                                                        newQuantidadesVariantes.push({
+                                                          cor_id: variante.id,
+                                                          cor_nome: variante.cor_nome,
+                                                          cor_hex: variante.cor_codigo_hex || variante.cor_hex,
+                                                          quantidade: newQtd
+                                                        });
+                                                      }
+                                                    }
+
+                                                    setFormData(prev => ({
+                                                      ...prev,
+                                                      produtos_quantidades: {
+                                                        ...prev.produtos_quantidades,
+                                                        [produto.id]: {
+                                                          variantes: newQuantidadesVariantes
+                                                        }
+                                                      }
+                                                    }));
+                                                  }}
+                                                  className="w-14 h-6 text-center text-xs"
+                                                />
+                                                <Button
+                                                  type="button"
+                                                  variant="outline"
+                                                  size="sm"
+                                                  className="h-6 w-6 p-0"
+                                                  onClick={() => {
+                                                    let newQuantidadesVariantes = [...quantidadesVariantes];
+                                                    const existingIndex = newQuantidadesVariantes.findIndex(v => v.cor_id === variante.id);
+
+                                                    if (existingIndex >= 0) {
+                                                      newQuantidadesVariantes[existingIndex].quantidade++;
+                                                    } else {
+                                                      newQuantidadesVariantes.push({
+                                                        cor_id: variante.id,
+                                                        cor_nome: variante.cor_nome,
+                                                        cor_hex: variante.cor_codigo_hex || variante.cor_hex,
+                                                        quantidade: 1
+                                                      });
+                                                    }
+
+                                                    setFormData(prev => ({
+                                                      ...prev,
+                                                      produtos_quantidades: {
+                                                        ...prev.produtos_quantidades,
+                                                        [produto.id]: {
+                                                          variantes: newQuantidadesVariantes
+                                                        }
+                                                      }
+                                                    }));
+                                                  }}
+                                                >
+                                                  <Plus className="w-3 h-3" />
+                                                </Button>
+                                              </div>
+                                              <span className="text-xs text-gray-500">
+                                                {produto.tipo_venda === 'grade' ? 'grades' : 'un'}
+                                              </span>
+                                            </div>
+                                          );
+                                        })}
+                                        <div className="text-xs text-gray-600 mt-1 pt-1 border-t">
+                                          Total: {quantidadesVariantes.reduce((sum, v) => sum + v.quantidade, 0)} {produto.tipo_venda === 'grade' ? 'grades' : 'unidades'}
+                                        </div>
+                                      </div>
+                                    );
+                                  }
+                                })()}
+
+                                {/* Se não tem variantes, mostrar quantidade simples */}
+                                {!produto.tem_variantes_cor && (
+                                  <div className="flex items-center gap-2">
+                                    <Label className="text-xs">Qtd. Mínima:</Label>
+                                    <div className="flex items-center gap-1">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 w-7 p-0"
+                                        onClick={() => handleQuantidadeChange(produto.id, quantidade - 1)}
+                                      >
+                                        <Minus className="w-3 h-3" />
+                                      </Button>
+                                      <Input
+                                        type="number"
+                                        min="1"
+                                        value={quantidade}
+                                        onChange={(e) => handleQuantidadeChange(produto.id, e.target.value)}
+                                        className="w-16 h-7 text-center"
+                                      />
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 w-7 p-0"
+                                        onClick={() => handleQuantidadeChange(produto.id, quantidade + 1)}
+                                      >
+                                        <Plus className="w-3 h-3" />
+                                      </Button>
+                                    </div>
+                                    <span className="text-xs text-gray-500">
+                                      {produto.tipo_venda === 'grade' ? 'grades' : 'unidades'}
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
