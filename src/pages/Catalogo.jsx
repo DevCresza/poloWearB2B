@@ -172,30 +172,34 @@ export default function Catalogo() {
 
   const filteredProducts = (produtos || []).filter(produto => {
     if (!produto.ativo) return false;
-    
-    if (produto.controla_estoque && !produto.permite_venda_sem_estoque) {
+
+    // Só verifica estoque para produtos de pronta entrega
+    if (produto.disponibilidade === 'pronta_entrega' && produto.controla_estoque && !produto.permite_venda_sem_estoque) {
       const estoqueTotal = getProductTotalStock(produto);
       if (estoqueTotal <= 0) return false;
     }
-    
+
     const matchesSearch = produto.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (produto.descricao && produto.descricao.toLowerCase().includes(searchTerm.toLowerCase())) ||
                          (produto.referencia_fornecedor && produto.referencia_fornecedor.toLowerCase().includes(searchTerm.toLowerCase())) ||
                          (produto.referencia_polo && produto.referencia_polo.toLowerCase().includes(searchTerm.toLowerCase()));
-    
+
     const matchesFornecedor = selectedFornecedor === 'all' || produto.fornecedor_id === selectedFornecedor;
     const matchesCategoria = selectedCategoria === 'all' || produto.categoria === selectedCategoria;
     const matchesDisponibilidade = selectedDisponibilidade === 'all' || produto.disponibilidade === selectedDisponibilidade;
     const matchesCapsula = !selectedCapsula || selectedCapsula.produto_ids.includes(produto.id);
-    
+
+    // Filtro de estoque só se aplica a produtos de pronta entrega
     let matchesEstoque = true;
-    if (filtroEstoque === 'com_estoque') {
-      matchesEstoque = getProductTotalStock(produto) > 0;
-    } else if (filtroEstoque === 'baixo') {
-      const estoque = getProductTotalStock(produto);
-      matchesEstoque = estoque > 0 && estoque <= produto.estoque_minimo_grades;
+    if (produto.disponibilidade === 'pronta_entrega') {
+      if (filtroEstoque === 'com_estoque') {
+        matchesEstoque = getProductTotalStock(produto) > 0;
+      } else if (filtroEstoque === 'baixo') {
+        const estoque = getProductTotalStock(produto);
+        matchesEstoque = estoque > 0 && estoque <= produto.estoque_minimo_grades;
+      }
     }
-    
+
     return matchesSearch && matchesFornecedor && matchesCategoria && matchesDisponibilidade && matchesCapsula && matchesEstoque;
   });
 
@@ -312,7 +316,8 @@ export default function Catalogo() {
               )}
             </div>
 
-            {produto.controla_estoque && estoque <= 0 && (
+            {/* Só mostra overlay "Sem Estoque" para produtos de pronta entrega */}
+            {produto.disponibilidade === 'pronta_entrega' && produto.controla_estoque && estoque <= 0 && (
               <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center">
                 <Badge className="bg-red-600 text-white text-xs sm:text-sm font-semibold">Sem Estoque</Badge>
               </div>
@@ -344,8 +349,9 @@ export default function Catalogo() {
                 Grade: {produto.total_pecas_grade} peças • R$ {produto.preco_grade_completa?.toFixed(2)}
               </p>
             )}
-            
-            {produto.controla_estoque && (
+
+            {/* Só mostra estoque para produtos de pronta entrega */}
+            {produto.disponibilidade === 'pronta_entrega' && produto.controla_estoque && (
               <p className={`text-[10px] sm:text-xs font-semibold ${estoque > 0 ? 'text-green-600' : 'text-red-600'}`}>
                 {estoque > 0 ? `✓ ${estoque} disponível` : '✗ Esgotado'}
               </p>
@@ -358,7 +364,11 @@ export default function Catalogo() {
                     key={idx}
                     className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border-2 border-gray-300 shadow-sm"
                     style={{ backgroundColor: v.cor_codigo_hex || v.cor_hex || '#000000' }}
-                    title={`${v.cor_nome}: ${v.estoque_grades || 0} grades`}
+                    title={
+                      produto.disponibilidade === 'pronta_entrega'
+                        ? `${v.cor_nome}: ${v.estoque_grades || 0} grades`
+                        : v.cor_nome
+                    }
                   />
                 ))}
                 {variantes.length > 6 && (
@@ -386,9 +396,14 @@ export default function Catalogo() {
             </div>
             
             <div className="flex gap-2 pt-2 mt-auto">
-              <Button 
+              <Button
                 onClick={() => adicionarDiretoAoCarrinho(produto)}
-                disabled={produto.controla_estoque && !produto.permite_venda_sem_estoque && estoque <= 0}
+                disabled={
+                  produto.disponibilidade === 'pronta_entrega' &&
+                  produto.controla_estoque &&
+                  !produto.permite_venda_sem_estoque &&
+                  estoque <= 0
+                }
                 className="flex-1 bg-blue-600 hover:bg-blue-700 text-white h-9 sm:h-11 text-xs sm:text-sm"
               >
                 {adicionandoCarrinho[produto.id] ? (
