@@ -175,7 +175,7 @@ export default function Catalogo() {
         console.log('Configuração de quantidade:', qtdConfig);
 
         // Se produto tem variantes de cor configuradas na cápsula
-        if (qtdConfig && typeof qtdConfig === 'object' && qtdConfig.variantes) {
+        if (qtdConfig && typeof qtdConfig === 'object' && qtdConfig.variantes && qtdConfig.variantes.length > 0) {
           console.log('Produto tem variantes de cor. Total de variantes:', qtdConfig.variantes.length);
           for (const varianteConfig of qtdConfig.variantes) {
             console.log('Processando variante:', varianteConfig.cor_nome, 'Quantidade:', varianteConfig.quantidade);
@@ -207,22 +207,47 @@ export default function Catalogo() {
             }
           }
         } else {
-          // Produto sem variantes
-          const quantidadeProduto = typeof qtdConfig === 'number' ? qtdConfig : 1;
-          const quantidadeTotal = quantidadeProduto * quantidadeCapsula;
-          console.log('Produto sem variantes. Preparando quantidade:', quantidadeTotal);
+          // Verificar se tem objeto de variantes mas está vazio
+          if (qtdConfig && typeof qtdConfig === 'object' && qtdConfig.variantes && qtdConfig.variantes.length === 0) {
+            console.warn('⚠️ ATENÇÃO: Produto', produto.nome, 'tem configuração de variantes mas nenhuma cor foi selecionada na cápsula!');
+            console.warn('Configure as cores deste produto na edição da cápsula.');
+            // Não adicionar nada
+          } else {
+            // Produto sem variantes (quantidade numérica)
+            const quantidadeProduto = typeof qtdConfig === 'number' ? qtdConfig : 1;
+            const quantidadeTotal = quantidadeProduto * quantidadeCapsula;
+            console.log('Produto sem variantes. Preparando quantidade:', quantidadeTotal);
 
-          // Acumular item
-          itensParaAdicionar.push({
-            produto,
-            quantidade: quantidadeTotal,
-            corVariante: null
-          });
-          totalItensAdicionados++;
+            // Acumular item
+            itensParaAdicionar.push({
+              produto,
+              quantidade: quantidadeTotal,
+              corVariante: null
+            });
+            totalItensAdicionados++;
+          }
         }
       }
 
       console.log('Total de itens para adicionar:', totalItensAdicionados);
+
+      // Verificar se há produtos sem cores configuradas
+      const produtosSemCores = (selectedCapsula.produto_ids || []).filter(produtoId => {
+        const qtdConfig = produtosQuantidades[produtoId];
+        return qtdConfig && typeof qtdConfig === 'object' && qtdConfig.variantes && qtdConfig.variantes.length === 0;
+      });
+
+      if (produtosSemCores.length > 0) {
+        const nomesProdutos = produtosSemCores
+          .map(id => produtos.find(p => p.id === id)?.nome)
+          .filter(Boolean)
+          .join(', ');
+
+        toast.warning(`Atenção: ${produtosSemCores.length} produto(s) não foi adicionado pois não tem cores configuradas na cápsula: ${nomesProdutos}. Edite a cápsula para configurar as cores.`, {
+          duration: 8000
+        });
+      }
+
       console.log('Adicionando todos os itens de uma vez...');
 
       // Adicionar todos os itens de uma vez ao carrinho
