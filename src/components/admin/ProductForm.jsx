@@ -71,6 +71,15 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
 
   const tamanhos = ['PP', 'P', 'M', 'G', 'GG', 'XG', '2G', '3G', 'EG'];
 
+  // Função para ordenar tamanhos de acordo com a ordem padrão
+  const ordenarTamanhos = (tamanhosParaOrdenar) => {
+    return tamanhosParaOrdenar.sort((a, b) => {
+      const indexA = tamanhos.indexOf(a);
+      const indexB = tamanhos.indexOf(b);
+      return indexA - indexB;
+    });
+  };
+
   useEffect(() => {
     loadFornecedores();
     if (produto) {
@@ -143,7 +152,9 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
         data_prevista_entrega: produto.data_prevista_entrega ? new Date(produto.data_prevista_entrega).toISOString().split('T')[0] : '',
         data_lancamento: produto.data_lancamento ? new Date(produto.data_lancamento).toISOString().split('T')[0] : ''
       });
-      setTamanhoSelecionado(grade.tamanhos_disponiveis || []);
+      // Ordenar tamanhos ao carregar produto existente
+      const tamanhosOrdenados = ordenarTamanhos([...(grade.tamanhos_disponiveis || [])]);
+      setTamanhoSelecionado(tamanhosOrdenados);
     }
   }, [produto]);
 
@@ -173,15 +184,19 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
         }
       }));
     }
-    setTamanhoSelecionado(novosTamanhos);
+
+    // Ordenar tamanhos automaticamente em ordem crescente (PP, P, M, G, GG...)
+    const tamanhosOrdenados = ordenarTamanhos([...novosTamanhos]);
+
+    setTamanhoSelecionado(tamanhosOrdenados);
     setFormData(prev => ({
       ...prev,
       grade_configuracao: {
         ...prev.grade_configuracao,
-        tamanhos_disponiveis: novosTamanhos
+        tamanhos_disponiveis: tamanhosOrdenados
       }
     }));
-    calcularTotalPecas(novosTamanhos, formData.grade_configuracao.quantidades_por_tamanho);
+    calcularTotalPecas(tamanhosOrdenados, formData.grade_configuracao.quantidades_por_tamanho);
   };
 
   const handleQuantidadeTamanho = (tamanho, quantidade) => {
