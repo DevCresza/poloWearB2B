@@ -115,7 +115,7 @@ export default function PedidosFornecedor() {
 
     try {
       await Pedido.update(selectedPedido.id, {
-        status: 'aprovado',
+        status: 'em_producao',
         data_aprovacao: new Date().toISOString(),
         data_prevista_entrega: dataEntrega
       });
@@ -410,36 +410,30 @@ export default function PedidosFornecedor() {
   // Helper objects for status badges, used in the CardHeader
   const statusColors = {
     novo_pedido: 'bg-blue-100 text-blue-800',
-    em_analise: 'bg-yellow-100 text-yellow-800',
-    aprovado: 'bg-green-100 text-green-800',
-    recusado: 'bg-red-100 text-red-800',
     em_producao: 'bg-purple-100 text-purple-800',
     faturado: 'bg-indigo-100 text-indigo-800',
     em_transporte: 'bg-orange-100 text-orange-800',
     finalizado: 'bg-green-100 text-green-800',
+    cancelado: 'bg-gray-100 text-gray-800',
   };
 
   const statusLabels = {
     novo_pedido: 'Novo',
-    em_analise: 'Em Análise',
-    aprovado: 'Aprovado',
-    recusado: 'Recusado',
     em_producao: 'Em Produção',
     faturado: 'Faturado',
     em_transporte: 'Em Transporte',
     finalizado: 'Finalizado',
+    cancelado: 'Cancelado',
   };
 
   const getStatusBadge = (status) => {
     const badges = {
-      novo_pedido: { label: 'Novo', color: 'bg-blue-100 text-blue-800' },
-      em_analise: { label: 'Em Análise', color: 'bg-yellow-100 text-yellow-800' },
-      aprovado: { label: 'Aprovado', color: 'bg-green-100 text-green-800' },
-      recusado: { label: 'Recusado', color: 'bg-red-100 text-red-800' },
+      novo_pedido: { label: 'Novo Pedido', color: 'bg-blue-100 text-blue-800' },
       em_producao: { label: 'Em Produção', color: 'bg-purple-100 text-purple-800' },
       faturado: { label: 'Faturado', color: 'bg-indigo-100 text-indigo-800' },
       em_transporte: { label: 'Em Transporte', color: 'bg-orange-100 text-orange-800' },
-      finalizado: { label: 'Finalizado', color: 'bg-green-100 text-green-800' }
+      finalizado: { label: 'Finalizado', color: 'bg-green-100 text-green-800' },
+      cancelado: { label: 'Cancelado', color: 'bg-gray-100 text-gray-800' }
     };
     return badges[status] || badges.novo_pedido;
   };
@@ -541,12 +535,11 @@ export default function PedidosFornecedor() {
               <SelectContent>
                 <SelectItem value="todos">Todos os Status</SelectItem>
                 <SelectItem value="novo_pedido">Novos</SelectItem>
-                <SelectItem value="em_analise">Em Análise</SelectItem>
-                <SelectItem value="aprovado">Aprovados</SelectItem>
                 <SelectItem value="em_producao">Em Produção</SelectItem>
                 <SelectItem value="faturado">Faturados</SelectItem>
                 <SelectItem value="em_transporte">Em Transporte</SelectItem>
                 <SelectItem value="finalizado">Finalizados</SelectItem>
+                <SelectItem value="cancelado">Cancelados</SelectItem>
               </SelectContent>
             </Select>
 
@@ -735,7 +728,7 @@ export default function PedidosFornecedor() {
                         </>
                       )}
 
-                      {['aprovado', 'em_producao'].includes(pedido.status) && !pedido.nf_url && (
+                      {pedido.status === 'em_producao' && !pedido.nf_url && (
                         <>
                           <Button
                             onClick={() => {
@@ -747,14 +740,12 @@ export default function PedidosFornecedor() {
                             <FileText className="w-4 h-4 mr-2" />
                             Faturar Pedido
                           </Button>
-                          {pedido.status === 'aprovado' && (
-                            <Button
-                              variant="outline"
-                              onClick={() => handleMudarMetodoPagamento(pedido, pedido.metodo_pagamento === 'boleto' ? 'a_vista' : 'boleto')}
-                            >
-                              Mudar para {pedido.metodo_pagamento === 'boleto' ? 'À Vista' : 'Boleto'}
-                            </Button>
-                          )}
+                          <Button
+                            variant="outline"
+                            onClick={() => handleMudarMetodoPagamento(pedido, pedido.metodo_pagamento === 'boleto' ? 'a_vista' : 'boleto')}
+                          >
+                            Mudar para {pedido.metodo_pagamento === 'boleto' ? 'À Vista' : 'Boleto'}
+                          </Button>
                         </>
                       )}
 
