@@ -611,7 +611,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                       <div className="bg-white rounded-lg p-6 space-y-4">
                         <h4 className="font-semibold">Quantidade por Tamanho:</h4>
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                          {tamanhoSelecionado.map(tamanho => (
+                          {ordenarTamanhos([...tamanhoSelecionado]).map(tamanho => (
                             <div key={tamanho} className="space-y-2">
                               <Label htmlFor={`qtd-${tamanho}`}>{tamanho}</Label>
                               <Input
