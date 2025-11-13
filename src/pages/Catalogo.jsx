@@ -310,6 +310,12 @@ export default function Catalogo() {
   };
 
   const openProductDetails = (produto) => {
+    console.log('=== PRODUTO ABERTO ===');
+    console.log('Nome:', produto.nome);
+    console.log('Tipo de Venda:', produto.tipo_venda);
+    console.log('Tem Variantes Cor:', produto.tem_variantes_cor);
+    console.log('==================');
+
     setSelectedProduto(produto);
     setQuantidadeModal(produto.pedido_minimo_grades || 1);
     setSelectedVariantColor(null);
