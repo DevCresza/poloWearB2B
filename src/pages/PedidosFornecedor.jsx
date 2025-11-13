@@ -17,11 +17,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'; // Not used, but kept from original imports
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { 
+import {
   Package, Clock, CheckCircle, XCircle, Calendar, DollarSign,
   FileText, Upload, Download, Filter, Eye, Edit, Truck, AlertTriangle
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
 
 export default function PedidosFornecedor() {
   const [user, setUser] = useState(null);
@@ -40,6 +41,7 @@ export default function PedidosFornecedor() {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [showFaturarModal, setShowFaturarModal] = useState(false);
   const [showEnvioModal, setShowEnvioModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
   
   // Forms
   const [motivoRecusa, setMotivoRecusa] = useState('');
@@ -83,6 +85,18 @@ export default function PedidosFornecedor() {
           const todosClientes = await User.list();
           const clienteIds = [...new Set(pedidosList.map(p => p.comprador_user_id))];
           clientesList = todosClientes.filter(u => clienteIds.includes(u.id));
+
+          // Debug: logs para identificar problema
+          console.log('📋 Total de pedidos carregados:', pedidosList.length);
+          console.log('👥 IDs de compradores únicos:', clienteIds);
+          console.log('👥 Total de usuários no sistema:', todosClientes.length);
+          console.log('✅ Clientes filtrados encontrados:', clientesList.length);
+
+          // Verificar quais IDs não foram encontrados
+          const clientesNaoEncontrados = clienteIds.filter(id => !clientesList.find(c => c.id === id));
+          if (clientesNaoEncontrados.length > 0) {
+            console.warn('⚠️ IDs de clientes não encontrados:', clientesNaoEncontrados);
+          }
         }
       }
 
@@ -158,8 +172,7 @@ export default function PedidosFornecedor() {
     try {
       await Pedido.update(selectedPedido.id, {
         status: 'cancelado',
-        motivo_recusa: motivoRecusa,
-        data_cancelamento: new Date().toISOString()
+        motivo_recusa: motivoRecusa
       });
 
       // Notificar cliente
@@ -372,14 +385,13 @@ export default function PedidosFornecedor() {
 
   const handleExportPDF = async () => {
     try {
-      if (!fornecedorAtual) {
-        toast.info('Fornecedor não identificado');
-        return;
+      // Se é admin, exporta todos os pedidos. Se é fornecedor, exporta apenas os seus.
+      const params = {};
+      if (user?.role !== 'admin' && fornecedorAtual) {
+        params.fornecedor_id = fornecedorAtual.id;
       }
 
-      const response = await base44.functions.invoke('exportPedidosFornecedor', {
-        fornecedor_id: fornecedorAtual.id
-      });
+      const response = await base44.functions.invoke('exportPedidosFornecedor', params);
 
       const blob = new Blob([response.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
@@ -390,7 +402,10 @@ export default function PedidosFornecedor() {
       a.click();
       window.URL.revokeObjectURL(url);
       a.remove();
+
+      toast.success('PDF exportado com sucesso!');
     } catch (error) {
+      console.error('Erro ao exportar PDF:', error);
       toast.error('Erro ao exportar relatório');
     }
   };
@@ -586,6 +601,8 @@ export default function PedidosFornecedor() {
             // Debug: log if cliente or fornecedor not found
             if (!cliente) {
               console.warn(`Cliente não encontrado para pedido ${pedido.id}. comprador_user_id: ${pedido.comprador_user_id}`);
+              console.warn('Pedido completo:', pedido);
+              console.warn('Lista de clientes disponíveis:', clientes.map(c => ({ id: c.id, nome: c.full_name, empresa: c.empresa })));
             }
             if (!fornecedor) {
               console.warn(`Fornecedor não encontrado para pedido ${pedido.id}. fornecedor_id: ${pedido.fornecedor_id}`);
@@ -594,6 +611,9 @@ export default function PedidosFornecedor() {
             // Verificar se o cliente está inadimplente ou bloqueado
             const clienteInadimplente = cliente?.bloqueado || (cliente?.total_vencido || 0) > 0;
             const clienteBloqueado = cliente?.bloqueado;
+
+            // Tentar extrair nome do cliente do pedido se não encontrado na lista
+            const nomeCliente = cliente?.empresa || cliente?.razao_social || cliente?.nome_marca || cliente?.full_name || pedido.comprador_nome || 'Cliente não encontrado';
 
             return (
               <Card 
@@ -614,9 +634,9 @@ export default function PedidosFornecedor() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
                       <CardTitle className="text-lg font-bold text-gray-900">
-                        {cliente?.empresa || cliente?.razao_social || cliente?.nome_marca || 'Cliente não encontrado'}
+                        {nomeCliente}
                       </CardTitle>
-                      {cliente?.full_name && (
+                      {cliente?.full_name && nomeCliente !== cliente.full_name && (
                         <p className="text-sm text-gray-500">{cliente.full_name}</p>
                       )}
                       <p className="text-sm text-gray-600 mt-1">
@@ -772,8 +792,8 @@ export default function PedidosFornecedor() {
                       <Button
                         variant="outline"
                         onClick={() => {
-                          // Abrir modal de detalhes
-                          toast.info('Modal de detalhes - TODO');
+                          setSelectedPedido(pedido);
+                          setShowDetailsModal(true);
                         }}
                       >
                         <Eye className="w-4 h-4 mr-2" />
@@ -971,6 +991,21 @@ export default function PedidosFornecedor() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Detalhes do Pedido */}
+      {showDetailsModal && selectedPedido && (
+        <PedidoDetailsModal
+          pedido={selectedPedido}
+          onClose={() => {
+            setShowDetailsModal(false);
+            setSelectedPedido(null);
+          }}
+          onUpdate={loadPedidos}
+          currentUser={user}
+          userMap={new Map(clientes.map(c => [c.id, c.full_name || c.empresa || c.razao_social || c.nome_marca]))}
+          fornecedorMap={new Map(fornecedores.map(f => [f.id, f.razao_social || f.nome_fantasia]))}
+        />
+      )}
     </div>
   );
 }

@@ -96,28 +96,81 @@ export default function Catalogo() {
       }
       return item.id === produto.id && !item.cor_selecionada;
     });
-    
+
     let novoCarrinho;
     if (itemExistente) {
       novoCarrinho = carrinho.map(item => {
-        const matchKey = corVariante 
+        const matchKey = corVariante
           ? item.id === produto.id && item.cor_selecionada?.cor_nome === corVariante.cor_nome
           : item.id === produto.id && !item.cor_selecionada;
-        
+
         return matchKey
           ? { ...item, quantidade: item.quantidade + quantidade }
           : item;
       });
     } else {
-      const itemCarrinho = { 
-        ...produto, 
+      const itemCarrinho = {
+        ...produto,
         quantidade,
         cor_selecionada: corVariante
       };
       novoCarrinho = [...carrinho, itemCarrinho];
     }
-    
+
     salvarCarrinho(novoCarrinho);
+    setShowDetailsModal(false);
+  };
+
+  // Função para adicionar múltiplas cores de uma vez (batch processing)
+  const adicionarMultiplasCoresAoCarrinho = (produto, variantesComQuantidade) => {
+    // Parse variantes
+    let variantes = [];
+    try {
+      variantes = typeof produto.variantes_cor === 'string'
+        ? JSON.parse(produto.variantes_cor)
+        : produto.variantes_cor;
+    } catch (e) {
+      variantes = [];
+    }
+
+    // Acumular todos os itens que serão adicionados
+    let novoCarrinho = [...carrinho];
+
+    variantesComQuantidade.forEach(([varianteId, quantidade]) => {
+      const variante = variantes.find(v => v.id === varianteId);
+      if (!variante) return;
+
+      // Verificar se já existe item com essa cor no carrinho
+      const itemExistente = novoCarrinho.find(item =>
+        item.id === produto.id && item.cor_selecionada?.cor_nome === variante.cor_nome
+      );
+
+      if (itemExistente) {
+        // Incrementar quantidade do item existente
+        novoCarrinho = novoCarrinho.map(item => {
+          const matchKey = item.id === produto.id && item.cor_selecionada?.cor_nome === variante.cor_nome;
+          return matchKey
+            ? { ...item, quantidade: item.quantidade + quantidade }
+            : item;
+        });
+      } else {
+        // Adicionar novo item
+        const itemCarrinho = {
+          ...produto,
+          quantidade,
+          cor_selecionada: variante
+        };
+        novoCarrinho.push(itemCarrinho);
+      }
+    });
+
+    // Salvar carrinho UMA VEZ com todos os itens
+    salvarCarrinho(novoCarrinho);
+
+    const mensagem = produto.tipo_venda === 'grade'
+      ? `${variantesComQuantidade.length} grade(s) de cor(es) diferente(s) adicionada(s) ao carrinho!`
+      : `${variantesComQuantidade.length} cor(es) adicionada(s) ao carrinho!`;
+    toast.success(mensagem);
     setShowDetailsModal(false);
   };
 
@@ -1003,35 +1056,142 @@ export default function Catalogo() {
                   } catch (e) {
                   }
                   
-                  // Se o produto é vendido em GRADE, apenas mostrar as cores disponíveis (informativo)
+                  // Se o produto é vendido em GRADE, permitir seleção de quantas grades quer de cada cor
                   if (selectedProduto.tipo_venda === 'grade') {
+                    // Composição de Tamanhos da Grade (mostrar primeiro)
+                    const gradeComposicao = (() => {
+                      let gradeConfig = {};
+                      try {
+                        gradeConfig = typeof selectedProduto.grade_configuracao === 'string'
+                          ? JSON.parse(selectedProduto.grade_configuracao)
+                          : selectedProduto.grade_configuracao || {};
+                      } catch (e) {
+                        gradeConfig = {};
+                      }
+
+                      const tamanhos = gradeConfig.tamanhos_disponiveis || [];
+                      const quantidades = gradeConfig.quantidades_por_tamanho || {};
+
+                      if (tamanhos.length > 0) {
+                        return (
+                          <div className="mb-4 bg-blue-50 rounded-lg p-4 border border-blue-200">
+                            <Label className="mb-3 block font-semibold text-blue-900">Composição da Grade:</Label>
+                            <div className="grid grid-cols-4 gap-2">
+                              {tamanhos.map((tamanho, idx) => (
+                                <div key={idx} className="bg-white rounded-lg p-2 border border-blue-200 text-center">
+                                  <div className="text-sm font-bold text-gray-900">{tamanho}</div>
+                                  <div className="text-xs text-gray-600">{quantidades[tamanho] || 0} peças</div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-3 pt-3 border-t border-blue-200 text-center">
+                              <span className="text-sm font-semibold text-blue-900">
+                                Total: {selectedProduto.total_pecas_grade || 0} peças por grade
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })();
+
                     return variantes.length > 0 && (
                       <div>
-                        <Label className="mb-3 block font-semibold">Cores Disponíveis nesta Grade</Label>
+                        {gradeComposicao}
+
+                        <Label className="mb-3 block font-semibold">Selecione Quantas Grades Quer de Cada Cor</Label>
                         <p className="text-sm text-gray-600 mb-3">
-                          Este produto é vendido em grade completa com as seguintes cores:
+                          Escolha quantas grades completas deseja de cada cor. Cada grade contém a composição de tamanhos mostrada acima.
                         </p>
-                        <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
-                          {variantes.map((v, idx) => (
-                            <div
-                              key={idx}
-                              className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 bg-gray-50"
-                            >
+                        <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                          {variantes.map((v, idx) => {
+                            const estoqueVariante = v.estoque_grades || 0;
+                            const qtdSelecionada = quantidadesPorCor[v.id] || 0;
+                            const semEstoque = selectedProduto.disponibilidade === 'pronta_entrega' &&
+                                             estoqueVariante <= 0 &&
+                                             selectedProduto.controla_estoque &&
+                                             !selectedProduto.permite_venda_sem_estoque;
+
+                            return (
                               <div
-                                className="w-8 h-8 rounded-full border-2 border-gray-300 flex-shrink-0 cursor-pointer"
-                                style={{ backgroundColor: v.cor_codigo_hex || v.cor_hex || '#000000' }}
-                                onClick={() => {
-                                  setSelectedVariantColor(v);
-                                  setFotoAtualIndex(0);
-                                }}
-                                title="Clique para ver fotos desta cor"
-                              />
-                              <div className="text-left flex-1">
-                                <div className="font-medium text-sm">{v.cor_nome}</div>
-                                <div className="text-xs text-gray-500">Incluído na grade</div>
+                                key={idx}
+                                className={`
+                                  flex items-center gap-3 p-3 rounded-lg border-2 transition-all
+                                  ${qtdSelecionada > 0 ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white'}
+                                  ${semEstoque ? 'opacity-50' : ''}
+                                `}
+                              >
+                                <div
+                                  className="w-10 h-10 rounded-full border-2 border-gray-300 flex-shrink-0 cursor-pointer"
+                                  style={{ backgroundColor: v.cor_codigo_hex || v.cor_hex || '#000000' }}
+                                  onClick={() => {
+                                    setSelectedVariantColor(v);
+                                    setFotoAtualIndex(0);
+                                  }}
+                                  title="Clique para ver fotos desta cor"
+                                />
+                                <div className="text-left flex-1">
+                                  <div className="font-medium text-sm">{v.cor_nome}</div>
+                                  {!semEstoque && selectedProduto.controla_estoque && selectedProduto.disponibilidade === 'pronta_entrega' && (
+                                    <div className="text-xs text-gray-500">
+                                      {estoqueVariante} {estoqueVariante === 1 ? 'grade disponível' : 'grades disponíveis'}
+                                    </div>
+                                  )}
+                                  {semEstoque && (
+                                    <div className="text-xs text-red-500">Sem estoque</div>
+                                  )}
+                                </div>
+
+                                {!semEstoque && (
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      onClick={() => {
+                                        const novaQtd = Math.max(0, qtdSelecionada - 1);
+                                        setQuantidadesPorCor(prev => ({ ...prev, [v.id]: novaQtd }));
+                                      }}
+                                      className="h-8 w-8"
+                                      disabled={qtdSelecionada === 0}
+                                    >
+                                      <Minus className="w-3 h-3" />
+                                    </Button>
+
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      max={selectedProduto.controla_estoque && selectedProduto.disponibilidade === 'pronta_entrega' ? estoqueVariante : undefined}
+                                      value={qtdSelecionada}
+                                      onChange={(e) => {
+                                        let valor = parseInt(e.target.value) || 0;
+                                        if (selectedProduto.controla_estoque && selectedProduto.disponibilidade === 'pronta_entrega') {
+                                          valor = Math.min(valor, estoqueVariante);
+                                        }
+                                        setQuantidadesPorCor(prev => ({ ...prev, [v.id]: Math.max(0, valor) }));
+                                      }}
+                                      className="w-16 text-center h-8 text-sm"
+                                    />
+
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      onClick={() => {
+                                        let novaQtd = qtdSelecionada + 1;
+                                        if (selectedProduto.controla_estoque && selectedProduto.disponibilidade === 'pronta_entrega') {
+                                          novaQtd = Math.min(novaQtd, estoqueVariante);
+                                        }
+                                        setQuantidadesPorCor(prev => ({ ...prev, [v.id]: novaQtd }));
+                                      }}
+                                      className="h-8 w-8"
+                                      disabled={selectedProduto.controla_estoque && selectedProduto.disponibilidade === 'pronta_entrega' && qtdSelecionada >= estoqueVariante}
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                    </Button>
+                                  </div>
+                                )}
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     );
@@ -1264,14 +1424,7 @@ export default function Catalogo() {
                 {/* Add to Cart Button */}
                 <Button
                   onClick={() => {
-                    // Se produto é grade completa, adiciona a grade inteira sem seleção de cor
-                    if (selectedProduto.tipo_venda === 'grade') {
-                      adicionarAoCarrinho(selectedProduto, quantidadeModal, null);
-                      setShowDetailsModal(false);
-                      return;
-                    }
-
-                    // Se produto tem variantes de cor e é unitário, adiciona múltiplas cores
+                    // Se produto tem variantes de cor (unitário ou grade), adiciona múltiplas cores com BATCH PROCESSING
                     if (selectedProduto.tem_variantes_cor) {
                       const variantesComQuantidade = Object.entries(quantidadesPorCor).filter(([_, qtd]) => qtd > 0);
 
@@ -1280,44 +1433,25 @@ export default function Catalogo() {
                         return;
                       }
 
-                      let variantes = [];
-                      try {
-                        variantes = typeof selectedProduto.variantes_cor === 'string'
-                          ? JSON.parse(selectedProduto.variantes_cor)
-                          : selectedProduto.variantes_cor;
-                      } catch (e) {
-                        variantes = [];
-                      }
-
-                      variantesComQuantidade.forEach(([varianteId, quantidade]) => {
-                        const variante = variantes.find(v => v.id === varianteId);
-                        if (variante) {
-                          adicionarAoCarrinho(selectedProduto, quantidade, variante);
-                        }
-                      });
-
-                      toast.success(`${variantesComQuantidade.length} cor(es) adicionada(s) ao carrinho!`);
-                      setShowDetailsModal(false);
+                      // Usar função de batch processing
+                      adicionarMultiplasCoresAoCarrinho(selectedProduto, variantesComQuantidade);
                     } else {
                       // Produto sem variantes, adiciona normalmente
                       adicionarAoCarrinho(selectedProduto, quantidadeModal, null);
                     }
                   }}
                   disabled={(() => {
-                    // Se produto é grade completa, nunca desabilita (sempre pode adicionar)
-                    if (selectedProduto.tipo_venda === 'grade') {
-                      return false;
-                    }
-
-                    // Se tem variantes de cor e é unitário, verifica seleção
+                    // Se tem variantes de cor (unitário ou grade), verifica seleção
                     if (selectedProduto.tem_variantes_cor) {
                       const totalSelecionado = Object.values(quantidadesPorCor).reduce((sum, qtd) => sum + qtd, 0);
                       if (totalSelecionado === 0) {
                         return true;
                       }
 
-                      // Verificar estoque se controla estoque
-                      if (selectedProduto.controla_estoque && !selectedProduto.permite_venda_sem_estoque) {
+                      // Verificar estoque se controla estoque e é pronta entrega
+                      if (selectedProduto.controla_estoque &&
+                          !selectedProduto.permite_venda_sem_estoque &&
+                          selectedProduto.disponibilidade === 'pronta_entrega') {
                         let variantes = [];
                         try {
                           variantes = typeof selectedProduto.variantes_cor === 'string'
@@ -1345,7 +1479,9 @@ export default function Catalogo() {
                     }
 
                     // Produto sem variantes - lógica antiga
-                    if (selectedProduto.controla_estoque && !selectedProduto.permite_venda_sem_estoque) {
+                    if (selectedProduto.controla_estoque &&
+                        !selectedProduto.permite_venda_sem_estoque &&
+                        selectedProduto.disponibilidade === 'pronta_entrega') {
                       return (selectedProduto.estoque_atual_grades || 0) <= 0;
                     }
                     return false;
@@ -1354,12 +1490,7 @@ export default function Catalogo() {
                 >
                   <ShoppingCart className="w-5 h-5 mr-2" />
                   {(() => {
-                    // Se produto é grade completa, mostrar texto específico
-                    if (selectedProduto.tipo_venda === 'grade') {
-                      return 'Adicionar Grade ao Carrinho';
-                    }
-
-                    // Produto com variantes de cor e unitário
+                    // Produto com variantes de cor (unitário ou grade)
                     if (selectedProduto.tem_variantes_cor) {
                       const totalSelecionado = Object.values(quantidadesPorCor).reduce((sum, qtd) => sum + qtd, 0);
 
