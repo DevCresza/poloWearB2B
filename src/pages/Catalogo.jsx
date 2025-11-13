@@ -34,9 +34,11 @@ export default function Catalogo() {
   const [selectedCapsula, setSelectedCapsula] = useState(null);
   const [selectedProduto, setSelectedProduto] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showCapsulaModal, setShowCapsulaModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [carrinho, setCarrinho] = useState([]);
   const [quantidadeModal, setQuantidadeModal] = useState(1);
+  const [quantidadeCapsula, setQuantidadeCapsula] = useState(1);
   const [selectedVariantColor, setSelectedVariantColor] = useState(null);
   const [quantidadesPorCor, setQuantidadesPorCor] = useState({}); // { cor_id: quantidade }
   const [adicionandoCarrinho, setAdicionandoCarrinho] = useState({});
@@ -126,13 +128,75 @@ export default function Catalogo() {
     }
 
     setAdicionandoCarrinho(prev => ({ ...prev, [produto.id]: true }));
-    
+
     const quantidade = produto.pedido_minimo_grades || 1;
     adicionarAoCarrinho(produto, quantidade);
-    
+
     setTimeout(() => {
       setAdicionandoCarrinho(prev => ({ ...prev, [produto.id]: false }));
     }, 500);
+  };
+
+  const adicionarCapsulaAoCarrinho = async () => {
+    if (!selectedCapsula) return;
+
+    try {
+      // Parse produtos_quantidades
+      let produtosQuantidades = {};
+      try {
+        produtosQuantidades = typeof selectedCapsula.produtos_quantidades === 'string'
+          ? JSON.parse(selectedCapsula.produtos_quantidades)
+          : selectedCapsula.produtos_quantidades || {};
+      } catch (e) {
+        produtosQuantidades = {};
+      }
+
+      let totalItensAdicionados = 0;
+
+      // Para cada produto na cápsula
+      for (const produtoId of (selectedCapsula.produto_ids || [])) {
+        const produto = produtos.find(p => p.id === produtoId);
+        if (!produto) continue;
+
+        const qtdConfig = produtosQuantidades[produtoId];
+
+        // Se produto tem variantes de cor configuradas na cápsula
+        if (qtdConfig && typeof qtdConfig === 'object' && qtdConfig.variantes) {
+          for (const varianteConfig of qtdConfig.variantes) {
+            // Encontrar a variante completa no produto
+            let variantes = [];
+            try {
+              variantes = typeof produto.variantes_cor === 'string'
+                ? JSON.parse(produto.variantes_cor)
+                : produto.variantes_cor || [];
+            } catch (e) {
+              variantes = [];
+            }
+
+            const variante = variantes.find(v => v.id === varianteConfig.cor_id);
+            if (variante) {
+              // Multiplicar quantidade da cápsula pela quantidade configurada de cada cor
+              const quantidadeTotal = varianteConfig.quantidade * quantidadeCapsula;
+              adicionarAoCarrinho(produto, quantidadeTotal, variante);
+              totalItensAdicionados++;
+            }
+          }
+        } else {
+          // Produto sem variantes
+          const quantidadeProduto = typeof qtdConfig === 'number' ? qtdConfig : 1;
+          const quantidadeTotal = quantidadeProduto * quantidadeCapsula;
+          adicionarAoCarrinho(produto, quantidadeTotal, null);
+          totalItensAdicionados++;
+        }
+      }
+
+      toast.success(`Cápsula "${selectedCapsula.nome}" (${quantidadeCapsula}x) adicionada ao carrinho!`);
+      setShowCapsulaModal(false);
+      setSelectedCapsula(null);
+    } catch (error) {
+      toast.error('Erro ao adicionar cápsula ao carrinho');
+      console.error(error);
+    }
   };
 
   const getProductTotalStock = (product) => {
@@ -188,7 +252,6 @@ export default function Catalogo() {
     const matchesFornecedor = selectedFornecedor === 'all' || produto.fornecedor_id === selectedFornecedor;
     const matchesCategoria = selectedCategoria === 'all' || produto.categoria === selectedCategoria;
     const matchesDisponibilidade = selectedDisponibilidade === 'all' || produto.disponibilidade === selectedDisponibilidade;
-    const matchesCapsula = !selectedCapsula || selectedCapsula.produto_ids.includes(produto.id);
 
     // Filtro de estoque só se aplica a produtos de pronta entrega
     let matchesEstoque = true;
@@ -201,7 +264,7 @@ export default function Catalogo() {
       }
     }
 
-    return matchesSearch && matchesFornecedor && matchesCategoria && matchesDisponibilidade && matchesCapsula && matchesEstoque;
+    return matchesSearch && matchesFornecedor && matchesCategoria && matchesDisponibilidade && matchesEstoque;
   });
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
@@ -242,11 +305,8 @@ export default function Catalogo() {
   
   const handleSelectCapsula = (capsula) => {
     setSelectedCapsula(capsula);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-  
-  const clearCapsulaFilter = () => {
-    setSelectedCapsula(null);
+    setQuantidadeCapsula(1);
+    setShowCapsulaModal(true);
   };
 
   const openProductDetails = (produto) => {
@@ -557,26 +617,8 @@ export default function Catalogo() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8">
-        {/* Capsula Filter Alert */}
-        {selectedCapsula && (
-          <Alert className="border-blue-200 bg-blue-50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4 text-blue-600" />
-                <span className="font-semibold text-blue-900 text-sm sm:text-base">
-                  Cápsula: {selectedCapsula.nome}
-                </span>
-              </div>
-              <Button onClick={clearCapsulaFilter} variant="ghost" size="sm">
-                <X className="w-4 h-4 mr-2" />
-                Limpar
-              </Button>
-            </div>
-          </Alert>
-        )}
-
         {/* Featured Products */}
-        {!selectedCapsula && featuredProducts.length > 0 && (
+        {featuredProducts.length > 0 && (
           <div className="space-y-4 sm:space-y-6">
             <div className="flex items-center gap-2 sm:gap-3">
               <Star className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-500 fill-yellow-500" />
@@ -592,7 +634,7 @@ export default function Catalogo() {
         )}
 
         {/* Capsules Section */}
-        {!selectedCapsula && activeCapsulas.length > 0 && (
+        {activeCapsulas.length > 0 && (
           <div className="space-y-4 sm:space-y-6">
             <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Cápsulas Sugestivas</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -633,7 +675,7 @@ export default function Catalogo() {
         {/* All Products */}
         <div className="space-y-4 sm:space-y-6">
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
-            {selectedCapsula ? `Produtos da Cápsula: ${selectedCapsula.nome}` : 'Todos os Produtos'}
+            Todos os Produtos
           </h2>
           
           {sortedProducts.length === 0 ? (
@@ -1211,6 +1253,152 @@ export default function Catalogo() {
                   </Alert>
                 )}
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Modal de Detalhes da Cápsula */}
+      {showCapsulaModal && selectedCapsula && (
+        <Dialog open={showCapsulaModal} onOpenChange={setShowCapsulaModal}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                <Sparkles className="w-6 h-6 text-purple-600" />
+                <DialogTitle className="text-2xl">{selectedCapsula.nome}</DialogTitle>
+              </div>
+              <p className="text-gray-600 mt-2">{selectedCapsula.descricao}</p>
+            </DialogHeader>
+
+            <div className="space-y-6 mt-4">
+              {/* Imagem da cápsula */}
+              {selectedCapsula.imagem_capa_url && (
+                <div className="w-full aspect-video rounded-lg overflow-hidden">
+                  <img
+                    src={selectedCapsula.imagem_capa_url}
+                    alt={selectedCapsula.nome}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+
+              {/* Composição da cápsula */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">Composição da Cápsula:</h3>
+
+                <div className="grid gap-4">
+                  {(selectedCapsula.produto_ids || []).map((produtoId) => {
+                    const produto = produtos.find(p => p.id === produtoId);
+                    if (!produto) return null;
+
+                    let produtosQuantidades = {};
+                    try {
+                      produtosQuantidades = typeof selectedCapsula.produtos_quantidades === 'string'
+                        ? JSON.parse(selectedCapsula.produtos_quantidades)
+                        : selectedCapsula.produtos_quantidades || {};
+                    } catch (e) {
+                      produtosQuantidades = {};
+                    }
+
+                    const qtdConfig = produtosQuantidades[produtoId];
+                    const primeiraFoto = getPrimeiraFoto(produto);
+
+                    return (
+                      <div key={produtoId} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        <div className="flex gap-4">
+                          {/* Foto do produto */}
+                          <div className="w-20 h-20 rounded-md bg-gray-200 flex items-center justify-center flex-shrink-0">
+                            {primeiraFoto ? (
+                              <img
+                                src={primeiraFoto}
+                                alt={produto.nome}
+                                className="w-full h-full rounded-md object-cover"
+                              />
+                            ) : (
+                              <Package className="w-8 h-8 text-gray-400" />
+                            )}
+                          </div>
+
+                          {/* Informações do produto */}
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-900">{produto.nome}</h4>
+                            <p className="text-sm text-gray-600">{produto.marca}</p>
+
+                            {/* Mostrar composição de cores se tiver variantes */}
+                            {qtdConfig && typeof qtdConfig === 'object' && qtdConfig.variantes && qtdConfig.variantes.length > 0 && (
+                              <div className="mt-3 space-y-2">
+                                <p className="text-xs font-semibold text-gray-700">Cores incluídas:</p>
+                                {qtdConfig.variantes.map((varianteConfig, idx) => (
+                                  <div key={idx} className="flex items-center gap-2 text-sm">
+                                    <div
+                                      className="w-5 h-5 rounded-full border-2 border-gray-300"
+                                      style={{ backgroundColor: varianteConfig.cor_hex || '#000' }}
+                                    />
+                                    <span className="font-medium">{varianteConfig.cor_nome}</span>
+                                    <span className="text-gray-600">
+                                      - {varianteConfig.quantidade} {produto.tipo_venda === 'grade' ? 'grade(s)' : 'unidade(s)'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Mostrar quantidade se produto sem variantes */}
+                            {typeof qtdConfig === 'number' && (
+                              <p className="mt-2 text-sm text-gray-600">
+                                Quantidade: {qtdConfig} {produto.tipo_venda === 'grade' ? 'grade(s)' : 'unidade(s)'}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Seletor de quantidade da cápsula */}
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                <Label className="font-semibold text-gray-900 mb-3 block">
+                  Quantas vezes deseja esta cápsula?
+                </Label>
+                <p className="text-sm text-gray-600 mb-3">
+                  Ao selecionar 2x, você receberá o dobro de cada item acima. 3x triplica, e assim por diante.
+                </p>
+                <div className="flex items-center gap-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="lg"
+                    onClick={() => setQuantidadeCapsula(Math.max(1, quantidadeCapsula - 1))}
+                    className="h-12 w-12"
+                  >
+                    <Minus className="w-5 h-5" />
+                  </Button>
+                  <div className="flex-1 text-center">
+                    <span className="text-3xl font-bold text-blue-600">{quantidadeCapsula}x</span>
+                    <p className="text-xs text-gray-600 mt-1">da cápsula completa</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="lg"
+                    onClick={() => setQuantidadeCapsula(quantidadeCapsula + 1)}
+                    className="h-12 w-12"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Botão adicionar ao carrinho */}
+              <Button
+                onClick={adicionarCapsulaAoCarrinho}
+                className="w-full h-14 text-lg bg-purple-600 hover:bg-purple-700"
+              >
+                <ShoppingCart className="w-5 h-5 mr-2" />
+                Adicionar Cápsula ao Carrinho
+              </Button>
             </div>
           </DialogContent>
         </Dialog>

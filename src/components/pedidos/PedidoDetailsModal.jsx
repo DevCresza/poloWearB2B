@@ -14,7 +14,7 @@ import {
 import { Pedido } from '@/api/entities';
 import { User as UserEntity } from '@/api/entities';
 
-export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentUser }) {
+export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentUser, userMap, fornecedorMap }) {
   const [confirmando, setConfirmando] = useState(false);
 
   const getMetodoPagamentoLabel = (metodo) => {
@@ -95,6 +95,34 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
             </Badge>
           </div>
 
+          {/* Informações do Cliente e Fornecedor */}
+          {(userMap || fornecedorMap) && (
+            <div className="grid md:grid-cols-2 gap-4">
+              {userMap && pedido.comprador_user_id && (
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <User className="w-5 h-5 text-blue-600" />
+                    <h4 className="font-semibold text-blue-900">Cliente</h4>
+                  </div>
+                  <p className="text-gray-800 font-medium">
+                    {userMap.get(pedido.comprador_user_id) || 'Cliente não encontrado'}
+                  </p>
+                </div>
+              )}
+              {fornecedorMap && pedido.fornecedor_id && (
+                <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Building className="w-5 h-5 text-purple-600" />
+                    <h4 className="font-semibold text-purple-900">Fornecedor</h4>
+                  </div>
+                  <p className="text-gray-800 font-medium">
+                    {fornecedorMap.get(pedido.fornecedor_id) || 'Fornecedor não encontrado'}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           <Tabs defaultValue="itens" className="w-full">
             <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="itens">Itens do Pedido</TabsTrigger>
@@ -108,8 +136,8 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
               {itens.map((item, index) => (
                 <div key={index} className="flex gap-4 p-4 bg-gray-50 rounded-lg">
                   {item.foto && (
-                    <img 
-                      src={item.foto} 
+                    <img
+                      src={item.foto}
                       alt={item.nome}
                       className="w-24 h-24 object-cover rounded-lg"
                     />
@@ -120,7 +148,20 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                     {item.referencia && (
                       <p className="text-xs text-gray-500">Ref: {item.referencia}</p>
                     )}
-                    <div className="mt-2 flex items-center gap-4">
+
+                    {/* Mostrar cor selecionada se houver */}
+                    {item.cor_selecionada && item.cor_selecionada.cor_nome && (
+                      <div className="mt-2 inline-flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
+                        <span className="text-xs font-medium text-gray-600">Cor:</span>
+                        <div
+                          className="w-5 h-5 rounded-full border-2 border-gray-300 shadow-sm"
+                          style={{ backgroundColor: item.cor_selecionada.cor_codigo_hex || item.cor_selecionada.cor_hex || '#000000' }}
+                        />
+                        <span className="text-sm font-semibold text-gray-900">{item.cor_selecionada.cor_nome}</span>
+                      </div>
+                    )}
+
+                    <div className="mt-2 flex items-center gap-4 flex-wrap">
                       <Badge variant="outline">
                         {item.tipo_venda === 'grade' ? 'Grade Completa' : 'Unitário'}
                       </Badge>
