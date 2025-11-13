@@ -157,8 +157,9 @@ export default function PedidosFornecedor() {
 
     try {
       await Pedido.update(selectedPedido.id, {
-        status: 'recusado',
-        motivo_recusa: motivoRecusa
+        status: 'cancelado',
+        motivo_recusa: motivoRecusa,
+        data_cancelamento: new Date().toISOString()
       });
 
       // Notificar cliente
