@@ -582,7 +582,15 @@ export default function PedidosFornecedor() {
             const cliente = clientes.find(c => c.id === pedido.comprador_user_id);
             const fornecedor = fornecedores.find(f => f.id === pedido.fornecedor_id);
             const statusBadge = getStatusBadge(pedido.status); // Keep for the value section
-            
+
+            // Debug: log if cliente or fornecedor not found
+            if (!cliente) {
+              console.warn(`Cliente não encontrado para pedido ${pedido.id}. comprador_user_id: ${pedido.comprador_user_id}`);
+            }
+            if (!fornecedor) {
+              console.warn(`Fornecedor não encontrado para pedido ${pedido.id}. fornecedor_id: ${pedido.fornecedor_id}`);
+            }
+
             // Verificar se o cliente está inadimplente ou bloqueado
             const clienteInadimplente = cliente?.bloqueado || (cliente?.total_vencido || 0) > 0;
             const clienteBloqueado = cliente?.bloqueado;
@@ -614,11 +622,9 @@ export default function PedidosFornecedor() {
                       <p className="text-sm text-gray-600 mt-1">
                         Pedido #{pedido.id.slice(0, 8)} • {new Date(pedido.created_date).toLocaleDateString('pt-BR')}
                       </p>
-                      {fornecedor && (
-                        <p className="text-sm text-gray-600">
-                          Fornecedor: {fornecedor.nome_marca}
-                        </p>
-                      )}
+                      <p className="text-sm text-gray-600">
+                        Fornecedor: {fornecedor?.nome_marca || 'Não identificado'}
+                      </p>
                     </div>
                     <Badge className={statusColors[pedido.status] || 'bg-gray-100 text-gray-800'}>
                       {statusLabels[pedido.status] || pedido.status}
