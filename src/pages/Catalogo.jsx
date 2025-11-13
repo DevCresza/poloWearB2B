@@ -157,6 +157,8 @@ export default function Catalogo() {
 
       console.log('Produtos Quantidades:', produtosQuantidades);
 
+      // Acumular todos os itens primeiro
+      const itensParaAdicionar = [];
       let totalItensAdicionados = 0;
 
       // Para cada produto na cápsula
@@ -191,8 +193,14 @@ export default function Catalogo() {
             if (variante) {
               // Multiplicar quantidade da cápsula pela quantidade configurada de cada cor
               const quantidadeTotal = varianteConfig.quantidade * quantidadeCapsula;
-              console.log('Adicionando:', produto.nome, '-', variante.cor_nome, 'Qtd:', quantidadeTotal);
-              adicionarAoCarrinho(produto, quantidadeTotal, variante);
+              console.log('Preparando para adicionar:', produto.nome, '-', variante.cor_nome, 'Qtd:', quantidadeTotal);
+
+              // Acumular item ao invés de adicionar imediatamente
+              itensParaAdicionar.push({
+                produto,
+                quantidade: quantidadeTotal,
+                corVariante: variante
+              });
               totalItensAdicionados++;
             } else {
               console.warn('Variante não encontrada no produto. ID procurado:', varianteConfig.cor_id);
@@ -202,13 +210,60 @@ export default function Catalogo() {
           // Produto sem variantes
           const quantidadeProduto = typeof qtdConfig === 'number' ? qtdConfig : 1;
           const quantidadeTotal = quantidadeProduto * quantidadeCapsula;
-          console.log('Produto sem variantes. Adicionando quantidade:', quantidadeTotal);
-          adicionarAoCarrinho(produto, quantidadeTotal, null);
+          console.log('Produto sem variantes. Preparando quantidade:', quantidadeTotal);
+
+          // Acumular item
+          itensParaAdicionar.push({
+            produto,
+            quantidade: quantidadeTotal,
+            corVariante: null
+          });
           totalItensAdicionados++;
         }
       }
 
-      console.log('Total de itens adicionados:', totalItensAdicionados);
+      console.log('Total de itens para adicionar:', totalItensAdicionados);
+      console.log('Adicionando todos os itens de uma vez...');
+
+      // Adicionar todos os itens de uma vez ao carrinho
+      let novoCarrinho = [...carrinho];
+
+      for (const itemConfig of itensParaAdicionar) {
+        const { produto, quantidade, corVariante } = itemConfig;
+
+        // Verificar se item já existe
+        const itemExistente = novoCarrinho.find(item => {
+          if (corVariante) {
+            return item.id === produto.id && item.cor_selecionada?.cor_nome === corVariante.cor_nome;
+          }
+          return item.id === produto.id && !item.cor_selecionada;
+        });
+
+        if (itemExistente) {
+          // Atualizar quantidade do item existente
+          novoCarrinho = novoCarrinho.map(item => {
+            const matchKey = corVariante
+              ? item.id === produto.id && item.cor_selecionada?.cor_nome === corVariante.cor_nome
+              : item.id === produto.id && !item.cor_selecionada;
+
+            return matchKey
+              ? { ...item, quantidade: item.quantidade + quantidade }
+              : item;
+          });
+        } else {
+          // Adicionar novo item
+          const itemCarrinho = {
+            ...produto,
+            quantidade,
+            cor_selecionada: corVariante
+          };
+          novoCarrinho.push(itemCarrinho);
+        }
+      }
+
+      // Salvar carrinho UMA ÚNICA VEZ com todos os itens
+      salvarCarrinho(novoCarrinho);
+      console.log('Carrinho salvo com', novoCarrinho.length, 'itens');
       console.log('=======================================');
 
       toast.success(`Cápsula "${selectedCapsula.nome}" (${quantidadeCapsula}x) adicionada ao carrinho!`);
