@@ -896,6 +896,41 @@ export default function Catalogo() {
                   } catch (e) {
                   }
                   
+                  // Se o produto é vendido em GRADE, apenas mostrar as cores disponíveis (informativo)
+                  if (selectedProduto.tipo_venda === 'grade') {
+                    return variantes.length > 0 && (
+                      <div>
+                        <Label className="mb-3 block font-semibold">Cores Disponíveis nesta Grade</Label>
+                        <p className="text-sm text-gray-600 mb-3">
+                          Este produto é vendido em grade completa com as seguintes cores:
+                        </p>
+                        <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+                          {variantes.map((v, idx) => (
+                            <div
+                              key={idx}
+                              className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 bg-gray-50"
+                            >
+                              <div
+                                className="w-8 h-8 rounded-full border-2 border-gray-300 flex-shrink-0 cursor-pointer"
+                                style={{ backgroundColor: v.cor_codigo_hex || v.cor_hex || '#000000' }}
+                                onClick={() => {
+                                  setSelectedVariantColor(v);
+                                  setFotoAtualIndex(0);
+                                }}
+                                title="Clique para ver fotos desta cor"
+                              />
+                              <div className="text-left flex-1">
+                                <div className="font-medium text-sm">{v.cor_nome}</div>
+                                <div className="text-xs text-gray-500">Incluído na grade</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Se o produto é UNITÁRIO, permitir seleção individual por cor
                   return variantes.length > 0 && (
                     <div>
                       <Label className="mb-3 block font-semibold">Selecione as Quantidades por Cor</Label>
@@ -1122,8 +1157,15 @@ export default function Catalogo() {
                 {/* Add to Cart Button */}
                 <Button
                   onClick={() => {
+                    // Se produto é grade completa, adiciona a grade inteira sem seleção de cor
+                    if (selectedProduto.tipo_venda === 'grade') {
+                      adicionarAoCarrinho(selectedProduto, quantidadeModal, null);
+                      setShowDetailsModal(false);
+                      return;
+                    }
+
+                    // Se produto tem variantes de cor e é unitário, adiciona múltiplas cores
                     if (selectedProduto.tem_variantes_cor) {
-                      // Adicionar múltiplas cores ao carrinho
                       const variantesComQuantidade = Object.entries(quantidadesPorCor).filter(([_, qtd]) => qtd > 0);
 
                       if (variantesComQuantidade.length === 0) {
@@ -1155,7 +1197,12 @@ export default function Catalogo() {
                     }
                   }}
                   disabled={(() => {
-                    // Se tem variantes de cor, verifica se selecionou pelo menos uma quantidade
+                    // Se produto é grade completa, nunca desabilita (sempre pode adicionar)
+                    if (selectedProduto.tipo_venda === 'grade') {
+                      return false;
+                    }
+
+                    // Se tem variantes de cor e é unitário, verifica seleção
                     if (selectedProduto.tem_variantes_cor) {
                       const totalSelecionado = Object.values(quantidadesPorCor).reduce((sum, qtd) => sum + qtd, 0);
                       if (totalSelecionado === 0) {
@@ -1200,7 +1247,12 @@ export default function Catalogo() {
                 >
                   <ShoppingCart className="w-5 h-5 mr-2" />
                   {(() => {
-                    // Produto com variantes de cor
+                    // Se produto é grade completa, mostrar texto específico
+                    if (selectedProduto.tipo_venda === 'grade') {
+                      return 'Adicionar Grade ao Carrinho';
+                    }
+
+                    // Produto com variantes de cor e unitário
                     if (selectedProduto.tem_variantes_cor) {
                       const totalSelecionado = Object.values(quantidadesPorCor).reduce((sum, qtd) => sum + qtd, 0);
 
@@ -1235,7 +1287,7 @@ export default function Catalogo() {
                       return `Adicionar ${totalSelecionado} ao Carrinho`;
                     }
 
-                    // Produto sem variantes - lógica antiga
+                    // Produto sem variantes
                     if (selectedProduto.controla_estoque && !selectedProduto.permite_venda_sem_estoque) {
                       return (selectedProduto.estoque_atual_grades || 0) <= 0 ? 'Produto Esgotado' : 'Adicionar ao Carrinho';
                     }
@@ -1243,8 +1295,8 @@ export default function Catalogo() {
                   })()}
                 </Button>
 
-                {/* Alert quando não selecionou quantidades */}
-                {selectedProduto.tem_variantes_cor && Object.values(quantidadesPorCor).reduce((sum, qtd) => sum + qtd, 0) === 0 && (
+                {/* Alert quando não selecionou quantidades - apenas para produtos unitários */}
+                {selectedProduto.tem_variantes_cor && selectedProduto.tipo_venda !== 'grade' && Object.values(quantidadesPorCor).reduce((sum, qtd) => sum + qtd, 0) === 0 && (
                   <Alert className="border-yellow-200 bg-yellow-50">
                     <AlertTriangle className="h-4 w-4 text-yellow-600" />
                     <AlertDescription className="text-yellow-800">
