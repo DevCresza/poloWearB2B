@@ -141,6 +141,10 @@ export default function Catalogo() {
     if (!selectedCapsula) return;
 
     try {
+      console.log('=== ADICIONANDO CÁPSULA AO CARRINHO ===');
+      console.log('Cápsula:', selectedCapsula.nome);
+      console.log('Produtos IDs na cápsula:', selectedCapsula.produto_ids);
+
       // Parse produtos_quantidades
       let produtosQuantidades = {};
       try {
@@ -151,18 +155,28 @@ export default function Catalogo() {
         produtosQuantidades = {};
       }
 
+      console.log('Produtos Quantidades:', produtosQuantidades);
+
       let totalItensAdicionados = 0;
 
       // Para cada produto na cápsula
       for (const produtoId of (selectedCapsula.produto_ids || [])) {
+        console.log('Processando produto ID:', produtoId);
         const produto = produtos.find(p => p.id === produtoId);
-        if (!produto) continue;
+        if (!produto) {
+          console.warn('Produto não encontrado:', produtoId);
+          continue;
+        }
+        console.log('Produto encontrado:', produto.nome);
 
         const qtdConfig = produtosQuantidades[produtoId];
+        console.log('Configuração de quantidade:', qtdConfig);
 
         // Se produto tem variantes de cor configuradas na cápsula
         if (qtdConfig && typeof qtdConfig === 'object' && qtdConfig.variantes) {
+          console.log('Produto tem variantes de cor. Total de variantes:', qtdConfig.variantes.length);
           for (const varianteConfig of qtdConfig.variantes) {
+            console.log('Processando variante:', varianteConfig.cor_nome, 'Quantidade:', varianteConfig.quantidade);
             // Encontrar a variante completa no produto
             let variantes = [];
             try {
@@ -177,25 +191,32 @@ export default function Catalogo() {
             if (variante) {
               // Multiplicar quantidade da cápsula pela quantidade configurada de cada cor
               const quantidadeTotal = varianteConfig.quantidade * quantidadeCapsula;
+              console.log('Adicionando:', produto.nome, '-', variante.cor_nome, 'Qtd:', quantidadeTotal);
               adicionarAoCarrinho(produto, quantidadeTotal, variante);
               totalItensAdicionados++;
+            } else {
+              console.warn('Variante não encontrada no produto. ID procurado:', varianteConfig.cor_id);
             }
           }
         } else {
           // Produto sem variantes
           const quantidadeProduto = typeof qtdConfig === 'number' ? qtdConfig : 1;
           const quantidadeTotal = quantidadeProduto * quantidadeCapsula;
+          console.log('Produto sem variantes. Adicionando quantidade:', quantidadeTotal);
           adicionarAoCarrinho(produto, quantidadeTotal, null);
           totalItensAdicionados++;
         }
       }
+
+      console.log('Total de itens adicionados:', totalItensAdicionados);
+      console.log('=======================================');
 
       toast.success(`Cápsula "${selectedCapsula.nome}" (${quantidadeCapsula}x) adicionada ao carrinho!`);
       setShowCapsulaModal(false);
       setSelectedCapsula(null);
     } catch (error) {
       toast.error('Erro ao adicionar cápsula ao carrinho');
-      console.error(error);
+      console.error('ERRO ao adicionar cápsula:', error);
     }
   };
 
