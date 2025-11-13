@@ -1415,6 +1415,69 @@ export default function Catalogo() {
                 </div>
               </div>
 
+              {/* Cálculo do Valor da Cápsula */}
+              {(() => {
+                let valorTotalCapsula = 0;
+                let produtosQuantidades = {};
+
+                try {
+                  produtosQuantidades = typeof selectedCapsula.produtos_quantidades === 'string'
+                    ? JSON.parse(selectedCapsula.produtos_quantidades)
+                    : selectedCapsula.produtos_quantidades || {};
+                } catch (e) {
+                  produtosQuantidades = {};
+                }
+
+                // Calcular valor total da cápsula
+                (selectedCapsula.produto_ids || []).forEach((produtoId) => {
+                  const produto = produtos.find(p => p.id === produtoId);
+                  if (!produto) return;
+
+                  const qtdConfig = produtosQuantidades[produtoId];
+
+                  // Se tem variantes de cor configuradas
+                  if (qtdConfig && typeof qtdConfig === 'object' && qtdConfig.variantes) {
+                    qtdConfig.variantes.forEach(varianteConfig => {
+                      const quantidade = varianteConfig.quantidade || 0;
+                      const precoPorItem = produto.tipo_venda === 'grade'
+                        ? (produto.preco_grade_completa || 0)
+                        : (produto.preco_por_peca || 0);
+                      valorTotalCapsula += precoPorItem * quantidade;
+                    });
+                  } else if (typeof qtdConfig === 'number') {
+                    // Produto sem variantes
+                    const quantidade = qtdConfig;
+                    const precoPorItem = produto.tipo_venda === 'grade'
+                      ? (produto.preco_grade_completa || 0)
+                      : (produto.preco_por_peca || 0);
+                    valorTotalCapsula += precoPorItem * quantidade;
+                  }
+                });
+
+                const valorComQuantidade = valorTotalCapsula * quantidadeCapsula;
+
+                return (
+                  <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-lg font-semibold text-gray-900">Valor unitário da cápsula:</span>
+                      <span className="text-2xl font-bold text-green-600">
+                        R$ {valorTotalCapsula.toFixed(2)}
+                      </span>
+                    </div>
+                    {quantidadeCapsula > 1 && (
+                      <div className="flex justify-between items-center pt-2 border-t border-green-200">
+                        <span className="text-base font-semibold text-gray-900">
+                          Total ({quantidadeCapsula}x cápsulas):
+                        </span>
+                        <span className="text-3xl font-bold text-green-700">
+                          R$ {valorComQuantidade.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Seletor de quantidade da cápsula */}
               <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
                 <Label className="font-semibold text-gray-900 mb-3 block">
