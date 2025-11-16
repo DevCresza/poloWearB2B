@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Produto } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { User } from '@/api/entities';
+import { Capsula } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -88,9 +89,71 @@ export default function GestaoProdutos() {
     }
   };
 
+  const removerProdutoDasCapsulas = async (produtoId) => {
+    try {
+      // Buscar todas as cápsulas
+      const todasCapsulas = await Capsula.list();
+
+      // Filtrar cápsulas que contêm este produto
+      const capsulasAfetadas = todasCapsulas.filter(capsula => {
+        const produtoIds = Array.isArray(capsula.produto_ids)
+          ? capsula.produto_ids
+          : JSON.parse(capsula.produto_ids || '[]');
+        return produtoIds.includes(produtoId);
+      });
+
+      console.log(`🔍 Encontradas ${capsulasAfetadas.length} cápsulas com o produto ${produtoId}`);
+
+      // Atualizar cada cápsula removendo o produto
+      for (const capsula of capsulasAfetadas) {
+        let produtoIds = Array.isArray(capsula.produto_ids)
+          ? capsula.produto_ids
+          : JSON.parse(capsula.produto_ids || '[]');
+
+        let produtosQuantidades = typeof capsula.produtos_quantidades === 'string'
+          ? JSON.parse(capsula.produtos_quantidades || '{}')
+          : capsula.produtos_quantidades || {};
+
+        // Remover o produto dos arrays
+        produtoIds = produtoIds.filter(id => id !== produtoId);
+        delete produtosQuantidades[produtoId];
+
+        // Atualizar a cápsula
+        await Capsula.update(capsula.id, {
+          produto_ids: produtoIds,
+          produtos_quantidades: produtosQuantidades
+        });
+
+        console.log(`✅ Produto removido da cápsula: ${capsula.nome}`);
+      }
+
+      if (capsulasAfetadas.length > 0) {
+        console.log(`✅ Produto removido de ${capsulasAfetadas.length} cápsula(s)`);
+      }
+
+      return capsulasAfetadas.length;
+    } catch (error) {
+      console.error('Erro ao remover produto das cápsulas:', error);
+      return 0;
+    }
+  };
+
   const handleAtivoToggle = async (produto, isChecked) => {
     try {
       await Produto.update(produto.id, { ativo: isChecked });
+
+      // Se desativou o produto, remover de todas as cápsulas
+      if (!isChecked) {
+        const qtdCapsulas = await removerProdutoDasCapsulas(produto.id);
+        if (qtdCapsulas > 0) {
+          toast.success(`Produto desativado e removido de ${qtdCapsulas} cápsula(s)!`);
+        } else {
+          toast.success('Produto desativado!');
+        }
+      } else {
+        toast.success('Produto ativado!');
+      }
+
       loadData();
     } catch (error) {
       toast.error('Falha ao atualizar o status do produto.');
@@ -98,13 +161,23 @@ export default function GestaoProdutos() {
   };
 
   const handleDelete = async (produto) => {
-    if (!confirm(`Tem certeza que deseja excluir o produto "${produto.nome}"? Esta ação não pode ser desfeita.`)) {
+    if (!confirm(`Tem certeza que deseja excluir o produto "${produto.nome}"? Esta ação não pode ser desfeita e o produto será removido de todas as cápsulas.`)) {
       return;
     }
 
     try {
+      // Primeiro remover de todas as cápsulas
+      const qtdCapsulas = await removerProdutoDasCapsulas(produto.id);
+
+      // Depois excluir o produto
       await Produto.delete(produto.id);
-      toast.success('Produto excluído com sucesso!');
+
+      if (qtdCapsulas > 0) {
+        toast.success(`Produto excluído e removido de ${qtdCapsulas} cápsula(s)!`);
+      } else {
+        toast.success('Produto excluído com sucesso!');
+      }
+
       loadData();
     } catch (error) {
       toast.error('Falha ao excluir o produto. Verifique se não há pedidos vinculados.');

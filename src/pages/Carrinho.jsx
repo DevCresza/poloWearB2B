@@ -396,10 +396,13 @@ export default function Carrinho() {
                                     src={item.imagem_capa_url}
                                     alt={item.nome}
                                     className="w-full sm:w-24 h-48 sm:h-24 object-cover rounded-md"
+                                    onError={(e) => {
+                                      e.target.style.display = 'none';
+                                    }}
                                   />
                                 ) : (
-                                  <div className="w-full sm:w-24 h-48 sm:h-24 bg-purple-200 rounded-md flex items-center justify-center">
-                                    <Package className="w-8 h-8 text-purple-600" />
+                                  <div className="w-full sm:w-24 h-48 sm:h-24 bg-gray-200 rounded-md flex items-center justify-center">
+                                    <Package className="w-8 h-8 text-gray-400" />
                                   </div>
                                 )}
 
