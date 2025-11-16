@@ -73,27 +73,39 @@ export default function Carrinho() {
     }
   };
 
-  const removerItem = (produtoId, corSelecionada = null) => {
+  const removerItem = (itemId, corSelecionada = null, isCapsula = false) => {
     const novoCarrinho = carrinho.filter(item => {
-      if (corSelecionada) {
-        return !(item.id === produtoId && item.cor_selecionada?.cor_nome === corSelecionada.cor_nome);
+      // Se é cápsula, apenas comparar o ID
+      if (isCapsula || item.tipo === 'capsula') {
+        return item.id !== itemId;
       }
-      return item.id !== produtoId;
+
+      // Se não é cápsula, usar lógica antiga de produto
+      if (corSelecionada) {
+        return !(item.id === itemId && item.cor_selecionada?.cor_nome === corSelecionada.cor_nome);
+      }
+      return item.id !== itemId;
     });
     salvarCarrinho(novoCarrinho);
   };
 
-  const atualizarQuantidade = (produtoId, novaQuantidade, corSelecionada = null) => {
+  const atualizarQuantidade = (itemId, novaQuantidade, corSelecionada = null, isCapsula = false) => {
     if (novaQuantidade <= 0) {
-      removerItem(produtoId, corSelecionada);
+      removerItem(itemId, corSelecionada, isCapsula);
       return;
     }
 
     const novoCarrinho = carrinho.map(item => {
-      const match = corSelecionada 
-        ? item.id === produtoId && item.cor_selecionada?.cor_nome === corSelecionada.cor_nome
-        : item.id === produtoId && !item.cor_selecionada;
-      
+      // Se é cápsula, apenas comparar o ID
+      if (isCapsula || item.tipo === 'capsula') {
+        return item.id === itemId ? { ...item, quantidade: novaQuantidade } : item;
+      }
+
+      // Se não é cápsula, usar lógica antiga de produto
+      const match = corSelecionada
+        ? item.id === itemId && item.cor_selecionada?.cor_nome === corSelecionada.cor_nome
+        : item.id === itemId && !item.cor_selecionada;
+
       return match ? { ...item, quantidade: novaQuantidade } : item;
     });
     salvarCarrinho(novoCarrinho);
@@ -108,18 +120,30 @@ export default function Carrinho() {
   const agruparPorFornecedor = () => {
     const grupos = {};
     carrinho.forEach(item => {
-      if (!grupos[item.fornecedor_id]) {
-        grupos[item.fornecedor_id] = {
-          fornecedor_id: item.fornecedor_id,
+      // Para cápsulas, usar ID especial já que elas agrupam múltiplos fornecedores
+      const fornecedorKey = item.tipo === 'capsula' ? 'capsula' : item.fornecedor_id;
+
+      if (!grupos[fornecedorKey]) {
+        grupos[fornecedorKey] = {
+          fornecedor_id: fornecedorKey,
           itens: [],
-          total: 0
+          total: 0,
+          isCapsula: item.tipo === 'capsula'
         };
       }
-      grupos[item.fornecedor_id].itens.push(item);
-      const preco = item.tipo_venda === 'grade' 
-        ? item.preco_grade_completa 
-        : item.preco_por_peca;
-      grupos[item.fornecedor_id].total += preco * item.quantidade;
+      grupos[fornecedorKey].itens.push(item);
+
+      // Calcular preço do item
+      let preco;
+      if (item.tipo === 'capsula') {
+        preco = item.preco_unitario || 0;
+      } else {
+        preco = item.tipo_venda === 'grade'
+          ? item.preco_grade_completa
+          : item.preco_por_peca;
+      }
+
+      grupos[fornecedorKey].total += preco * item.quantidade;
     });
     return Object.values(grupos);
   };
@@ -359,11 +383,98 @@ export default function Carrinho() {
                     )}
                   </CardHeader>
                   <CardContent className="p-4 sm:p-6 space-y-4">
-                    {/* Produtos */}
+                    {/* Produtos ou Cápsulas */}
                     <div className="space-y-4">
                       {grupo.itens.map((item, itemIndex) => {
-                        const preco = item.tipo_venda === 'grade' 
-                          ? item.preco_grade_completa 
+                        // Renderização especial para cápsulas
+                        if (item.tipo === 'capsula') {
+                          return (
+                            <div key={item.id} className="border-2 border-purple-300 bg-purple-50 rounded-lg p-4">
+                              <div className="flex flex-col sm:flex-row gap-4">
+                                {item.imagem_capa_url ? (
+                                  <img
+                                    src={item.imagem_capa_url}
+                                    alt={item.nome}
+                                    className="w-full sm:w-24 h-48 sm:h-24 object-cover rounded-md"
+                                  />
+                                ) : (
+                                  <div className="w-full sm:w-24 h-48 sm:h-24 bg-purple-200 rounded-md flex items-center justify-center">
+                                    <Package className="w-8 h-8 text-purple-600" />
+                                  </div>
+                                )}
+
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Badge className="bg-purple-600 text-white">CÁPSULA</Badge>
+                                    <h3 className="font-bold text-lg">{item.nome}</h3>
+                                  </div>
+                                  {item.descricao && (
+                                    <p className="text-sm text-gray-700 mb-2">{item.descricao}</p>
+                                  )}
+                                  <p className="text-sm text-gray-600">
+                                    {item.detalhes_produtos?.length || 0} produtos inclusos
+                                  </p>
+                                  <p className="text-lg font-semibold text-purple-700 mt-2">
+                                    R$ {item.preco_unitario?.toFixed(2)} por cápsula
+                                  </p>
+                                </div>
+
+                                <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between gap-4">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removerItem(item.id, null, true)}
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={() => atualizarQuantidade(item.id, item.quantidade - 1, null, true)}
+                                    >
+                                      <Minus className="w-4 h-4" />
+                                    </Button>
+                                    <span className="w-12 text-center font-semibold">{item.quantidade}</span>
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={() => atualizarQuantidade(item.id, item.quantidade + 1, null, true)}
+                                    >
+                                      <Plus className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+
+                                  <p className="text-base font-bold text-purple-900">
+                                    R$ {(item.preco_unitario * item.quantidade).toFixed(2)}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Lista de produtos da cápsula (somente visualização) */}
+                              {item.detalhes_produtos && item.detalhes_produtos.length > 0 && (
+                                <div className="mt-4 pt-4 border-t border-purple-200">
+                                  <p className="text-sm font-semibold text-purple-900 mb-2">Produtos inclusos:</p>
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                    {item.detalhes_produtos.map((detalhe, idx) => (
+                                      <div key={idx} className="text-xs text-gray-700 bg-white rounded px-2 py-1">
+                                        • {detalhe.nome}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        // Renderização normal para produtos
+                        const preco = item.tipo_venda === 'grade'
+                          ? item.preco_grade_completa
                           : item.preco_por_peca;
                         const itemKey = `${item.id}_${item.cor_selecionada?.cor_nome || 'default'}`;
 
