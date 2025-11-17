@@ -194,6 +194,63 @@ export default function Catalogo() {
     if (!selectedCapsula) return;
 
     try {
+      console.log('=== ADICIONANDO CÁPSULA AO CARRINHO ===');
+      console.log('Cápsula selecionada:', selectedCapsula);
+      console.log('Quantidade:', quantidadeCapsula);
+
+      // Parse produto_ids se necessário
+      let produtoIds = [];
+      try {
+        produtoIds = Array.isArray(selectedCapsula.produto_ids)
+          ? selectedCapsula.produto_ids
+          : JSON.parse(selectedCapsula.produto_ids || '[]');
+      } catch (e) {
+        console.error('Erro ao fazer parse de produto_ids:', e);
+        produtoIds = [];
+      }
+
+      console.log('Produto IDs processados:', produtoIds);
+
+      // Parse produtos_quantidades
+      let produtosQuantidades = {};
+      try {
+        produtosQuantidades = typeof selectedCapsula.produtos_quantidades === 'string'
+          ? JSON.parse(selectedCapsula.produtos_quantidades)
+          : selectedCapsula.produtos_quantidades || {};
+      } catch (e) {
+        console.error('Erro ao fazer parse de produtos_quantidades:', e);
+        produtosQuantidades = {};
+      }
+
+      // Calcular preço total da cápsula
+      let precoTotalCapsula = 0;
+      produtoIds.forEach(produtoId => {
+        const produto = produtos.find(p => p.id === produtoId);
+        if (!produto) return;
+
+        const qtdConfig = produtosQuantidades[produtoId];
+
+        // Se tem variantes de cor configuradas
+        if (qtdConfig && typeof qtdConfig === 'object' && qtdConfig.variantes) {
+          qtdConfig.variantes.forEach(varianteConfig => {
+            const quantidade = varianteConfig.quantidade || 0;
+            const precoPorItem = produto.tipo_venda === 'grade'
+              ? (produto.preco_grade_completa || 0)
+              : (produto.preco_por_peca || 0);
+            precoTotalCapsula += precoPorItem * quantidade;
+          });
+        } else if (typeof qtdConfig === 'number') {
+          // Produto sem variantes
+          const quantidade = qtdConfig;
+          const precoPorItem = produto.tipo_venda === 'grade'
+            ? (produto.preco_grade_completa || 0)
+            : (produto.preco_por_peca || 0);
+          precoTotalCapsula += precoPorItem * quantidade;
+        }
+      });
+
+      console.log('Preço total calculado da cápsula:', precoTotalCapsula);
+
       // Verificar se já existe essa cápsula no carrinho
       const capsulaExistente = carrinho.find(item =>
         item.tipo === 'capsula' && item.capsula_id === selectedCapsula.id
@@ -201,6 +258,7 @@ export default function Catalogo() {
 
       let novoCarrinho;
       if (capsulaExistente) {
+        console.log('Cápsula já existe no carrinho, incrementando quantidade');
         // Se já existe, incrementar quantidade
         novoCarrinho = carrinho.map(item => {
           if (item.tipo === 'capsula' && item.capsula_id === selectedCapsula.id) {
@@ -209,6 +267,7 @@ export default function Catalogo() {
           return item;
         });
       } else {
+        console.log('Criando novo item de cápsula');
         // Adicionar nova cápsula como item único
         const itemCapsula = {
           id: `capsula-${selectedCapsula.id}`, // ID único para a cápsula
@@ -220,17 +279,19 @@ export default function Catalogo() {
           quantidade: quantidadeCapsula,
           preco_total: precoTotalCapsula,
           preco_unitario: precoTotalCapsula, // Preço por cápsula
-          produto_ids: selectedCapsula.produto_ids,
+          produto_ids: produtoIds,
           produtos_quantidades: selectedCapsula.produtos_quantidades,
           // Informações adicionais para exibição
-          detalhes_produtos: selectedCapsula.produto_ids.map(produtoId => {
+          detalhes_produtos: produtoIds.map(produtoId => {
             const produto = produtos.find(p => p.id === produtoId);
             let produtosQuantidades = {};
             try {
               produtosQuantidades = typeof selectedCapsula.produtos_quantidades === 'string'
                 ? JSON.parse(selectedCapsula.produtos_quantidades)
                 : selectedCapsula.produtos_quantidades || {};
-            } catch (e) {}
+            } catch (e) {
+              console.warn('Erro ao fazer parse de produtos_quantidades:', e);
+            }
 
             const qtdConfig = produtosQuantidades[produtoId];
 
@@ -243,18 +304,20 @@ export default function Catalogo() {
           })
         };
 
+        console.log('Item cápsula criado:', itemCapsula);
         novoCarrinho = [...carrinho, itemCapsula];
       }
 
       salvarCarrinho(novoCarrinho);
-      console.log('Cápsula adicionada ao carrinho como item único');
+      console.log('✅ Cápsula adicionada ao carrinho como item único');
 
       toast.success(`Cápsula "${selectedCapsula.nome}" (${quantidadeCapsula}x) adicionada ao carrinho!`);
       setShowCapsulaModal(false);
       setSelectedCapsula(null);
     } catch (error) {
       toast.error('Erro ao adicionar cápsula ao carrinho');
-      console.error('ERRO ao adicionar cápsula:', error);
+      console.error('❌ ERRO ao adicionar cápsula:', error);
+      console.error('Stack:', error.stack);
     }
   };
 
