@@ -458,16 +458,43 @@ export default function Carrinho() {
                                 </div>
                               </div>
 
-                              {/* Lista de produtos da cápsula (somente visualização) */}
+                              {/* Lista de produtos da cápsula com detalhes (somente visualização) */}
                               {item.detalhes_produtos && item.detalhes_produtos.length > 0 && (
                                 <div className="mt-4 pt-4 border-t border-purple-200">
-                                  <p className="text-sm font-semibold text-purple-900 mb-2">Produtos inclusos:</p>
-                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                    {item.detalhes_produtos.map((detalhe, idx) => (
-                                      <div key={idx} className="text-xs text-gray-700 bg-white rounded px-2 py-1">
-                                        • {detalhe.nome}
-                                      </div>
-                                    ))}
+                                  <p className="text-sm font-semibold text-purple-900 mb-3">Produtos inclusos:</p>
+                                  <div className="space-y-3">
+                                    {item.detalhes_produtos.map((detalhe, idx) => {
+                                      const config = detalhe.configuracao;
+                                      const hasVariants = config && typeof config === 'object' && config.variantes && config.variantes.length > 0;
+                                      const numericQuantity = typeof config === 'number' ? config : null;
+
+                                      return (
+                                        <div key={idx} className="bg-white rounded-lg p-3 border border-purple-100">
+                                          <p className="font-semibold text-sm text-gray-900 mb-2">• {detalhe.nome}</p>
+                                          {hasVariants && (
+                                            <div className="ml-4 space-y-1">
+                                              {config.variantes.map((variante, vIdx) => (
+                                                <div key={vIdx} className="flex items-center gap-2 text-xs text-gray-700">
+                                                  <div
+                                                    className="w-4 h-4 rounded-full border border-gray-300"
+                                                    style={{ backgroundColor: variante.cor_codigo_hex || '#000' }}
+                                                    title={variante.cor_nome}
+                                                  />
+                                                  <span>
+                                                    <strong>{variante.cor_nome}:</strong> {variante.quantidade} grade(s)
+                                                  </span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                          {numericQuantity && (
+                                            <div className="ml-4 text-xs text-gray-700">
+                                              Quantidade: {numericQuantity}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               )}
