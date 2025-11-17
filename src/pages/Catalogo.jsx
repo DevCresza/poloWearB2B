@@ -295,11 +295,37 @@ export default function Catalogo() {
 
             const qtdConfig = produtosQuantidades[produtoId];
 
+            // Enriquecer configuração com dados completos de cor (incluindo hex)
+            let configEnriquecida = qtdConfig;
+            if (qtdConfig && typeof qtdConfig === 'object' && qtdConfig.variantes && Array.isArray(qtdConfig.variantes)) {
+              // Buscar variantes do produto para pegar cor_codigo_hex
+              let variantesProduto = [];
+              try {
+                variantesProduto = typeof produto?.variantes_cor === 'string'
+                  ? JSON.parse(produto.variantes_cor)
+                  : produto?.variantes_cor || [];
+              } catch (e) {
+                variantesProduto = [];
+              }
+
+              // Adicionar cor_codigo_hex às variantes da configuração
+              configEnriquecida = {
+                ...qtdConfig,
+                variantes: qtdConfig.variantes.map(varConfig => {
+                  const varianteProduto = variantesProduto.find(v => v.id === varConfig.cor_id);
+                  return {
+                    ...varConfig,
+                    cor_codigo_hex: varianteProduto?.cor_codigo_hex || varianteProduto?.cor_hex || '#000000'
+                  };
+                })
+              };
+            }
+
             return {
               id: produtoId,
               nome: produto?.nome || 'Produto não encontrado',
               foto: produto?.fotos?.[0] || null,
-              configuracao: qtdConfig
+              configuracao: configEnriquecida
             };
           })
         };
