@@ -22,6 +22,7 @@ import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 export default function Catalogo() {
   const [user, setUser] = useState(null);
   const [produtos, setProdutos] = useState([]);
+  const [todosProdutos, setTodosProdutos] = useState([]); // Lista completa sem filtros
   const [fornecedores, setFornecedores] = useState([]);
   const [capsulas, setCapsulas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -60,10 +61,16 @@ export default function Catalogo() {
         Capsula.list()
       ]);
 
-      // Mostrar todos os produtos ativos (todas as marcas)
-      const produtosAtivos = (produtosList || []).filter(p => p.ativo !== false);
-      setProdutos(produtosAtivos);
-      
+      // Guardar TODOS os produtos (incluindo inativos e visíveis apenas em cápsulas)
+      // Isso permite que cápsulas mostrem produtos que foram desativados posteriormente
+      setTodosProdutos(produtosList || []);
+
+      // Mostrar apenas produtos ativos e que não sejam visíveis apenas em cápsulas no catálogo
+      const produtosVisiveis = (produtosList || []).filter(p =>
+        p.ativo !== false && p.visivel_apenas_capsulas !== true
+      );
+      setProdutos(produtosVisiveis);
+
       setFornecedores(fornecedoresList || []);
       capsulasList.forEach(capsula => {
         if (!capsula.produto_ids) {
@@ -194,10 +201,6 @@ export default function Catalogo() {
     if (!selectedCapsula) return;
 
     try {
-      console.log('=== ADICIONANDO CÁPSULA AO CARRINHO ===');
-      console.log('Cápsula selecionada:', selectedCapsula);
-      console.log('Quantidade:', quantidadeCapsula);
-
       // Parse produto_ids se necessário
       let produtoIds = [];
       try {
@@ -205,11 +208,8 @@ export default function Catalogo() {
           ? selectedCapsula.produto_ids
           : JSON.parse(selectedCapsula.produto_ids || '[]');
       } catch (e) {
-        console.error('Erro ao fazer parse de produto_ids:', e);
         produtoIds = [];
       }
-
-      console.log('Produto IDs processados:', produtoIds);
 
       // Parse produtos_quantidades
       let produtosQuantidades = {};
@@ -218,14 +218,13 @@ export default function Catalogo() {
           ? JSON.parse(selectedCapsula.produtos_quantidades)
           : selectedCapsula.produtos_quantidades || {};
       } catch (e) {
-        console.error('Erro ao fazer parse de produtos_quantidades:', e);
         produtosQuantidades = {};
       }
 
       // Calcular preço total da cápsula
       let precoTotalCapsula = 0;
       produtoIds.forEach(produtoId => {
-        const produto = produtos.find(p => p.id === produtoId);
+        const produto = todosProdutos.find(p => p.id === produtoId);
         if (!produto) return;
 
         const qtdConfig = produtosQuantidades[produtoId];
@@ -248,8 +247,6 @@ export default function Catalogo() {
           precoTotalCapsula += precoPorItem * quantidade;
         }
       });
-
-      console.log('Preço total calculado da cápsula:', precoTotalCapsula);
 
       // Verificar se já existe essa cápsula no carrinho
       const capsulaExistente = carrinho.find(item =>
@@ -283,7 +280,7 @@ export default function Catalogo() {
           produtos_quantidades: selectedCapsula.produtos_quantidades,
           // Informações adicionais para exibição
           detalhes_produtos: produtoIds.map(produtoId => {
-            const produto = produtos.find(p => p.id === produtoId);
+            const produto = todosProdutos.find(p => p.id === produtoId);
             let produtosQuantidades = {};
             try {
               produtosQuantidades = typeof selectedCapsula.produtos_quantidades === 'string'
@@ -330,20 +327,15 @@ export default function Catalogo() {
           })
         };
 
-        console.log('Item cápsula criado:', itemCapsula);
         novoCarrinho = [...carrinho, itemCapsula];
       }
 
       salvarCarrinho(novoCarrinho);
-      console.log('✅ Cápsula adicionada ao carrinho como item único');
-
       toast.success(`Cápsula "${selectedCapsula.nome}" (${quantidadeCapsula}x) adicionada ao carrinho!`);
       setShowCapsulaModal(false);
       setSelectedCapsula(null);
     } catch (error) {
       toast.error('Erro ao adicionar cápsula ao carrinho');
-      console.error('❌ ERRO ao adicionar cápsula:', error);
-      console.error('Stack:', error.stack);
     }
   };
 
@@ -458,12 +450,6 @@ export default function Catalogo() {
   };
 
   const openProductDetails = (produto) => {
-    console.log('=== PRODUTO ABERTO ===');
-    console.log('Nome:', produto.nome);
-    console.log('Tipo de Venda:', produto.tipo_venda);
-    console.log('Tem Variantes Cor:', produto.tem_variantes_cor);
-    console.log('==================');
-
     setSelectedProduto(produto);
     setQuantidadeModal(produto.pedido_minimo_grades || 1);
     setSelectedVariantColor(null);
@@ -1572,7 +1558,7 @@ export default function Catalogo() {
 
                 <div className="grid gap-4">
                   {(selectedCapsula.produto_ids || []).map((produtoId) => {
-                    const produto = produtos.find(p => p.id === produtoId);
+                    const produto = todosProdutos.find(p => p.id === produtoId);
                     if (!produto) return null;
 
                     let produtosQuantidades = {};
@@ -1656,7 +1642,7 @@ export default function Catalogo() {
 
                 // Calcular valor total da cápsula
                 (selectedCapsula.produto_ids || []).forEach((produtoId) => {
-                  const produto = produtos.find(p => p.id === produtoId);
+                  const produto = todosProdutos.find(p => p.id === produtoId);
                   if (!produto) return;
 
                   const qtdConfig = produtosQuantidades[produtoId];

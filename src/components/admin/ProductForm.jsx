@@ -55,6 +55,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
     variantes_cor: [], // New field
     is_destaque: false,
     ativo: true,
+    visivel_apenas_capsulas: false,
     controla_estoque: true, // Kept as default true, checkbox removed
     permite_venda_sem_estoque: false,
     data_lancamento: ''
@@ -923,13 +924,35 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                 <Checkbox
                   id="ativo"
                   checked={formData.ativo}
-                  onCheckedChange={(checked) => setFormData({...formData, ativo: checked})}
+                  onCheckedChange={(checked) => setFormData({
+                    ...formData,
+                    ativo: checked,
+                    visivel_apenas_capsulas: checked ? false : formData.visivel_apenas_capsulas
+                  })}
                 />
                 <label
                   htmlFor="ativo"
                   className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                 >
                   Produto Ativo no Catálogo
+                </label>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="visivel_apenas_capsulas"
+                  checked={formData.visivel_apenas_capsulas || false}
+                  onCheckedChange={(checked) => setFormData({
+                    ...formData,
+                    visivel_apenas_capsulas: checked,
+                    ativo: checked ? false : formData.ativo
+                  })}
+                />
+                <label
+                  htmlFor="visivel_apenas_capsulas"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  Visível Apenas em Cápsulas
                 </label>
               </div>
             </div>
