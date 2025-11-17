@@ -781,7 +781,7 @@ export default function Catalogo() {
               {activeCapsulas.map(capsula => (
                 <div key={capsula.id} onClick={() => handleSelectCapsula(capsula)} className="cursor-pointer group">
                   <Card className="overflow-hidden hover:shadow-xl transition-all border-0 shadow-md">
-                    <div className="aspect-video overflow-hidden bg-gradient-to-br from-purple-100 to-pink-100">
+                    <div className="aspect-[3/4] overflow-hidden bg-gradient-to-br from-purple-100 to-pink-100">
                       {capsula.imagem_capa_url ? (
                         <img
                           src={capsula.imagem_capa_url}
