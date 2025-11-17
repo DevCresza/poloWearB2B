@@ -420,30 +420,46 @@ export default function Carrinho() {
 
                                   {/* Mostrar cores disponíveis na cápsula */}
                                   {(() => {
-                                    // Coletar todas as cores únicas de todos os produtos
-                                    const coresUnicas = new Map();
+                                    // Coletar todas as cores e somar quantidades de grades
+                                    const coresComQuantidade = new Map();
                                     item.detalhes_produtos?.forEach(detalhe => {
                                       const config = detalhe.configuracao;
                                       if (config && typeof config === 'object' && config.variantes && Array.isArray(config.variantes)) {
                                         config.variantes.forEach(variante => {
-                                          if (!coresUnicas.has(variante.cor_nome)) {
-                                            coresUnicas.set(variante.cor_nome, variante.cor_codigo_hex || '#000000');
+                                          const corNome = variante.cor_nome;
+                                          const corHex = variante.cor_codigo_hex || '#000000';
+                                          const quantidade = variante.quantidade || 0;
+
+                                          if (coresComQuantidade.has(corNome)) {
+                                            const existing = coresComQuantidade.get(corNome);
+                                            existing.quantidade += quantidade;
+                                          } else {
+                                            coresComQuantidade.set(corNome, {
+                                              hex: corHex,
+                                              quantidade: quantidade
+                                            });
                                           }
                                         });
                                       }
                                     });
 
-                                    if (coresUnicas.size > 0) {
+                                    if (coresComQuantidade.size > 0) {
                                       return (
-                                        <div className="flex flex-wrap gap-1.5 mt-2">
-                                          {Array.from(coresUnicas.entries()).map(([corNome, corHex], idx) => (
-                                            <div
-                                              key={idx}
-                                              className="w-6 h-6 rounded-full border-2 border-gray-300 shadow-sm"
-                                              style={{ backgroundColor: corHex }}
-                                              title={corNome}
-                                            />
-                                          ))}
+                                        <div className="mt-3 bg-white rounded-lg p-3 border border-purple-100">
+                                          <p className="text-sm font-semibold text-gray-900 mb-2">Cores incluídas:</p>
+                                          <div className="space-y-1.5">
+                                            {Array.from(coresComQuantidade.entries()).map(([corNome, dados], idx) => (
+                                              <div key={idx} className="flex items-center gap-2 text-sm">
+                                                <div
+                                                  className="w-5 h-5 rounded-full border-2 border-gray-300 shadow-sm flex-shrink-0"
+                                                  style={{ backgroundColor: dados.hex }}
+                                                />
+                                                <span className="text-gray-800">
+                                                  <strong>{corNome}</strong> - {dados.quantidade} grade(s)
+                                                </span>
+                                              </div>
+                                            ))}
+                                          </div>
                                         </div>
                                       );
                                     }
@@ -490,47 +506,6 @@ export default function Carrinho() {
                                   </p>
                                 </div>
                               </div>
-
-                              {/* Lista de produtos da cápsula com detalhes (somente visualização) */}
-                              {item.detalhes_produtos && item.detalhes_produtos.length > 0 && (
-                                <div className="mt-4 pt-4 border-t border-purple-200">
-                                  <p className="text-sm font-semibold text-purple-900 mb-3">Produtos inclusos:</p>
-                                  <div className="space-y-3">
-                                    {item.detalhes_produtos.map((detalhe, idx) => {
-                                      const config = detalhe.configuracao;
-                                      const hasVariants = config && typeof config === 'object' && config.variantes && config.variantes.length > 0;
-                                      const numericQuantity = typeof config === 'number' ? config : null;
-
-                                      return (
-                                        <div key={idx} className="bg-white rounded-lg p-3 border border-purple-100">
-                                          <p className="font-semibold text-sm text-gray-900 mb-2">• {detalhe.nome}</p>
-                                          {hasVariants && (
-                                            <div className="ml-4 space-y-1">
-                                              {config.variantes.map((variante, vIdx) => (
-                                                <div key={vIdx} className="flex items-center gap-2 text-xs text-gray-700">
-                                                  <div
-                                                    className="w-4 h-4 rounded-full border border-gray-300"
-                                                    style={{ backgroundColor: variante.cor_codigo_hex || '#000' }}
-                                                    title={variante.cor_nome}
-                                                  />
-                                                  <span>
-                                                    <strong>{variante.cor_nome}:</strong> {variante.quantidade} grade(s)
-                                                  </span>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          )}
-                                          {numericQuantity && (
-                                            <div className="ml-4 text-xs text-gray-700">
-                                              Quantidade: {numericQuantity}
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           );
                         }
