@@ -91,7 +91,7 @@ export default function GestaoMetas() {
       let pecasRealizadas = 0;
       pedidos.forEach(p => {
         try {
-          const itens = JSON.parse(p.itens);
+          const itens = Array.isArray(p.itens) ? p.itens : JSON.parse(p.itens);
           itens.forEach(item => {
             if (item.tipo_venda === 'grade') {
               pecasRealizadas += (item.quantidade || 0) * (item.total_pecas_grade || 0);

@@ -519,12 +519,22 @@ export default function MeusPedidos() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {JSON.parse(selectedPedido.itens || '[]').map((item, index) => (
-                      <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                        <div>
-                          <p className="font-medium">{item.nome}</p>
+                    {(Array.isArray(selectedPedido.itens) ? selectedPedido.itens : JSON.parse(selectedPedido.itens || '[]')).map((item, index) => (
+                      <div key={index} className={`flex justify-between items-center p-3 rounded-lg ${item.tipo === 'capsula' ? 'bg-purple-50 border-2 border-purple-200' : 'bg-gray-50'}`}>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            {item.tipo === 'capsula' && (
+                              <Badge className="bg-purple-600 text-white text-xs">CÁPSULA</Badge>
+                            )}
+                            <p className="font-medium">{item.nome}</p>
+                          </div>
                           <p className="text-sm text-gray-600">
-                            {item.tipo_venda === 'grade' ? `${item.quantidade} grade(s)` : `${item.quantidade} unidade(s)`}
+                            {item.tipo === 'capsula'
+                              ? `${item.quantidade} cápsula(s)`
+                              : item.tipo_venda === 'grade'
+                                ? `${item.quantidade} grade(s)`
+                                : `${item.quantidade} unidade(s)`
+                            }
                           </p>
                         </div>
                         <p className="font-semibold text-blue-600">

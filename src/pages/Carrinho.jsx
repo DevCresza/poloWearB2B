@@ -196,19 +196,39 @@ export default function Carrinho() {
         }
       }
 
-      const itensPedido = grupo.itens.map(item => ({
-        produto_id: item.id,
-        nome: item.nome,
-        marca: item.marca,
-        referencia: item.referencia_polo || item.referencia_fornecedor || '',
-        tipo_venda: item.tipo_venda,
-        quantidade: item.quantidade,
-        preco: item.tipo_venda === 'grade' ? item.preco_grade_completa : item.preco_por_peca,
-        total: (item.tipo_venda === 'grade' ? item.preco_grade_completa : item.preco_por_peca) * item.quantidade,
-        foto: getPrimeiraFoto(item),
-        grade_selecionada: item.grade_configuracao || null,
-        cor_selecionada: item.cor_selecionada || null
-      }));
+      const itensPedido = grupo.itens.map(item => {
+        // Tratamento especial para cápsulas
+        if (item.tipo === 'capsula') {
+          return {
+            tipo: 'capsula',
+            capsula_id: item.capsula_id,
+            produto_id: item.id, // ID do item no carrinho
+            nome: item.nome,
+            quantidade: item.quantidade,
+            preco: item.preco_unitario,
+            total: item.preco_unitario * item.quantidade,
+            foto: item.imagem_capa_url,
+            detalhes_produtos: item.detalhes_produtos || [],
+            produto_ids: item.produto_ids || [],
+            produtos_quantidades: item.produtos_quantidades || {}
+          };
+        }
+
+        // Tratamento normal para produtos
+        return {
+          produto_id: item.id,
+          nome: item.nome,
+          marca: item.marca,
+          referencia: item.referencia_polo || item.referencia_fornecedor || '',
+          tipo_venda: item.tipo_venda,
+          quantidade: item.quantidade,
+          preco: item.tipo_venda === 'grade' ? item.preco_grade_completa : item.preco_por_peca,
+          total: (item.tipo_venda === 'grade' ? item.preco_grade_completa : item.preco_por_peca) * item.quantidade,
+          foto: getPrimeiraFoto(item),
+          grade_selecionada: item.grade_configuracao || null,
+          cor_selecionada: item.cor_selecionada || null
+        };
+      });
 
       // Construir objeto de endereço a partir dos campos do usuário
       const enderecoEntrega = {
@@ -220,28 +240,34 @@ export default function Carrinho() {
         telefone: user.telefone || user.whatsapp
       };
 
-      const pedido = await Pedido.create({
+      const pedidoData = {
         comprador_user_id: user.id,
-        fornecedor_id: fornecedorId,
-        itens: JSON.stringify(itensPedido),
+        fornecedor_id: fornecedorId === 'capsula' ? null : fornecedorId, // NULL para cápsulas
+        itens: itensPedido,
         valor_total: grupo.total,
-        valor_final: grupo.total, // Valor final sem desconto ou frete
+        valor_final: grupo.total,
         status: 'novo_pedido',
         status_pagamento: 'pendente',
         metodo_pagamento: metodoPagamento[fornecedorId],
         endereco_entrega: enderecoEntrega,
         observacoes: observacoes[fornecedorId] || '',
         observacoes_comprador: observacoes[fornecedorId] || ''
-      });
+      };
+
+      const pedido = await Pedido.create(pedidoData);
 
       const dataVencimento = new Date();
       dataVencimento.setDate(dataVencimento.getDate() + 30);
+
+      const descricaoCarteira = fornecedorId === 'capsula'
+        ? `Pedido #${pedido.id.substring(0, 8)} - Cápsula`
+        : `Pedido #${pedido.id.substring(0, 8)} - ${fornecedor?.nome_fantasia || fornecedor?.nome_marca}`;
 
       await Carteira.create({
         pedido_id: pedido.id,
         cliente_user_id: user.id,
         tipo: 'a_pagar', // Cliente vai pagar
-        descricao: `Pedido #${pedido.id.substring(0, 8)} - ${fornecedor?.nome_fantasia || fornecedor?.nome_marca}`,
+        descricao: descricaoCarteira,
         valor: grupo.total,
         data_vencimento: dataVencimento.toISOString().split('T')[0],
         status: 'pendente',
@@ -253,19 +279,32 @@ export default function Carrinho() {
       } catch (notifError) {
       }
 
-      const novoCarrinho = carrinho.filter(item => item.fornecedor_id !== fornecedorId);
+      // Remover itens do carrinho
+      const novoCarrinho = carrinho.filter(item => {
+        // Se for cápsula, comparar com 'capsula'
+        if (item.tipo === 'capsula') {
+          return fornecedorId !== 'capsula';
+        }
+        // Se for produto normal, comparar fornecedor_id
+        return item.fornecedor_id !== fornecedorId;
+      });
       salvarCarrinho(novoCarrinho);
 
-      const fornecedorNome = fornecedor?.nome_marca || 'Fornecedor';
-      const contatoFornecedor = fornecedor?.contato_envio_whatsapp || fornecedor?.contato_comercial_whatsapp || 'Não disponível';
-      const emailFornecedor = fornecedor?.contato_envio_email || fornecedor?.contato_comercial_email || 'Não disponível';
+      // Mensagem de sucesso
+      if (fornecedorId === 'capsula') {
+        toast.success('✅ Pedido de Cápsula criado com sucesso!');
+      } else {
+        const fornecedorNome = fornecedor?.nome_marca || 'Fornecedor';
+        const contatoFornecedor = fornecedor?.contato_envio_whatsapp || fornecedor?.contato_comercial_whatsapp || 'Não disponível';
+        const emailFornecedor = fornecedor?.contato_envio_email || fornecedor?.contato_comercial_email || 'Não disponível';
 
-      toast.success(
-        `✅ Pedido para ${fornecedorNome} criado com sucesso!\n\n` +
-        `📧 Email: ${emailFornecedor}\n` +
-        `📱 WhatsApp: ${contatoFornecedor}\n\n` +
-        `O fornecedor foi notificado automaticamente e entrará em contato em breve.`
-      );
+        toast.success(
+          `✅ Pedido para ${fornecedorNome} criado com sucesso!\n\n` +
+          `📧 Email: ${emailFornecedor}\n` +
+          `📱 WhatsApp: ${contatoFornecedor}\n\n` +
+          `O fornecedor foi notificado automaticamente e entrará em contato em breve.`
+        );
+      }
 
       if (novoCarrinho.length === 0) {
         navigate(createPageUrl('MeusPedidos'));

@@ -305,7 +305,7 @@ export default function DashboardAdmin() {
     const produtosVendidos = {};
     pedidosList.filter(p => p.status === 'finalizado').forEach(pedido => {
       try {
-        const itens = JSON.parse(pedido.itens);
+        const itens = Array.isArray(pedido.itens) ? pedido.itens : JSON.parse(pedido.itens);
         itens.forEach(item => {
           const key = item.nome;
           if (!produtosVendidos[key]) {

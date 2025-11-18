@@ -776,7 +776,7 @@ export default function Catalogo() {
         {/* Capsules Section */}
         {activeCapsulas.length > 0 && (
           <div className="space-y-4 sm:space-y-6">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Cápsulas Sugestivas</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Cápsulas</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {activeCapsulas.map(capsula => (
                 <div key={capsula.id} onClick={() => handleSelectCapsula(capsula)} className="cursor-pointer group">
@@ -1543,7 +1543,7 @@ export default function Catalogo() {
             <div className="space-y-6 mt-4">
               {/* Imagem da cápsula */}
               {selectedCapsula.imagem_capa_url && (
-                <div className="w-full aspect-video rounded-lg overflow-hidden">
+                <div className="w-full max-w-md mx-auto aspect-[3/4] rounded-lg overflow-hidden">
                   <img
                     src={selectedCapsula.imagem_capa_url}
                     alt={selectedCapsula.nome}

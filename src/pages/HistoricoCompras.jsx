@@ -84,7 +84,7 @@ export default function HistoricoCompras() {
     const produtosMap = {};
     pedidosList.forEach(pedido => {
       try {
-        const itens = JSON.parse(pedido.itens);
+        const itens = Array.isArray(pedido.itens) ? pedido.itens : JSON.parse(pedido.itens);
         itens.forEach(item => {
           if (!produtosMap[item.produto_id]) {
             produtosMap[item.produto_id] = {
@@ -154,7 +154,7 @@ export default function HistoricoCompras() {
     const categoriaMap = {};
     pedidosList.forEach(pedido => {
       try {
-        const itens = JSON.parse(pedido.itens);
+        const itens = Array.isArray(pedido.itens) ? pedido.itens : JSON.parse(pedido.itens);
         itens.forEach(item => {
           const produto = produtosList.find(p => p.id === item.produto_id);
           if (produto && produto.categoria) {
