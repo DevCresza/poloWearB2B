@@ -3,6 +3,7 @@ import { User } from '@/api/entities';
 import { Pedido } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { Carteira } from '@/api/entities';
+import { Produto } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +27,7 @@ export default function Carrinho() {
   const [user, setUser] = useState(null);
   const [carrinho, setCarrinho] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
+  const [produtos, setProdutos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [finalizando, setFinalizando] = useState({});
   const [metodoPagamento, setMetodoPagamento] = useState({});
@@ -42,8 +44,13 @@ export default function Carrinho() {
       const currentUser = await User.me();
       setUser(currentUser);
 
-      const fornecedoresList = await Fornecedor.list();
+      const [fornecedoresList, produtosList] = await Promise.all([
+        Fornecedor.list(),
+        Produto.list()
+      ]);
+
       setFornecedores(fornecedoresList || []);
+      setProdutos(produtosList || []);
     } catch (error) {
     } finally {
       setLoading(false);
@@ -120,17 +127,52 @@ export default function Carrinho() {
   const agruparPorFornecedor = () => {
     const grupos = {};
     carrinho.forEach(item => {
-      // Para cápsulas, usar ID especial já que elas agrupam múltiplos fornecedores
-      const fornecedorKey = item.tipo === 'capsula' ? 'capsula' : item.fornecedor_id;
+      let fornecedorKey;
+
+      if (item.tipo === 'capsula') {
+        // Para cápsulas, verificar de qual fornecedor são os produtos
+        // Buscar o fornecedor do primeiro produto da cápsula
+        const produtoIds = item.produto_ids || [];
+        let fornecedorCapsula = null;
+
+        // Buscar nos produtos carregados qual é o fornecedor
+        if (produtoIds.length > 0 && produtos.length > 0) {
+          const primeiroProduto = produtos.find(p => produtoIds.includes(p.id));
+          if (primeiroProduto) {
+            fornecedorCapsula = primeiroProduto.fornecedor_id;
+          }
+        }
+
+        // Se não encontrou nos produtos carregados, tentar buscar nos detalhes
+        if (!fornecedorCapsula && item.detalhes_produtos && item.detalhes_produtos.length > 0) {
+          const detalhe = item.detalhes_produtos[0];
+          if (detalhe.id && produtos.length > 0) {
+            const prod = produtos.find(p => p.id === detalhe.id);
+            if (prod) {
+              fornecedorCapsula = prod.fornecedor_id;
+            }
+          }
+        }
+
+        // Usar o fornecedor encontrado ou 'capsula' como fallback
+        fornecedorKey = fornecedorCapsula || 'capsula';
+      } else {
+        fornecedorKey = item.fornecedor_id;
+      }
 
       if (!grupos[fornecedorKey]) {
         grupos[fornecedorKey] = {
           fornecedor_id: fornecedorKey,
           itens: [],
           total: 0,
-          isCapsula: item.tipo === 'capsula'
+          temCapsula: false
         };
       }
+
+      if (item.tipo === 'capsula') {
+        grupos[fornecedorKey].temCapsula = true;
+      }
+
       grupos[fornecedorKey].itens.push(item);
 
       // Calcular preço do item
@@ -281,9 +323,30 @@ export default function Carrinho() {
 
       // Remover itens do carrinho
       const novoCarrinho = carrinho.filter(item => {
-        // Se for cápsula, comparar com 'capsula'
         if (item.tipo === 'capsula') {
-          return fornecedorId !== 'capsula';
+          // Para cápsulas, verificar se pertence a este fornecedor
+          const produtoIds = item.produto_ids || [];
+          let fornecedorCapsula = null;
+
+          if (produtoIds.length > 0 && produtos.length > 0) {
+            const primeiroProduto = produtos.find(p => produtoIds.includes(p.id));
+            if (primeiroProduto) {
+              fornecedorCapsula = primeiroProduto.fornecedor_id;
+            }
+          }
+
+          if (!fornecedorCapsula && item.detalhes_produtos && item.detalhes_produtos.length > 0) {
+            const detalhe = item.detalhes_produtos[0];
+            if (detalhe.id && produtos.length > 0) {
+              const prod = produtos.find(p => p.id === detalhe.id);
+              if (prod) {
+                fornecedorCapsula = prod.fornecedor_id;
+              }
+            }
+          }
+
+          // Manter no carrinho se for de outro fornecedor
+          return fornecedorCapsula !== fornecedorId;
         }
         // Se for produto normal, comparar fornecedor_id
         return item.fornecedor_id !== fornecedorId;
@@ -291,8 +354,10 @@ export default function Carrinho() {
       salvarCarrinho(novoCarrinho);
 
       // Mensagem de sucesso
-      if (fornecedorId === 'capsula') {
-        toast.success('✅ Pedido de Cápsula criado com sucesso!');
+      const temCapsula = grupo.temCapsula;
+      if (temCapsula) {
+        const fornecedorNome = fornecedor?.nome_marca || 'Fornecedor';
+        toast.success(`✅ Pedido para ${fornecedorNome} (incluindo cápsula) criado com sucesso!`);
       } else {
         const fornecedorNome = fornecedor?.nome_marca || 'Fornecedor';
         const contatoFornecedor = fornecedor?.contato_envio_whatsapp || fornecedor?.contato_comercial_whatsapp || 'Não disponível';

@@ -5,11 +5,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Produto } from '@/api/entities';
 import { Capsula } from '@/api/entities';
+import { Fornecedor } from '@/api/entities';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Search, Plus, Minus, Package } from 'lucide-react';
+import { Search, Plus, Minus, Package, Filter } from 'lucide-react';
 import ImageUploader from './ImageUploader';
 import { toast } from 'sonner';
 
@@ -23,6 +25,8 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
     ativa: true,
   });
   const [allProdutos, setAllProdutos] = useState([]);
+  const [fornecedores, setFornecedores] = useState([]);
+  const [selectedFornecedor, setSelectedFornecedor] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -51,14 +55,19 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
       });
     }
 
-    const loadProdutos = async () => {
+    const loadData = async () => {
       try {
-        const produtosList = await Produto.list();
-        setAllProdutos(produtosList);
+        const [produtosList, fornecedoresList] = await Promise.all([
+          Produto.list(),
+          Fornecedor.list()
+        ]);
+        setAllProdutos(produtosList || []);
+        setFornecedores(fornecedoresList || []);
       } catch (error) {
+        console.error('Erro ao carregar dados:', error);
       }
     };
-    loadProdutos();
+    loadData();
   }, [capsula]);
 
   const handleProductSelection = (productId) => {
@@ -102,9 +111,63 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
     }));
   };
 
-  const filteredProdutos = allProdutos.filter(p => 
-    p.nome.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredProdutos = allProdutos.filter(p => {
+    const matchesSearch = p.nome.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesFornecedor = selectedFornecedor === 'all' || p.fornecedor_id === selectedFornecedor;
+    return matchesSearch && matchesFornecedor;
+  });
+
+  // Função para obter a primeira foto do produto
+  const getPrimeiraFoto = (produto) => {
+    // Primeiro tenta fotos principais
+    if (produto.fotos) {
+      let fotos = produto.fotos;
+      if (typeof fotos === 'string') {
+        try {
+          fotos = JSON.parse(fotos);
+        } catch (e) {
+          fotos = [];
+        }
+      }
+      if (Array.isArray(fotos) && fotos.length > 0) {
+        // fotos é array de objetos {url, cor_nome, cor_codigo_hex}
+        const primeiraFoto = fotos[0];
+        if (typeof primeiraFoto === 'string') {
+          return primeiraFoto;
+        } else if (primeiraFoto && primeiraFoto.url) {
+          return primeiraFoto.url;
+        }
+      }
+    }
+
+    // Depois tenta variantes de cor
+    if (produto.variantes_cor) {
+      let variantes = [];
+      try {
+        variantes = typeof produto.variantes_cor === 'string'
+          ? JSON.parse(produto.variantes_cor)
+          : produto.variantes_cor || [];
+      } catch (e) {
+        variantes = [];
+      }
+
+      for (const variante of variantes) {
+        let fotosUrls = variante.fotos_urls || [];
+        if (typeof fotosUrls === 'string') {
+          try {
+            fotosUrls = JSON.parse(fotosUrls);
+          } catch (e) {
+            fotosUrls = [];
+          }
+        }
+        if (Array.isArray(fotosUrls) && fotosUrls.length > 0) {
+          return fotosUrls[0];
+        }
+      }
+    }
+
+    return null;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -169,14 +232,37 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
             {/* Coluna 2: Seleção de Produtos com Quantidade */}
             <div className="md:col-span-2">
               <Label className="font-medium text-lg">Selecionar Produtos e Quantidades Mínimas ({formData.produto_ids.length})</Label>
-              <div className="mt-2 relative">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                <Input 
-                  placeholder="Buscar produto..." 
-                  value={searchTerm} 
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-slate-100 shadow-neumorphic-inset"
-                />
+
+              {/* Filtros */}
+              <div className="mt-2 flex gap-3">
+                {/* Filtro por Fornecedor */}
+                <div className="w-64">
+                  <Select value={selectedFornecedor} onValueChange={setSelectedFornecedor}>
+                    <SelectTrigger className="bg-slate-100 shadow-neumorphic-inset">
+                      <Filter className="w-4 h-4 mr-2 text-gray-400" />
+                      <SelectValue placeholder="Filtrar por fornecedor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os Fornecedores</SelectItem>
+                      {fornecedores.map(fornecedor => (
+                        <SelectItem key={fornecedor.id} value={fornecedor.id}>
+                          {fornecedor.razao_social || fornecedor.nome_marca}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Busca por nome */}
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Buscar produto..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="pl-10 bg-slate-100 shadow-neumorphic-inset"
+                  />
+                </div>
               </div>
               <ScrollArea className="h-96 mt-4 p-4 rounded-lg bg-slate-100 shadow-neumorphic-inset">
                 <div className="space-y-3">
@@ -195,16 +281,12 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
                             checked={isSelected}
                             onCheckedChange={() => handleProductSelection(produto.id)}
                           />
-                          <div className="w-12 h-12 rounded-md bg-gray-200 flex items-center justify-center flex-shrink-0">
-                            {produto.fotos?.[0] ? (
+                          <div className="w-12 h-12 rounded-md bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                            {getPrimeiraFoto(produto) ? (
                               <img
-                                src={produto.fotos[0]}
+                                src={getPrimeiraFoto(produto)}
                                 alt={produto.nome}
-                                className="w-full h-full rounded-md object-cover"
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  e.target.parentElement.innerHTML = '<svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>';
-                                }}
+                                className="w-full h-full object-cover"
                               />
                             ) : (
                               <Package className="w-6 h-6 text-gray-400" />

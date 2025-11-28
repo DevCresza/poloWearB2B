@@ -44,6 +44,8 @@ export default function Catalogo() {
   const [quantidadesPorCor, setQuantidadesPorCor] = useState({}); // { cor_id: quantidade }
   const [adicionandoCarrinho, setAdicionandoCarrinho] = useState({});
   const [fotoAtualIndex, setFotoAtualIndex] = useState(0);
+  const [capsulaFotoIndex, setCapsulaFotoIndex] = useState(0); // Índice da foto atual na galeria da cápsula
+  const [capsulaFotos, setCapsulaFotos] = useState([]); // Array de fotos para a galeria da cápsula
 
   useEffect(() => {
     checkUserAndLoadData();
@@ -72,9 +74,33 @@ export default function Catalogo() {
       setProdutos(produtosVisiveis);
 
       setFornecedores(fornecedoresList || []);
+
+      // Parse produto_ids e produtos_quantidades de cada cápsula
       capsulasList.forEach(capsula => {
-        if (!capsula.produto_ids) {
+        // Parse produto_ids se vier como string
+        if (capsula.produto_ids) {
+          try {
+            capsula.produto_ids = Array.isArray(capsula.produto_ids)
+              ? capsula.produto_ids
+              : JSON.parse(capsula.produto_ids);
+          } catch (e) {
+            capsula.produto_ids = [];
+          }
+        } else {
           capsula.produto_ids = [];
+        }
+
+        // Parse produtos_quantidades se vier como string
+        if (capsula.produtos_quantidades) {
+          try {
+            capsula.produtos_quantidades = typeof capsula.produtos_quantidades === 'string'
+              ? JSON.parse(capsula.produtos_quantidades)
+              : capsula.produtos_quantidades;
+          } catch (e) {
+            capsula.produtos_quantidades = {};
+          }
+        } else {
+          capsula.produtos_quantidades = {};
         }
       });
       setCapsulas(capsulasList || []);
@@ -255,7 +281,6 @@ export default function Catalogo() {
 
       let novoCarrinho;
       if (capsulaExistente) {
-        console.log('Cápsula já existe no carrinho, incrementando quantidade');
         // Se já existe, incrementar quantidade
         novoCarrinho = carrinho.map(item => {
           if (item.tipo === 'capsula' && item.capsula_id === selectedCapsula.id) {
@@ -264,7 +289,6 @@ export default function Catalogo() {
           return item;
         });
       } else {
-        console.log('Criando novo item de cápsula');
         // Adicionar nova cápsula como item único
         const itemCapsula = {
           id: `capsula-${selectedCapsula.id}`, // ID único para a cápsula
@@ -444,6 +468,133 @@ export default function Catalogo() {
   };
   
   const handleSelectCapsula = (capsula) => {
+    // Coletar todas as fotos das variantes dos produtos da cápsula
+    const fotos = [];
+
+    // Adicionar imagem de capa da cápsula primeiro (se existir)
+    if (capsula.imagem_capa_url) {
+      fotos.push({
+        url: capsula.imagem_capa_url,
+        tipo: 'capa',
+        label: 'Capa da Cápsula'
+      });
+    }
+
+    // Parse produto_ids e produtos_quantidades
+    let produtoIds = [];
+    let produtosQuantidades = {};
+    try {
+      produtoIds = Array.isArray(capsula.produto_ids)
+        ? capsula.produto_ids
+        : JSON.parse(capsula.produto_ids || '[]');
+    } catch (e) {
+      produtoIds = [];
+    }
+    try {
+      produtosQuantidades = typeof capsula.produtos_quantidades === 'string'
+        ? JSON.parse(capsula.produtos_quantidades)
+        : capsula.produtos_quantidades || {};
+    } catch (e) {
+      produtosQuantidades = {};
+    }
+
+    // Para cada produto na cápsula, coletar fotos das variantes incluídas
+    produtoIds.forEach(produtoId => {
+      const produto = todosProdutos.find(p => p.id === produtoId);
+      if (!produto) return;
+
+      const qtdConfig = produtosQuantidades[produtoId];
+
+      // Se tem variantes de cor configuradas
+      if (qtdConfig && typeof qtdConfig === 'object' && qtdConfig.variantes) {
+        // Buscar variantes do produto
+        let variantesProduto = [];
+        try {
+          variantesProduto = typeof produto.variantes_cor === 'string'
+            ? JSON.parse(produto.variantes_cor)
+            : produto.variantes_cor || [];
+        } catch (e) {
+          variantesProduto = [];
+        }
+
+        // Para cada variante incluída na cápsula
+        qtdConfig.variantes.forEach(varConfig => {
+          const variante = variantesProduto.find(v => v.id === varConfig.cor_id);
+
+          if (variante) {
+            // Adicionar fotos da variante
+            let fotosVariante = variante.fotos_urls || [];
+
+            // Parse se vier como string
+            if (typeof fotosVariante === 'string') {
+              try {
+                fotosVariante = JSON.parse(fotosVariante);
+              } catch (e) {
+                fotosVariante = [];
+              }
+            }
+
+            const corHex = varConfig.cor_hex || variante.cor_codigo_hex || variante.cor_hex || '#000';
+
+            if (fotosVariante.length > 0) {
+              // Usar apenas a primeira foto da variante (a principal)
+              fotos.push({
+                url: fotosVariante[0],
+                tipo: 'variante',
+                produtoNome: produto.nome,
+                corNome: varConfig.cor_nome || variante.cor_nome,
+                corHex: corHex,
+                quantidade: varConfig.quantidade,
+                tipoVenda: produto.tipo_venda
+              });
+            } else {
+              // Se variante não tem foto, usar foto principal do produto
+              const fotoPrincipal = getPrimeiraFoto(produto);
+              if (fotoPrincipal) {
+                fotos.push({
+                  url: fotoPrincipal,
+                  tipo: 'variante',
+                  produtoNome: produto.nome,
+                  corNome: varConfig.cor_nome || variante.cor_nome,
+                  corHex: corHex,
+                  quantidade: varConfig.quantidade,
+                  tipoVenda: produto.tipo_venda
+                });
+              }
+            }
+          } else {
+            // Variante não encontrada - usar foto principal do produto
+            const fotoPrincipal = getPrimeiraFoto(produto);
+            if (fotoPrincipal) {
+              fotos.push({
+                url: fotoPrincipal,
+                tipo: 'variante',
+                produtoNome: produto.nome,
+                corNome: varConfig.cor_nome || 'Cor',
+                corHex: varConfig.cor_hex || '#000',
+                quantidade: varConfig.quantidade,
+                tipoVenda: produto.tipo_venda
+              });
+            }
+          }
+        });
+      } else if (typeof qtdConfig === 'number') {
+        // Produto sem variantes - usar foto principal
+        const fotoPrincipal = getPrimeiraFoto(produto);
+        if (fotoPrincipal) {
+          fotos.push({
+            url: fotoPrincipal,
+            tipo: 'produto',
+            produtoNome: produto.nome,
+            quantidade: qtdConfig,
+            tipoVenda: produto.tipo_venda
+          });
+        }
+      }
+    });
+
+    setCapsulaFotos(fotos);
+    setCapsulaFotoIndex(0);
     setSelectedCapsula(capsula);
     setQuantidadeCapsula(1);
     setShowCapsulaModal(true);
@@ -1541,8 +1692,104 @@ export default function Catalogo() {
             </DialogHeader>
 
             <div className="space-y-6 mt-4">
-              {/* Imagem da cápsula */}
-              {selectedCapsula.imagem_capa_url && (
+              {/* Galeria de fotos da cápsula */}
+              {capsulaFotos.length > 0 && (
+                <div className="space-y-4">
+                  {/* Foto principal */}
+                  <div className="relative w-full max-w-md mx-auto">
+                    <div className="aspect-[3/4] rounded-lg overflow-hidden bg-gray-100">
+                      <img
+                        src={capsulaFotos[capsulaFotoIndex]?.url}
+                        alt={capsulaFotos[capsulaFotoIndex]?.produtoNome || selectedCapsula.nome}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+
+                    {/* Navegação esquerda/direita */}
+                    {capsulaFotos.length > 1 && (
+                      <>
+                        <button
+                          onClick={() => setCapsulaFotoIndex(prev => prev === 0 ? capsulaFotos.length - 1 : prev - 1)}
+                          className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-2 shadow-lg transition-all"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => setCapsulaFotoIndex(prev => prev === capsulaFotos.length - 1 ? 0 : prev + 1)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-2 shadow-lg transition-all"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      </>
+                    )}
+
+                    {/* Info da foto atual */}
+                    {capsulaFotos[capsulaFotoIndex]?.tipo !== 'capa' && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
+                        <div className="flex items-center gap-2">
+                          {capsulaFotos[capsulaFotoIndex]?.corHex && (
+                            <div
+                              className="w-5 h-5 rounded-full border-2 border-white shadow"
+                              style={{ backgroundColor: capsulaFotos[capsulaFotoIndex].corHex }}
+                            />
+                          )}
+                          <div className="text-white">
+                            <p className="font-semibold text-sm">{capsulaFotos[capsulaFotoIndex]?.produtoNome}</p>
+                            {capsulaFotos[capsulaFotoIndex]?.corNome && (
+                              <p className="text-xs opacity-90">
+                                {capsulaFotos[capsulaFotoIndex].corNome} - {capsulaFotos[capsulaFotoIndex].quantidade} {capsulaFotos[capsulaFotoIndex].tipoVenda === 'grade' ? 'grade(s)' : 'un.'}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Contador de fotos */}
+                    <div className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full">
+                      {capsulaFotoIndex + 1} / {capsulaFotos.length}
+                    </div>
+                  </div>
+
+                  {/* Miniaturas com bolinhas de cor */}
+                  <div className="flex justify-center gap-2 flex-wrap max-w-md mx-auto">
+                    {capsulaFotos.map((foto, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setCapsulaFotoIndex(idx)}
+                        className={`relative transition-all ${
+                          capsulaFotoIndex === idx
+                            ? 'ring-2 ring-purple-500 ring-offset-2'
+                            : 'opacity-70 hover:opacity-100'
+                        }`}
+                      >
+                        {foto.tipo === 'capa' ? (
+                          <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100">
+                            <img src={foto.url} alt="Capa" className="w-full h-full object-cover" />
+                          </div>
+                        ) : foto.corHex ? (
+                          <div
+                            className="w-8 h-8 rounded-full border-2 border-gray-300 shadow-sm"
+                            style={{ backgroundColor: foto.corHex }}
+                            title={`${foto.produtoNome} - ${foto.corNome}`}
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100">
+                            <img src={foto.url} alt={foto.produtoNome} className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Fallback se não tiver fotos mas tiver imagem de capa */}
+              {capsulaFotos.length === 0 && selectedCapsula.imagem_capa_url && (
                 <div className="w-full max-w-md mx-auto aspect-[3/4] rounded-lg overflow-hidden">
                   <img
                     src={selectedCapsula.imagem_capa_url}
@@ -1557,7 +1804,18 @@ export default function Catalogo() {
                 <h3 className="text-lg font-semibold text-gray-900">Composição da Cápsula:</h3>
 
                 <div className="grid gap-4">
-                  {(selectedCapsula.produto_ids || []).map((produtoId) => {
+                  {(() => {
+                    // Parse produto_ids se vier como string
+                    let produtoIds = [];
+                    try {
+                      produtoIds = Array.isArray(selectedCapsula.produto_ids)
+                        ? selectedCapsula.produto_ids
+                        : JSON.parse(selectedCapsula.produto_ids || '[]');
+                    } catch (e) {
+                      produtoIds = [];
+                    }
+                    return produtoIds;
+                  })().map((produtoId) => {
                     const produto = todosProdutos.find(p => p.id === produtoId);
                     if (!produto) return null;
 
@@ -1640,8 +1898,18 @@ export default function Catalogo() {
                   produtosQuantidades = {};
                 }
 
+                // Parse produto_ids se vier como string
+                let produtoIds = [];
+                try {
+                  produtoIds = Array.isArray(selectedCapsula.produto_ids)
+                    ? selectedCapsula.produto_ids
+                    : JSON.parse(selectedCapsula.produto_ids || '[]');
+                } catch (e) {
+                  produtoIds = [];
+                }
+
                 // Calcular valor total da cápsula
-                (selectedCapsula.produto_ids || []).forEach((produtoId) => {
+                produtoIds.forEach((produtoId) => {
                   const produto = todosProdutos.find(p => p.id === produtoId);
                   if (!produto) return;
 

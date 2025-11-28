@@ -187,9 +187,9 @@ export default function GestaoFornecedores() {
                     <TableHead>Nome da Marca</TableHead>
                     <TableHead>Razão Social</TableHead>
                     <TableHead>CNPJ</TableHead>
-                    <TableHead>Pedido Mínimo</TableHead> {/* Updated header */}
-                    <TableHead>Email Acesso</TableHead> {/* New header */}
-                    <TableHead>Status</TableHead> {/* New header */}
+                    <TableHead>Pedido Mínimo</TableHead>
+                    <TableHead>Email Acesso</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>Ações</TableHead>
                   </TableRow>
                 </TableHeader>
