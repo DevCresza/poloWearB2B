@@ -517,15 +517,29 @@ export default function Catalogo() {
           variantesProduto = [];
         }
 
+        // Parse fotos principais do produto (que têm cor associada)
+        let fotosProduto = [];
+        if (produto.fotos) {
+          try {
+            fotosProduto = typeof produto.fotos === 'string'
+              ? JSON.parse(produto.fotos)
+              : produto.fotos || [];
+          } catch (e) {
+            fotosProduto = [];
+          }
+        }
+
         // Para cada variante incluída na cápsula
         qtdConfig.variantes.forEach(varConfig => {
           const variante = variantesProduto.find(v => v.id === varConfig.cor_id);
+          const corNome = varConfig.cor_nome || (variante ? variante.cor_nome : 'Cor');
+          const corHex = varConfig.cor_hex || (variante ? variante.cor_codigo_hex || variante.cor_hex : '#000') || '#000';
 
+          let fotoUrl = null;
+
+          // 1. Primeiro tenta buscar nas fotos_urls da variante
           if (variante) {
-            // Adicionar fotos da variante
             let fotosVariante = variante.fotos_urls || [];
-
-            // Parse se vier como string
             if (typeof fotosVariante === 'string') {
               try {
                 fotosVariante = JSON.parse(fotosVariante);
@@ -533,49 +547,40 @@ export default function Catalogo() {
                 fotosVariante = [];
               }
             }
+            if (Array.isArray(fotosVariante) && fotosVariante.length > 0) {
+              fotoUrl = fotosVariante[0];
+            }
+          }
 
-            const corHex = varConfig.cor_hex || variante.cor_codigo_hex || variante.cor_hex || '#000';
+          // 2. Se não encontrou, buscar nas fotos principais do produto pela cor
+          if (!fotoUrl && fotosProduto.length > 0) {
+            const fotoPorCor = fotosProduto.find(f =>
+              f.cor_nome && f.cor_nome.toLowerCase() === corNome.toLowerCase()
+            );
+            if (fotoPorCor && fotoPorCor.url) {
+              fotoUrl = fotoPorCor.url;
+            }
+          }
 
-            if (fotosVariante.length > 0) {
-              // Usar apenas a primeira foto da variante (a principal)
-              fotos.push({
-                url: fotosVariante[0],
-                tipo: 'variante',
-                produtoNome: produto.nome,
-                corNome: varConfig.cor_nome || variante.cor_nome,
-                corHex: corHex,
-                quantidade: varConfig.quantidade,
-                tipoVenda: produto.tipo_venda
-              });
+          // 3. Se ainda não encontrou, usar a primeira foto disponível
+          if (!fotoUrl) {
+            if (fotosProduto.length > 0 && fotosProduto[0].url) {
+              fotoUrl = fotosProduto[0].url;
             } else {
-              // Se variante não tem foto, usar foto principal do produto
-              const fotoPrincipal = getPrimeiraFoto(produto);
-              if (fotoPrincipal) {
-                fotos.push({
-                  url: fotoPrincipal,
-                  tipo: 'variante',
-                  produtoNome: produto.nome,
-                  corNome: varConfig.cor_nome || variante.cor_nome,
-                  corHex: corHex,
-                  quantidade: varConfig.quantidade,
-                  tipoVenda: produto.tipo_venda
-                });
-              }
+              fotoUrl = getPrimeiraFoto(produto);
             }
-          } else {
-            // Variante não encontrada - usar foto principal do produto
-            const fotoPrincipal = getPrimeiraFoto(produto);
-            if (fotoPrincipal) {
-              fotos.push({
-                url: fotoPrincipal,
-                tipo: 'variante',
-                produtoNome: produto.nome,
-                corNome: varConfig.cor_nome || 'Cor',
-                corHex: varConfig.cor_hex || '#000',
-                quantidade: varConfig.quantidade,
-                tipoVenda: produto.tipo_venda
-              });
-            }
+          }
+
+          if (fotoUrl) {
+            fotos.push({
+              url: fotoUrl,
+              tipo: 'variante',
+              produtoNome: produto.nome,
+              corNome: corNome,
+              corHex: corHex,
+              quantidade: varConfig.quantidade,
+              tipoVenda: produto.tipo_venda
+            });
           }
         });
       } else if (typeof qtdConfig === 'number') {
