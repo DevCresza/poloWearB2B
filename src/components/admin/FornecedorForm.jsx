@@ -16,6 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox import
 import { Fornecedor } from '@/api/entities';
 import { User } from '@/api/entities';
 import { supabaseAuth } from '@/api/supabaseAuth';
+import { supabase } from '@/lib/supabase';
 import { Building, DollarSign, Mail, Phone, User as UserIcon, Shield, Truck, MapPin, Clock, CreditCard } from 'lucide-react'; // Added CreditCard icon
 
 export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
@@ -109,34 +110,58 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
         // Atualização de fornecedor existente
         await Fornecedor.update(fornecedor.id, fornecedorData);
 
-        // Se informou nova senha, atualizar o usuário
-        if (formData.email_fornecedor && formData.senha_fornecedor) {
+        // Se informou email e/ou senha, gerenciar o usuário
+        if (formData.email_fornecedor) {
           try {
             // Buscar usuário existente pelo email
             const usuarios = await User.list();
-            const usuarioExistente = usuarios.find(u => u.email === formData.email_fornecedor);
+            const usuarioExistente = usuarios.find(u =>
+              u.email?.toLowerCase() === formData.email_fornecedor.toLowerCase()
+            );
 
             if (usuarioExistente) {
               // Atualizar dados do usuário
               await User.update(usuarioExistente.id, {
                 full_name: formData.razao_social,
                 empresa: formData.nome_marca,
-                ativo: formData.ativo_fornecedor
+                ativo: formData.ativo_fornecedor,
+                fornecedor_id: fornecedor.id
               });
-              toast.info('Para alterar a senha, use a função de redefinição de senha.');
-            } else {
-              // Criar novo usuário se não existe
-              await supabaseAuth.signup({
-                email: formData.email_fornecedor,
-                password: formData.senha_fornecedor,
-                full_name: formData.razao_social,
-                role: 'fornecedor',
-                tipo_negocio: 'fornecedor',
-                empresa: formData.nome_marca,
-                telefone: formData.contato_comercial_whatsapp || formData.contato_comercial_telefone || '',
-                ativo: formData.ativo_fornecedor
-              });
-              toast.success('Usuário de acesso criado com sucesso!');
+
+              // Se informou nova senha, atualizar via Edge Function
+              if (formData.senha_fornecedor && formData.senha_fornecedor.length >= 6) {
+                const { data, error } = await supabase.functions.invoke('update-user-password', {
+                  body: {
+                    user_id: usuarioExistente.id,
+                    new_password: formData.senha_fornecedor
+                  }
+                });
+
+                if (error) {
+                  console.error('Erro ao atualizar senha:', error);
+                  toast.warning('Dados atualizados, mas erro ao alterar senha.');
+                } else {
+                  toast.success('Senha atualizada com sucesso!');
+                }
+              }
+            } else if (formData.senha_fornecedor) {
+              // Criar novo usuário se não existe e tem senha
+              if (formData.senha_fornecedor.length < 6) {
+                toast.error('A senha deve ter no mínimo 6 caracteres.');
+              } else {
+                await supabaseAuth.signup({
+                  email: formData.email_fornecedor,
+                  password: formData.senha_fornecedor,
+                  full_name: formData.razao_social,
+                  role: 'fornecedor',
+                  tipo_negocio: 'fornecedor',
+                  empresa: formData.nome_marca,
+                  telefone: formData.contato_comercial_whatsapp || formData.contato_comercial_telefone || '',
+                  fornecedor_id: fornecedor.id,
+                  ativo: formData.ativo_fornecedor
+                });
+                toast.success('Usuário de acesso criado com sucesso!');
+              }
             }
           } catch (userError) {
             console.error('Erro ao gerenciar usuário:', userError);
@@ -151,26 +176,33 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
 
         // Se informou email e senha, criar usuário de login
         if (formData.email_fornecedor && formData.senha_fornecedor) {
-          try {
-            await supabaseAuth.signup({
-              email: formData.email_fornecedor,
-              password: formData.senha_fornecedor,
-              full_name: formData.razao_social,
-              role: 'fornecedor',
-              tipo_negocio: 'fornecedor',
-              empresa: formData.nome_marca,
-              telefone: formData.contato_comercial_whatsapp || formData.contato_comercial_telefone || '',
-              fornecedor_id: novoFornecedor.id, // Vincular ao fornecedor
-              ativo: formData.ativo_fornecedor
-            });
-            toast.success('Fornecedor e usuário de acesso criados com sucesso!');
-          } catch (userError) {
-            console.error('Erro ao criar usuário:', userError);
-            toast.warning(`Fornecedor criado, mas erro ao criar usuário: ${userError.message}`);
+          if (formData.senha_fornecedor.length < 6) {
+            toast.error('A senha deve ter no mínimo 6 caracteres.');
+            toast.success('Fornecedor criado, mas usuário de acesso não foi criado.');
+          } else {
+            try {
+              await supabaseAuth.signup({
+                email: formData.email_fornecedor,
+                password: formData.senha_fornecedor,
+                full_name: formData.razao_social,
+                role: 'fornecedor',
+                tipo_negocio: 'fornecedor',
+                empresa: formData.nome_marca,
+                telefone: formData.contato_comercial_whatsapp || formData.contato_comercial_telefone || '',
+                fornecedor_id: novoFornecedor.id,
+                ativo: formData.ativo_fornecedor
+              });
+              toast.success('Fornecedor e usuário de acesso criados com sucesso!');
+            } catch (userError) {
+              console.error('Erro ao criar usuário:', userError);
+              toast.warning(`Fornecedor criado, mas erro ao criar usuário: ${userError.message}`);
+            }
           }
         } else {
           toast.success('Fornecedor criado com sucesso!');
-          toast.info('Lembre-se de cadastrar email e senha para permitir acesso ao portal.');
+          if (!formData.email_fornecedor || !formData.senha_fornecedor) {
+            toast.info('Lembre-se de cadastrar email e senha para permitir acesso ao portal.');
+          }
         }
       }
       onSuccess();
