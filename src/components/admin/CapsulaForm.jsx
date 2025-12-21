@@ -15,7 +15,7 @@ import { Search, Plus, Minus, Package, Filter } from 'lucide-react';
 import ImageUploader from './ImageUploader';
 import { toast } from 'sonner';
 
-export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
+export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel }) {
   const [formData, setFormData] = useState({
     nome: '',
     descricao: '',
@@ -23,6 +23,7 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
     produto_ids: [],
     produtos_quantidades: {},
     ativa: true,
+    fornecedor_id: null,
   });
   const [allProdutos, setAllProdutos] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
@@ -52,15 +53,33 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
         produto_ids: capsula.produto_ids || [],
         produtos_quantidades: quantidades,
         ativa: capsula.ativa !== undefined ? capsula.ativa : true,
+        fornecedor_id: capsula.fornecedor_id || null,
       });
+    } else if (currentUser?.tipo_negocio === 'fornecedor' && currentUser?.fornecedor_id) {
+      // Se é um novo cadastro e o usuário é fornecedor, pré-definir o fornecedor_id
+      setFormData(prev => ({
+        ...prev,
+        fornecedor_id: currentUser.fornecedor_id
+      }));
+    }
+
+    // Se for fornecedor, pré-selecionar o próprio fornecedor no filtro
+    if (currentUser?.tipo_negocio === 'fornecedor' && currentUser?.fornecedor_id) {
+      setSelectedFornecedor(currentUser.fornecedor_id);
     }
 
     const loadData = async () => {
       try {
-        const [produtosList, fornecedoresList] = await Promise.all([
-          Produto.list(),
-          Fornecedor.list()
-        ]);
+        let produtosList;
+
+        // Se for fornecedor, carregar apenas produtos do próprio fornecedor
+        if (currentUser?.tipo_negocio === 'fornecedor' && currentUser?.fornecedor_id) {
+          produtosList = await Produto.filter({ fornecedor_id: currentUser.fornecedor_id });
+        } else {
+          produtosList = await Produto.list();
+        }
+
+        const fornecedoresList = await Fornecedor.list();
         setAllProdutos(produtosList || []);
         setFornecedores(fornecedoresList || []);
       } catch (error) {
@@ -68,7 +87,7 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
       }
     };
     loadData();
-  }, [capsula]);
+  }, [capsula, currentUser]);
 
   const handleProductSelection = (productId) => {
     setFormData(prev => {
@@ -180,7 +199,9 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
       const dataToSave = {
         ...formData,
         // Supabase JSONB aceita objetos JavaScript diretamente
-        produtos_quantidades: formData.produtos_quantidades
+        produtos_quantidades: formData.produtos_quantidades,
+        // Garantir que o fornecedor_id seja salvo
+        fornecedor_id: formData.fornecedor_id || (currentUser?.tipo_negocio === 'fornecedor' ? currentUser.fornecedor_id : null)
       };
 
       if (capsula) {
@@ -235,23 +256,25 @@ export default function CapsulaForm({ capsula, onSuccess, onCancel }) {
 
               {/* Filtros */}
               <div className="mt-2 flex gap-3">
-                {/* Filtro por Fornecedor */}
-                <div className="w-64">
-                  <Select value={selectedFornecedor} onValueChange={setSelectedFornecedor}>
-                    <SelectTrigger className="bg-slate-100 shadow-neumorphic-inset">
-                      <Filter className="w-4 h-4 mr-2 text-gray-400" />
-                      <SelectValue placeholder="Filtrar por fornecedor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os Fornecedores</SelectItem>
-                      {fornecedores.map(fornecedor => (
-                        <SelectItem key={fornecedor.id} value={fornecedor.id}>
-                          {fornecedor.razao_social || fornecedor.nome_marca}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {/* Filtro por Fornecedor - só mostra para admin */}
+                {currentUser?.role === 'admin' && (
+                  <div className="w-64">
+                    <Select value={selectedFornecedor} onValueChange={setSelectedFornecedor}>
+                      <SelectTrigger className="bg-slate-100 shadow-neumorphic-inset">
+                        <Filter className="w-4 h-4 mr-2 text-gray-400" />
+                        <SelectValue placeholder="Filtrar por fornecedor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos os Fornecedores</SelectItem>
+                        {fornecedores.map(fornecedor => (
+                          <SelectItem key={fornecedor.id} value={fornecedor.id}>
+                            {fornecedor.razao_social || fornecedor.nome_marca}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 {/* Busca por nome */}
                 <div className="flex-1 relative">

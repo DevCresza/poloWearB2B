@@ -22,6 +22,73 @@ export const supabase = supabaseUrl && supabaseAnonKey
     })
   : null
 
+// Listener para detectar erros de autenticação e limpar tokens inválidos
+if (supabase) {
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'TOKEN_REFRESHED') {
+      console.log('[Auth] Token renovado com sucesso');
+    }
+
+    if (event === 'SIGNED_OUT') {
+      console.log('[Auth] Usuário deslogado');
+      clearAuthStorage();
+    }
+  });
+}
+
+// Função para limpar tokens de autenticação do localStorage
+export const clearAuthStorage = () => {
+  if (typeof window !== 'undefined') {
+    // Limpar tokens do Supabase
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('sb-') || key === 'auth_session') {
+        localStorage.removeItem(key);
+      }
+    });
+    console.log('[Auth] Tokens de autenticação removidos');
+  }
+}
+
+// Função para verificar e tratar erro de refresh token
+export const handleAuthError = async (error) => {
+  const errorMessage = error?.message || error?.error_description || '';
+
+  // Detectar erros de refresh token inválido
+  const isRefreshTokenError =
+    errorMessage.toLowerCase().includes('refresh token') ||
+    errorMessage.toLowerCase().includes('invalid token') ||
+    errorMessage.toLowerCase().includes('jwt expired') ||
+    errorMessage.toLowerCase().includes('not authenticated') ||
+    error?.code === 'PGRST301' ||
+    error?.code === '401';
+
+  if (isRefreshTokenError) {
+    console.warn('[Auth] Token de autenticação inválido. Limpando sessão...');
+    clearAuthStorage();
+
+    // Fazer logout para garantir limpeza completa
+    if (supabase) {
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch (e) {
+        // Ignorar erros no signOut
+      }
+    }
+
+    return {
+      isAuthError: true,
+      shouldRedirect: true,
+      message: 'Sua sessão expirou. Por favor, faça login novamente.'
+    };
+  }
+
+  return {
+    isAuthError: false,
+    shouldRedirect: false,
+    message: errorMessage
+  };
+}
+
 // Helper para converter erro do Supabase
 export const handleSupabaseError = (error) => {
   if (error?.message) {

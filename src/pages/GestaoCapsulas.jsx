@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Capsula } from '@/api/entities';
+import { Capsula, User } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Plus, Edit, Trash2, Image, Sparkles } from 'lucide-react';
@@ -11,17 +11,46 @@ export default function GestaoCapsulas() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingCapsula, setEditingCapsula] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
-    loadCapsulas();
+    loadCurrentUser();
   }, []);
+
+  useEffect(() => {
+    if (currentUser) {
+      loadCapsulas();
+    }
+  }, [currentUser]);
+
+  const loadCurrentUser = async () => {
+    try {
+      const user = await User.me();
+      setCurrentUser(user);
+    } catch (error) {
+      console.error('Erro ao carregar usuário:', error);
+    }
+  };
 
   const loadCapsulas = async () => {
     setLoading(true);
     try {
-      const capsulasList = await Capsula.list('-created_at');
-      setCapsulas(capsulasList);
+      let capsulasList;
+
+      // Se for fornecedor, filtrar apenas cápsulas do fornecedor
+      if (currentUser?.tipo_negocio === 'fornecedor' && currentUser?.fornecedor_id) {
+        capsulasList = await Capsula.filter({ fornecedor_id: currentUser.fornecedor_id }, '-created_at');
+      } else if (currentUser?.role === 'admin') {
+        // Admin vê todas as cápsulas
+        capsulasList = await Capsula.list('-created_at');
+      } else {
+        // Outros usuários não veem cápsulas (ou ajustar conforme necessário)
+        capsulasList = [];
+      }
+
+      setCapsulas(capsulasList || []);
     } catch (error) {
+      console.error('Erro ao carregar cápsulas:', error);
     } finally {
       setLoading(false);
     }
@@ -54,6 +83,7 @@ export default function GestaoCapsulas() {
       {showForm ? (
         <CapsulaForm
           capsula={editingCapsula}
+          currentUser={currentUser}
           onSuccess={handleSuccess}
           onCancel={() => {
             setShowForm(false);

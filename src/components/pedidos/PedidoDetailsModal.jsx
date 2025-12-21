@@ -5,17 +5,96 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { 
-  Package, MapPin, DollarSign, Calendar, FileText, 
+import {
+  Package, MapPin, DollarSign, Calendar, FileText,
   Download, CheckCircle, Clock, Truck, User, Building,
-  Phone, Mail, CreditCard
+  Phone, Mail, CreditCard, Upload
 } from 'lucide-react';
 import { Pedido } from '@/api/entities';
 import { User as UserEntity } from '@/api/entities';
+import { UploadFile } from '@/api/integrations';
 
 export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentUser, userMap, fornecedorMap }) {
   const [confirmando, setConfirmando] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [boletoFile, setBoletoFile] = useState(null);
+  const [nfFile, setNfFile] = useState(null);
+  const [nfNumero, setNfNumero] = useState(pedido.nf_numero || '');
+
+  // Verificar se usuário pode fazer upload (fornecedor ou admin)
+  const canUpload = currentUser?.role === 'admin' || currentUser?.tipo_negocio === 'fornecedor';
+
+  // Upload de Boleto
+  const handleUploadBoleto = async () => {
+    if (!boletoFile) {
+      toast.info('Selecione o arquivo do boleto');
+      return;
+    }
+    setUploading(true);
+    try {
+      const result = await UploadFile({ file: boletoFile });
+      await Pedido.update(pedido.id, {
+        boleto_url: result.file_url,
+        boleto_data_upload: new Date().toISOString()
+      });
+      toast.success('Boleto enviado com sucesso!');
+      setBoletoFile(null);
+      onUpdate();
+    } catch (error) {
+      toast.error('Erro ao enviar boleto');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Upload de Nota Fiscal
+  const handleUploadNF = async () => {
+    if (!nfFile) {
+      toast.info('Selecione o arquivo da nota fiscal');
+      return;
+    }
+    setUploading(true);
+    try {
+      const result = await UploadFile({ file: nfFile });
+      await Pedido.update(pedido.id, {
+        nf_url: result.file_url,
+        nf_numero: nfNumero,
+        nf_data_upload: new Date().toISOString(),
+        status: pedido.status === 'em_producao' ? 'faturado' : pedido.status
+      });
+      toast.success('Nota Fiscal enviada com sucesso!');
+      setNfFile(null);
+      onUpdate();
+    } catch (error) {
+      toast.error('Erro ao enviar nota fiscal');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Alterar status de pagamento
+  const handleAlterarStatusPagamento = async (novoStatus) => {
+    try {
+      const updateData = {
+        status_pagamento: novoStatus
+      };
+
+      // Se marcou como pago, registrar data de pagamento
+      if (novoStatus === 'pago') {
+        updateData.data_pagamento = new Date().toISOString().split('T')[0];
+      }
+
+      await Pedido.update(pedido.id, updateData);
+      toast.success('Status de pagamento atualizado!');
+      onUpdate();
+    } catch (error) {
+      toast.error('Erro ao atualizar status');
+    }
+  };
 
   const getMetodoPagamentoLabel = (metodo) => {
     const labels = {
@@ -315,13 +394,32 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                     <DollarSign className="w-5 h-5 text-green-600" />
                     <h4 className="font-semibold">Status do Pagamento:</h4>
                   </div>
-                  <Badge className={
-                    pedido.status_pagamento === 'pago' ? 'bg-green-100 text-green-800' :
-                    pedido.status_pagamento === 'atrasado' ? 'bg-red-100 text-red-800' :
-                    'bg-yellow-100 text-yellow-800'
-                  }>
-                    {pedido.status_pagamento}
-                  </Badge>
+                  {canUpload ? (
+                    <Select
+                      value={pedido.status_pagamento || 'pendente'}
+                      onValueChange={handleAlterarStatusPagamento}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Selecione o status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pendente">Pendente</SelectItem>
+                        <SelectItem value="em_analise">Em Análise</SelectItem>
+                        <SelectItem value="pago">Pago / Confirmado</SelectItem>
+                        <SelectItem value="atrasado">Atrasado</SelectItem>
+                        <SelectItem value="cancelado">Cancelado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Badge className={
+                      pedido.status_pagamento === 'pago' ? 'bg-green-100 text-green-800' :
+                      pedido.status_pagamento === 'atrasado' ? 'bg-red-100 text-red-800' :
+                      pedido.status_pagamento === 'em_analise' ? 'bg-blue-100 text-blue-800' :
+                      'bg-yellow-100 text-yellow-800'
+                    }>
+                      {pedido.status_pagamento || 'pendente'}
+                    </Badge>
+                  )}
                 </div>
               </div>
 
@@ -331,6 +429,47 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                     <CheckCircle className="w-5 h-5 text-green-600" />
                     <span className="font-semibold">Pagamento Confirmado em:</span>
                     <span>{new Date(pedido.data_pagamento).toLocaleDateString('pt-BR')}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Comprovante de Pagamento do Cliente */}
+              {pedido.comprovante_pagamento_url ? (
+                <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <FileText className="w-5 h-5 text-purple-600" />
+                        <h4 className="font-semibold text-purple-900">Comprovante de Pagamento</h4>
+                        <Badge className="bg-purple-100 text-purple-800">Enviado pelo cliente</Badge>
+                      </div>
+                      {pedido.comprovante_pagamento_data && (
+                        <p className="text-sm text-gray-600">
+                          Enviado em: {new Date(pedido.comprovante_pagamento_data).toLocaleString('pt-BR')}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      onClick={() => window.open(pedido.comprovante_pagamento_url, '_blank')}
+                      className="bg-purple-600 hover:bg-purple-700"
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Ver Comprovante
+                    </Button>
+                  </div>
+                  {canUpload && pedido.status_pagamento !== 'pago' && (
+                    <div className="mt-3 pt-3 border-t border-purple-200">
+                      <p className="text-sm text-purple-800">
+                        O cliente enviou o comprovante. Verifique e altere o status para "Pago" se estiver correto.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center gap-2 text-gray-500">
+                    <FileText className="w-5 h-5" />
+                    <span>Nenhum comprovante de pagamento enviado pelo cliente</span>
                   </div>
                 </div>
               )}
@@ -379,13 +518,59 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       )}
                     </div>
                   </div>
+                  {/* Permitir atualizar o boleto se for fornecedor/admin */}
+                  {canUpload && (
+                    <div className="mt-4 pt-4 border-t border-blue-200">
+                      <p className="text-sm text-gray-600 mb-2">Atualizar Boleto:</p>
+                      <div className="flex gap-2">
+                        <Input
+                          type="file"
+                          accept="application/pdf"
+                          onChange={(e) => setBoletoFile(e.target.files[0])}
+                          className="flex-1"
+                        />
+                        <Button
+                          onClick={handleUploadBoleto}
+                          disabled={uploading || !boletoFile}
+                          size="sm"
+                        >
+                          {uploading ? 'Enviando...' : 'Atualizar'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <Alert>
-                  <AlertDescription>
-                    Boleto ainda não disponível
-                  </AlertDescription>
-                </Alert>
+                <div className="p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                  <div className="flex items-center gap-2 mb-3">
+                    <FileText className="w-5 h-5 text-gray-400" />
+                    <h4 className="font-semibold text-gray-600">Boleto</h4>
+                  </div>
+                  {canUpload ? (
+                    <div className="space-y-3">
+                      <p className="text-sm text-gray-500">Nenhum boleto anexado. Faça o upload:</p>
+                      <Input
+                        type="file"
+                        accept="application/pdf"
+                        onChange={(e) => setBoletoFile(e.target.files[0])}
+                      />
+                      <Button
+                        onClick={handleUploadBoleto}
+                        disabled={uploading || !boletoFile}
+                        className="w-full bg-blue-600 hover:bg-blue-700"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {uploading ? 'Enviando...' : 'Enviar Boleto'}
+                      </Button>
+                    </div>
+                  ) : (
+                    <Alert>
+                      <AlertDescription>
+                        Boleto ainda não disponível
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
               )}
 
               {/* Nota Fiscal */}
@@ -432,13 +617,96 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       )}
                     </div>
                   </div>
+                  {/* Permitir atualizar a NF se for fornecedor/admin */}
+                  {canUpload && (
+                    <div className="mt-4 pt-4 border-t border-green-200">
+                      <p className="text-sm text-gray-600 mb-2">Atualizar Nota Fiscal:</p>
+                      <div className="flex gap-2">
+                        <Input
+                          type="file"
+                          accept="application/pdf"
+                          onChange={(e) => setNfFile(e.target.files[0])}
+                          className="flex-1"
+                        />
+                        <Button
+                          onClick={handleUploadNF}
+                          disabled={uploading || !nfFile}
+                          size="sm"
+                        >
+                          {uploading ? 'Enviando...' : 'Atualizar'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <Alert>
-                  <AlertDescription>
-                    Nota Fiscal ainda não disponível
-                  </AlertDescription>
-                </Alert>
+                <div className="p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                  <div className="flex items-center gap-2 mb-3">
+                    <FileText className="w-5 h-5 text-gray-400" />
+                    <h4 className="font-semibold text-gray-600">Nota Fiscal</h4>
+                  </div>
+                  {canUpload ? (
+                    <div className="space-y-3">
+                      <p className="text-sm text-gray-500">Nenhuma NF anexada. Faça o upload:</p>
+                      <div>
+                        <Label htmlFor="nfNumeroModal" className="text-sm">Número da NF</Label>
+                        <Input
+                          id="nfNumeroModal"
+                          type="text"
+                          placeholder="Ex: 12345"
+                          value={nfNumero}
+                          onChange={(e) => setNfNumero(e.target.value)}
+                          className="mb-2"
+                        />
+                      </div>
+                      <Input
+                        type="file"
+                        accept="application/pdf"
+                        onChange={(e) => setNfFile(e.target.files[0])}
+                      />
+                      <Button
+                        onClick={handleUploadNF}
+                        disabled={uploading || !nfFile}
+                        className="w-full bg-green-600 hover:bg-green-700"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {uploading ? 'Enviando...' : 'Enviar Nota Fiscal'}
+                      </Button>
+                    </div>
+                  ) : (
+                    <Alert>
+                      <AlertDescription>
+                        Nota Fiscal ainda não disponível
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
+
+              {/* Comprovante de Pagamento do Cliente */}
+              {pedido.comprovante_pagamento_url && (
+                <div className="p-4 bg-purple-50 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <FileText className="w-5 h-5 text-purple-600" />
+                        <h4 className="font-semibold">Comprovante de Pagamento (Cliente)</h4>
+                      </div>
+                      {pedido.comprovante_pagamento_data && (
+                        <p className="text-sm text-gray-600">
+                          Enviado em: {new Date(pedido.comprovante_pagamento_data).toLocaleString('pt-BR')}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => window.open(pedido.comprovante_pagamento_url, '_blank')}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Ver Comprovante
+                    </Button>
+                  </div>
+                </div>
               )}
             </TabsContent>
           </Tabs>

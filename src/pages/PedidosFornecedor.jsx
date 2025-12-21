@@ -42,6 +42,8 @@ export default function PedidosFornecedor() {
   const [showFaturarModal, setShowFaturarModal] = useState(false);
   const [showEnvioModal, setShowEnvioModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showBoletoModal, setShowBoletoModal] = useState(false);
+  const [showStatusPagamentoModal, setShowStatusPagamentoModal] = useState(false);
   
   // Forms
   const [motivoRecusa, setMotivoRecusa] = useState('');
@@ -55,6 +57,7 @@ export default function PedidosFornecedor() {
   const [dataEnvio, setDataEnvio] = useState('');
   
   const [uploading, setUploading] = useState(false);
+  const [novoStatusPagamento, setNovoStatusPagamento] = useState('');
 
   useEffect(() => {
     loadPedidos(); // Changed from loadData to loadPedidos
@@ -380,6 +383,119 @@ export default function PedidosFornecedor() {
       loadPedidos(); // Changed from loadData
     } catch (error) {
       toast.error('Erro ao alterar método de pagamento');
+    }
+  };
+
+  // Handler para enviar boleto separadamente
+  const handleEnviarBoleto = async () => {
+    if (!boletoFile) {
+      toast.info('Selecione o arquivo do boleto');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const boletoUpload = await UploadFile({ file: boletoFile });
+
+      await Pedido.update(selectedPedido.id, {
+        boleto_url: boletoUpload.file_url,
+        boleto_data_upload: new Date().toISOString()
+      });
+
+      // Notificar cliente
+      const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
+      await SendEmail({
+        from_name: 'POLO B2B',
+        to: cliente?.email,
+        subject: `📄 Boleto Disponível - Pedido #${selectedPedido.id.slice(-8).toUpperCase()}`,
+        body: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; text-align: center;">
+              <h1 style="color: white; margin: 0;">📄 Boleto Disponível</h1>
+            </div>
+            <div style="padding: 30px; background: white;">
+              <p>O boleto do seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> está disponível!</p>
+              <p><strong>Valor:</strong> R$ ${selectedPedido.valor_total.toFixed(2)}</p>
+              <div style="text-align: center; margin-top: 30px;">
+                <a href="${boletoUpload.file_url}" style="display: inline-block; background: #10b981; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px;">
+                  Baixar Boleto
+                </a>
+              </div>
+              <p style="margin-top: 30px; font-size: 14px; color: #6b7280;">
+                Após o pagamento, envie o comprovante pelo sistema.
+              </p>
+            </div>
+          </div>
+        `
+      });
+
+      toast.success('Boleto enviado com sucesso!');
+      setShowBoletoModal(false);
+      setBoletoFile(null);
+      loadPedidos();
+    } catch (error) {
+      toast.error('Erro ao enviar boleto');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Handler para alterar status de pagamento
+  const handleAlterarStatusPagamento = async () => {
+    if (!novoStatusPagamento) {
+      toast.info('Selecione o novo status');
+      return;
+    }
+
+    try {
+      const updateData = {
+        status_pagamento: novoStatusPagamento
+      };
+
+      // Se marcou como pago, registrar data de pagamento
+      if (novoStatusPagamento === 'pago') {
+        updateData.data_pagamento = new Date().toISOString().split('T')[0];
+      }
+
+      await Pedido.update(selectedPedido.id, updateData);
+
+      // Notificar cliente
+      const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
+      const statusLabels = {
+        pendente: 'Pendente',
+        em_analise: 'Em Análise',
+        pago: 'Confirmado',
+        atrasado: 'Atrasado',
+        cancelado: 'Cancelado'
+      };
+
+      await SendEmail({
+        from_name: 'POLO B2B',
+        to: cliente?.email,
+        subject: `💰 Atualização de Pagamento - Pedido #${selectedPedido.id.slice(-8).toUpperCase()}`,
+        body: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 30px; text-align: center;">
+              <h1 style="color: white; margin: 0;">💰 Atualização de Pagamento</h1>
+            </div>
+            <div style="padding: 30px; background: white;">
+              <p>O status de pagamento do seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi atualizado.</p>
+              <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+                <p style="font-size: 18px; margin: 0;"><strong>Novo Status:</strong> ${statusLabels[novoStatusPagamento]}</p>
+              </div>
+              ${novoStatusPagamento === 'pago' ? '<p style="color: #10b981;">✅ Seu pagamento foi confirmado! Obrigado.</p>' : ''}
+              ${novoStatusPagamento === 'atrasado' ? '<p style="color: #ef4444;">⚠️ Regularize o pagamento para evitar bloqueios.</p>' : ''}
+            </div>
+          </div>
+        `
+      });
+
+      toast.success('Status de pagamento atualizado!');
+      setShowStatusPagamentoModal(false);
+      setNovoStatusPagamento('');
+      loadPedidos();
+    } catch (error) {
+      toast.error('Erro ao atualizar status');
     }
   };
 
@@ -789,6 +905,48 @@ export default function PedidosFornecedor() {
                         </Button>
                       )}
 
+                      {/* Botão para enviar boleto separadamente */}
+                      {['em_producao', 'faturado'].includes(pedido.status) && (
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedPedido(pedido);
+                            setShowBoletoModal(true);
+                          }}
+                          className={pedido.boleto_url ? 'border-green-300 text-green-700' : ''}
+                        >
+                          <Upload className="w-4 h-4 mr-2" />
+                          {pedido.boleto_url ? 'Atualizar Boleto' : 'Enviar Boleto'}
+                        </Button>
+                      )}
+
+                      {/* Botão para alterar status de pagamento */}
+                      {['em_producao', 'faturado', 'em_transporte', 'finalizado'].includes(pedido.status) && (
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedPedido(pedido);
+                            setNovoStatusPagamento(pedido.status_pagamento || 'pendente');
+                            setShowStatusPagamentoModal(true);
+                          }}
+                        >
+                          <DollarSign className="w-4 h-4 mr-2" />
+                          Status Pagamento
+                        </Button>
+                      )}
+
+                      {/* Botão para ver comprovante do cliente */}
+                      {pedido.comprovante_pagamento_url && (
+                        <Button
+                          variant="outline"
+                          onClick={() => window.open(pedido.comprovante_pagamento_url, '_blank')}
+                          className="border-blue-300 text-blue-700"
+                        >
+                          <Eye className="w-4 h-4 mr-2" />
+                          Ver Comprovante
+                        </Button>
+                      )}
+
                       <Button
                         variant="outline"
                         onClick={() => {
@@ -1006,6 +1164,118 @@ export default function PedidosFornecedor() {
           fornecedorMap={new Map(fornecedores.map(f => [f.id, f.razao_social || f.nome_fantasia]))}
         />
       )}
+
+      {/* Modal de Envio de Boleto */}
+      <Dialog open={showBoletoModal} onOpenChange={setShowBoletoModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Enviar Boleto</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {selectedPedido?.boleto_url && (
+              <Alert className="bg-green-50 border-green-300">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <AlertDescription className="text-green-800">
+                  Este pedido já possui um boleto anexado.
+                  <Button
+                    variant="link"
+                    className="p-0 h-auto ml-2"
+                    onClick={() => window.open(selectedPedido.boleto_url, '_blank')}
+                  >
+                    Ver boleto atual
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <div>
+              <Label htmlFor="boletoFileModal">Upload do Boleto (PDF) *</Label>
+              <Input
+                id="boletoFileModal"
+                type="file"
+                accept="application/pdf"
+                onChange={(e) => setBoletoFile(e.target.files[0])}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                O cliente será notificado por email e poderá baixar o boleto pelo sistema.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => {
+                setShowBoletoModal(false);
+                setBoletoFile(null);
+              }}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleEnviarBoleto}
+                disabled={uploading || !boletoFile}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {uploading ? 'Enviando...' : 'Enviar Boleto'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Status de Pagamento */}
+      <Dialog open={showStatusPagamentoModal} onOpenChange={setShowStatusPagamentoModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Alterar Status de Pagamento</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {selectedPedido && (
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <p className="text-sm text-gray-600">Pedido #{selectedPedido.id.slice(-8).toUpperCase()}</p>
+                <p className="font-semibold text-lg">R$ {selectedPedido.valor_total?.toFixed(2)}</p>
+                {selectedPedido.comprovante_pagamento_url && (
+                  <Button
+                    variant="link"
+                    className="p-0 h-auto text-blue-600"
+                    onClick={() => window.open(selectedPedido.comprovante_pagamento_url, '_blank')}
+                  >
+                    Ver comprovante enviado pelo cliente
+                  </Button>
+                )}
+              </div>
+            )}
+
+            <div>
+              <Label htmlFor="statusPagamento">Status de Pagamento *</Label>
+              <Select value={novoStatusPagamento} onValueChange={setNovoStatusPagamento}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pendente">Pendente</SelectItem>
+                  <SelectItem value="em_analise">Em Análise (comprovante recebido)</SelectItem>
+                  <SelectItem value="pago">Pago / Confirmado</SelectItem>
+                  <SelectItem value="atrasado">Atrasado</SelectItem>
+                  <SelectItem value="cancelado">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => {
+                setShowStatusPagamentoModal(false);
+                setNovoStatusPagamento('');
+              }}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleAlterarStatusPagamento}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                Salvar Status
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

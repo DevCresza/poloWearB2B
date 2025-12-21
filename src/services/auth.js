@@ -1,7 +1,7 @@
 // Authentication Service - Camada de abstração para autenticação
 // Usa Supabase quando configurado, fallback para mockAuth
 
-import { supabase, handleSupabaseError, handleSupabaseSuccess, isSupabaseConfigured } from '@/lib/supabase';
+import { supabase, handleSupabaseError, handleSupabaseSuccess, isSupabaseConfigured, handleAuthError, clearAuthStorage } from '@/lib/supabase';
 import { mockAuth } from '@/api/mockAuth';
 import { User } from '@/api/entities';
 
@@ -122,7 +122,18 @@ class AuthService {
       if (isSupabaseConfigured()) {
         const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-        if (authError || !user) {
+        if (authError) {
+          // Verificar se é erro de refresh token
+          const authErrorResult = await handleAuthError(authError);
+          if (authErrorResult.isAuthError) {
+            this.clearSession();
+            throw new Error(authErrorResult.message);
+          }
+          throw authError;
+        }
+
+        if (!user) {
+          this.clearSession();
           throw new Error('Não autenticado');
         }
 
@@ -133,7 +144,23 @@ class AuthService {
           .eq('id', user.id)
           .single();
 
-        if (userError) throw userError;
+        if (userError) {
+          // Verificar se é erro de refresh token ou usuário não encontrado
+          const authErrorResult = await handleAuthError(userError);
+          if (authErrorResult.isAuthError) {
+            this.clearSession();
+            throw new Error(authErrorResult.message);
+          }
+
+          // Se usuário existe no auth mas não na tabela users (erro 406/PGRST116)
+          if (userError.code === 'PGRST116') {
+            console.warn('[Auth] Usuário existe no auth.users mas não em public.users');
+            clearAuthStorage();
+            throw new Error('Usuário não encontrado. Por favor, entre em contato com o administrador.');
+          }
+
+          throw userError;
+        }
 
         // Atualiza sessão
         this.saveSession({
@@ -175,6 +202,13 @@ class AuthService {
 
       return this.handleSuccess(user);
     } catch (error) {
+      // Verificar se é erro de autenticação
+      const authErrorResult = await handleAuthError(error);
+      if (authErrorResult.isAuthError) {
+        this.clearSession();
+        return this.handleError(new Error(authErrorResult.message));
+      }
+
       this.clearSession();
       return this.handleError(error);
     }

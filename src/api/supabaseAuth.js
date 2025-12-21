@@ -1,5 +1,5 @@
 // Autenticação com Supabase
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured, handleAuthError, clearAuthStorage } from '@/lib/supabase';
 import { mockAuth } from './mockAuth';
 
 // Se Supabase não configurado, usa mock
@@ -12,6 +12,8 @@ export const supabaseAuth = {
     // Se Supabase configurado, usa Supabase
     if (isSupabaseConfigured()) {
       try {
+        // Limpar qualquer sessão anterior inválida
+        clearAuthStorage();
 
         // Login com Supabase Auth
         const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -32,6 +34,12 @@ export const supabaseAuth = {
           .single();
 
         if (userError) {
+          // Se usuário existe no auth mas não na tabela users
+          if (userError.code === 'PGRST116') {
+            console.warn('[Auth] Usuário existe no auth.users mas não em public.users');
+            await supabase.auth.signOut();
+            throw new Error('Usuário não encontrado no sistema. Entre em contato com o administrador.');
+          }
           throw userError;
         }
 
@@ -57,9 +65,11 @@ export const supabaseAuth = {
     if (isSupabaseConfigured()) {
       try {
         const { error } = await supabase.auth.signOut();
+        clearAuthStorage();
         if (error) throw error;
         return true;
       } catch (error) {
+        clearAuthStorage();
         throw new Error(error.message);
       }
     }
@@ -74,7 +84,17 @@ export const supabaseAuth = {
       try {
         const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-        if (authError || !user) {
+        if (authError) {
+          // Verificar se é erro de refresh token
+          const authErrorResult = await handleAuthError(authError);
+          if (authErrorResult.isAuthError) {
+            throw new Error(authErrorResult.message);
+          }
+          throw authError;
+        }
+
+        if (!user) {
+          clearAuthStorage();
           throw new Error('Não autenticado');
         }
 
@@ -86,11 +106,29 @@ export const supabaseAuth = {
           .single();
 
         if (userError) {
+          // Verificar se é erro de refresh token
+          const authErrorResult = await handleAuthError(userError);
+          if (authErrorResult.isAuthError) {
+            throw new Error(authErrorResult.message);
+          }
+
+          // Se usuário existe no auth mas não na tabela users (erro 406/PGRST116)
+          if (userError.code === 'PGRST116') {
+            console.warn('[Auth] Usuário existe no auth.users mas não em public.users');
+            clearAuthStorage();
+            throw new Error('Usuário não encontrado. Por favor, entre em contato com o administrador.');
+          }
+
           throw userError;
         }
 
         return userData;
       } catch (error) {
+        // Verificar se é erro de autenticação
+        const authErrorResult = await handleAuthError(error);
+        if (authErrorResult.isAuthError) {
+          throw new Error(authErrorResult.message);
+        }
         throw new Error(error.message || 'Não autenticado');
       }
     }
