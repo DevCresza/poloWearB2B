@@ -214,7 +214,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
                       const file = e.target.files[0];
                       if (file) handleFileUpload(file, 'nf');
                     }}
-                    accept="application/pdf"
+                    accept=".pdf"
                     disabled={uploadingNF}
                   />
                   {pedido.nf_url && (
@@ -227,11 +227,12 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
                     </Button>
                   )}
                 </div>
+                <p className="text-xs text-gray-500"><strong>Formato aceito:</strong> PDF</p>
                 {uploadingNF && <p className="text-sm text-blue-600">Fazendo upload...</p>}
               </div>
 
               <div className="space-y-2">
-                <Label>Boleto (PDF)</Label>
+                <Label>Boleto</Label>
                 <div className="flex gap-2">
                   <Input
                     type="file"
@@ -239,7 +240,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
                       const file = e.target.files[0];
                       if (file) handleFileUpload(file, 'boleto');
                     }}
-                    accept="application/pdf"
+                    accept=".pdf"
                     disabled={uploadingBoleto}
                   />
                   {pedido.boleto_url && (
@@ -252,6 +253,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
                     </Button>
                   )}
                 </div>
+                <p className="text-xs text-gray-500"><strong>Formato aceito:</strong> PDF</p>
                 {uploadingBoleto && <p className="text-sm text-blue-600">Fazendo upload...</p>}
               </div>
             </div>

@@ -402,33 +402,6 @@ export default function PedidosFornecedor() {
         boleto_data_upload: new Date().toISOString()
       });
 
-      // Notificar cliente
-      const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
-      await SendEmail({
-        from_name: 'POLO B2B',
-        to: cliente?.email,
-        subject: `📄 Boleto Disponível - Pedido #${selectedPedido.id.slice(-8).toUpperCase()}`,
-        body: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; text-align: center;">
-              <h1 style="color: white; margin: 0;">📄 Boleto Disponível</h1>
-            </div>
-            <div style="padding: 30px; background: white;">
-              <p>O boleto do seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> está disponível!</p>
-              <p><strong>Valor:</strong> R$ ${selectedPedido.valor_total.toFixed(2)}</p>
-              <div style="text-align: center; margin-top: 30px;">
-                <a href="${boletoUpload.file_url}" style="display: inline-block; background: #10b981; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px;">
-                  Baixar Boleto
-                </a>
-              </div>
-              <p style="margin-top: 30px; font-size: 14px; color: #6b7280;">
-                Após o pagamento, envie o comprovante pelo sistema.
-              </p>
-            </div>
-          </div>
-        `
-      });
-
       toast.success('Boleto enviado com sucesso!');
       setShowBoletoModal(false);
       setBoletoFile(null);
@@ -458,37 +431,6 @@ export default function PedidosFornecedor() {
       }
 
       await Pedido.update(selectedPedido.id, updateData);
-
-      // Notificar cliente
-      const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
-      const statusLabels = {
-        pendente: 'Pendente',
-        em_analise: 'Em Análise',
-        pago: 'Confirmado',
-        atrasado: 'Atrasado',
-        cancelado: 'Cancelado'
-      };
-
-      await SendEmail({
-        from_name: 'POLO B2B',
-        to: cliente?.email,
-        subject: `💰 Atualização de Pagamento - Pedido #${selectedPedido.id.slice(-8).toUpperCase()}`,
-        body: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 30px; text-align: center;">
-              <h1 style="color: white; margin: 0;">💰 Atualização de Pagamento</h1>
-            </div>
-            <div style="padding: 30px; background: white;">
-              <p>O status de pagamento do seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi atualizado.</p>
-              <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
-                <p style="font-size: 18px; margin: 0;"><strong>Novo Status:</strong> ${statusLabels[novoStatusPagamento]}</p>
-              </div>
-              ${novoStatusPagamento === 'pago' ? '<p style="color: #10b981;">✅ Seu pagamento foi confirmado! Obrigado.</p>' : ''}
-              ${novoStatusPagamento === 'atrasado' ? '<p style="color: #ef4444;">⚠️ Regularize o pagamento para evitar bloqueios.</p>' : ''}
-            </div>
-          </div>
-        `
-      });
 
       toast.success('Status de pagamento atualizado!');
       setShowStatusPagamentoModal(false);
@@ -1042,25 +984,28 @@ export default function PedidosFornecedor() {
             </div>
 
             <div>
-              <Label htmlFor="nfFile">Upload da Nota Fiscal (PDF) *</Label>
+              <Label htmlFor="nfFile">Upload da Nota Fiscal *</Label>
               <Input
                 id="nfFile"
                 type="file"
-                accept="application/pdf"
+                accept=".pdf"
                 onChange={(e) => setNfFile(e.target.files[0])}
               />
+              <p className="text-xs text-gray-500 mt-1">
+                <strong>Formato aceito:</strong> PDF
+              </p>
             </div>
 
             <div>
-              <Label htmlFor="boletoFile">Upload do Boleto (PDF - opcional)</Label>
+              <Label htmlFor="boletoFile">Upload do Boleto (opcional)</Label>
               <Input
                 id="boletoFile"
                 type="file"
-                accept="application/pdf"
+                accept=".pdf"
                 onChange={(e) => setBoletoFile(e.target.files[0])}
               />
               <p className="text-xs text-gray-500 mt-1">
-                Envie o boleto caso o pagamento seja via boleto bancário
+                <strong>Formato aceito:</strong> PDF | Envie o boleto caso o pagamento seja via boleto bancário
               </p>
             </div>
 
@@ -1189,14 +1134,17 @@ export default function PedidosFornecedor() {
             )}
 
             <div>
-              <Label htmlFor="boletoFileModal">Upload do Boleto (PDF) *</Label>
+              <Label htmlFor="boletoFileModal">Upload do Boleto *</Label>
               <Input
                 id="boletoFileModal"
                 type="file"
-                accept="application/pdf"
+                accept=".pdf"
                 onChange={(e) => setBoletoFile(e.target.files[0])}
               />
               <p className="text-xs text-gray-500 mt-1">
+                <strong>Formato aceito:</strong> PDF
+              </p>
+              <p className="text-xs text-gray-500">
                 O cliente será notificado por email e poderá baixar o boleto pelo sistema.
               </p>
             </div>

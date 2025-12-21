@@ -604,13 +604,16 @@ export default function CarteiraFinanceira() {
             )}
 
             <div>
-              <Label>Selecione o comprovante (PDF, JPG, PNG)</Label>
+              <Label>Selecione o comprovante</Label>
               <Input
                 type="file"
                 accept=".pdf,.jpg,.jpeg,.png"
                 onChange={(e) => setComprovanteFile(e.target.files[0])}
                 className="mt-2"
               />
+              <p className="text-xs text-gray-500 mt-1">
+                <strong>Formatos aceitos:</strong> PDF, JPG, JPEG, PNG
+              </p>
             </div>
 
             <Alert>

@@ -748,7 +748,7 @@ export default function MeusPedidos() {
                                 <div>
                                   <input
                                     type="file"
-                                    accept="image/*,application/pdf"
+                                    accept=".pdf,.jpg,.jpeg,.png"
                                     onChange={(e) => {
                                       const file = e.target.files[0];
                                       if (file) {
@@ -758,6 +758,7 @@ export default function MeusPedidos() {
                                     className="hidden"
                                     id={`upload-${titulo.id}`}
                                   />
+                                  <p className="text-xs text-gray-500 mb-1"><strong>Formatos:</strong> PDF, JPG, PNG</p>
                                   <label htmlFor={`upload-${titulo.id}`}>
                                     <Button
                                       type="button"
@@ -828,15 +829,18 @@ export default function MeusPedidos() {
 
             <div>
               <label className="block text-sm font-medium mb-2">
-                Arquivo do Comprovante (PDF ou Imagem) *
+                Arquivo do Comprovante *
               </label>
               <Input
                 type="file"
-                accept="image/*,application/pdf"
+                accept=".pdf,.jpg,.jpeg,.png"
                 onChange={(e) => setComprovanteFile(e.target.files[0])}
                 className="rounded-xl"
               />
               <p className="text-xs text-gray-500 mt-1">
+                <strong>Formatos aceitos:</strong> PDF, JPG, JPEG, PNG
+              </p>
+              <p className="text-xs text-gray-500">
                 Envie o comprovante de pagamento (PIX, transferência, depósito).
                 O fornecedor irá analisar e confirmar o pagamento.
               </p>
