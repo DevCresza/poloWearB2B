@@ -989,11 +989,11 @@ export default function PedidosFornecedor() {
               <Input
                 id="nfFile"
                 type="file"
-                accept=".pdf"
+                accept=".pdf,.jpg,.jpeg,.png"
                 onChange={(e) => setNfFile(e.target.files[0])}
               />
               <p className="text-xs text-gray-500 mt-1">
-                <strong>Formato aceito:</strong> PDF
+                <strong>Formatos aceitos:</strong> PDF, JPG, PNG
               </p>
             </div>
 
@@ -1002,11 +1002,11 @@ export default function PedidosFornecedor() {
               <Input
                 id="boletoFile"
                 type="file"
-                accept=".pdf"
+                accept=".pdf,.jpg,.jpeg,.png"
                 onChange={(e) => setBoletoFile(e.target.files[0])}
               />
               <p className="text-xs text-gray-500 mt-1">
-                <strong>Formato aceito:</strong> PDF | Envie o boleto caso o pagamento seja via boleto bancário
+                <strong>Formatos aceitos:</strong> PDF, JPG, PNG | Envie o boleto caso o pagamento seja via boleto bancário
               </p>
             </div>
 
@@ -1139,11 +1139,11 @@ export default function PedidosFornecedor() {
               <Input
                 id="boletoFileModal"
                 type="file"
-                accept=".pdf"
+                accept=".pdf,.jpg,.jpeg,.png"
                 onChange={(e) => setBoletoFile(e.target.files[0])}
               />
               <p className="text-xs text-gray-500 mt-1">
-                <strong>Formato aceito:</strong> PDF
+                <strong>Formatos aceitos:</strong> PDF, JPG, PNG
               </p>
               <p className="text-xs text-gray-500">
                 O cliente será notificado por email e poderá baixar o boleto pelo sistema.

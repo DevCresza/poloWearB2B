@@ -525,7 +525,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       <div className="flex gap-2">
                         <Input
                           type="file"
-                          accept=".pdf"
+                          accept=".pdf,.jpg,.jpeg,.png"
                           onChange={(e) => setBoletoFile(e.target.files[0])}
                           className="flex-1"
                         />
@@ -537,7 +537,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                           {uploading ? 'Enviando...' : 'Atualizar'}
                         </Button>
                       </div>
-                      <p className="text-xs text-gray-500 mt-1"><strong>Formato aceito:</strong> PDF</p>
+                      <p className="text-xs text-gray-500 mt-1"><strong>Formatos aceitos:</strong> PDF, JPG, PNG</p>
                     </div>
                   )}
                 </div>
@@ -552,10 +552,10 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       <p className="text-sm text-gray-500">Nenhum boleto anexado. Faça o upload:</p>
                       <Input
                         type="file"
-                        accept=".pdf"
+                        accept=".pdf,.jpg,.jpeg,.png"
                         onChange={(e) => setBoletoFile(e.target.files[0])}
                       />
-                      <p className="text-xs text-gray-500"><strong>Formato aceito:</strong> PDF</p>
+                      <p className="text-xs text-gray-500"><strong>Formatos aceitos:</strong> PDF, JPG, PNG</p>
                       <Button
                         onClick={handleUploadBoleto}
                         disabled={uploading || !boletoFile}
@@ -626,7 +626,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       <div className="flex gap-2">
                         <Input
                           type="file"
-                          accept=".pdf"
+                          accept=".pdf,.jpg,.jpeg,.png"
                           onChange={(e) => setNfFile(e.target.files[0])}
                           className="flex-1"
                         />
@@ -638,7 +638,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                           {uploading ? 'Enviando...' : 'Atualizar'}
                         </Button>
                       </div>
-                      <p className="text-xs text-gray-500 mt-1"><strong>Formato aceito:</strong> PDF</p>
+                      <p className="text-xs text-gray-500 mt-1"><strong>Formatos aceitos:</strong> PDF, JPG, PNG</p>
                     </div>
                   )}
                 </div>
@@ -664,10 +664,10 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       </div>
                       <Input
                         type="file"
-                        accept=".pdf"
+                        accept=".pdf,.jpg,.jpeg,.png"
                         onChange={(e) => setNfFile(e.target.files[0])}
                       />
-                      <p className="text-xs text-gray-500"><strong>Formato aceito:</strong> PDF</p>
+                      <p className="text-xs text-gray-500"><strong>Formatos aceitos:</strong> PDF, JPG, PNG</p>
                       <Button
                         onClick={handleUploadNF}
                         disabled={uploading || !nfFile}
