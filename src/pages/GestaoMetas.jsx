@@ -13,7 +13,8 @@ import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { 
+import { Checkbox } from '@/components/ui/checkbox';
+import {
   Target, TrendingUp, TrendingDown, Plus, Edit, Calendar,
   DollarSign, Package, AlertTriangle, CheckCircle
 } from 'lucide-react';
@@ -30,7 +31,7 @@ export default function GestaoMetas() {
 
   const [formData, setFormData] = useState({
     ano: new Date().getFullYear(),
-    mes: new Date().getMonth() + 1,
+    meses_selecionados: [new Date().getMonth() + 1],
     tipo: 'geral',
     fornecedor_id: '',
     user_id: '',
@@ -138,16 +139,43 @@ export default function GestaoMetas() {
     e.preventDefault();
     try {
       if (editingMeta) {
-        await Meta.update(editingMeta.id, formData);
+        // Ao editar, atualiza apenas o mês original da meta
+        await Meta.update(editingMeta.id, {
+          ano: formData.ano,
+          mes: formData.meses_selecionados[0],
+          tipo: formData.tipo,
+          fornecedor_id: formData.fornecedor_id,
+          user_id: formData.user_id,
+          valor_meta: formData.valor_meta,
+          pecas_meta: formData.pecas_meta
+        });
+        toast.success('Meta atualizada com sucesso!');
       } else {
-        await Meta.create(formData);
+        // Ao criar, cria uma meta para cada mês selecionado
+        if (formData.meses_selecionados.length === 0) {
+          toast.error('Selecione pelo menos um mês');
+          return;
+        }
+
+        for (const mes of formData.meses_selecionados) {
+          await Meta.create({
+            ano: formData.ano,
+            mes: mes,
+            tipo: formData.tipo,
+            fornecedor_id: formData.fornecedor_id,
+            user_id: formData.user_id,
+            valor_meta: formData.valor_meta,
+            pecas_meta: formData.pecas_meta
+          });
+        }
+        toast.success(`${formData.meses_selecionados.length} meta(s) criada(s) com sucesso!`);
       }
-      
+
       setShowForm(false);
       setEditingMeta(null);
       setFormData({
         ano: new Date().getFullYear(),
-        mes: new Date().getMonth() + 1,
+        meses_selecionados: [new Date().getMonth() + 1],
         tipo: 'geral',
         fornecedor_id: '',
         user_id: '',
@@ -164,7 +192,7 @@ export default function GestaoMetas() {
     setEditingMeta(meta);
     setFormData({
       ano: meta.ano,
-      mes: meta.mes,
+      meses_selecionados: [meta.mes],
       tipo: meta.tipo,
       fornecedor_id: meta.fornecedor_id || '',
       user_id: meta.user_id || '',
@@ -381,40 +409,65 @@ export default function GestaoMetas() {
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-6 py-4">
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <Label>Ano *</Label>
-                <Select 
-                  value={formData.ano.toString()} 
-                  onValueChange={(value) => setFormData({...formData, ano: parseInt(value)})}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[2024, 2025, 2026, 2027].map(ano => (
-                      <SelectItem key={ano} value={ano.toString()}>{ano}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label>Ano *</Label>
+              <Select
+                value={formData.ano.toString()}
+                onValueChange={(value) => setFormData({...formData, ano: parseInt(value)})}
+              >
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[2024, 2025, 2026, 2027].map(ano => (
+                    <SelectItem key={ano} value={ano.toString()}>{ano}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-              <div>
-                <Label>Mês *</Label>
-                <Select 
-                  value={formData.mes.toString()} 
-                  onValueChange={(value) => setFormData({...formData, mes: parseInt(value)})}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {meses.map((mes, index) => (
-                      <SelectItem key={index + 1} value={(index + 1).toString()}>{mes}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div>
+              <Label className="mb-3 block">
+                {editingMeta ? 'Mês *' : 'Meses * (selecione um ou mais)'}
+              </Label>
+              <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
+                {meses.map((mes, index) => {
+                  const mesNum = index + 1;
+                  const isChecked = formData.meses_selecionados.includes(mesNum);
+                  return (
+                    <div
+                      key={mesNum}
+                      className={`flex items-center space-x-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                        isChecked ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'
+                      }`}
+                      onClick={() => {
+                        if (editingMeta) {
+                          // Ao editar, permite apenas um mês
+                          setFormData({...formData, meses_selecionados: [mesNum]});
+                        } else {
+                          // Ao criar, permite múltiplos
+                          const newMeses = isChecked
+                            ? formData.meses_selecionados.filter(m => m !== mesNum)
+                            : [...formData.meses_selecionados, mesNum];
+                          setFormData({...formData, meses_selecionados: newMeses});
+                        }
+                      }}
+                    >
+                      <Checkbox
+                        checked={isChecked}
+                        onCheckedChange={() => {}}
+                        className="pointer-events-none"
+                      />
+                      <span className="text-sm">{mes.substring(0, 3)}</span>
+                    </div>
+                  );
+                })}
               </div>
+              {!editingMeta && formData.meses_selecionados.length > 0 && (
+                <p className="text-sm text-blue-600 mt-2">
+                  {formData.meses_selecionados.length} mês(es) selecionado(s)
+                </p>
+              )}
             </div>
 
             <div>
