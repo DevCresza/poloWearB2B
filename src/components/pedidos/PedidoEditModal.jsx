@@ -214,7 +214,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
                       const file = e.target.files[0];
                       if (file) handleFileUpload(file, 'nf');
                     }}
-                    accept=".pdf,.jpg,.jpeg,.png"
+                    accept=".pdf,.jpg,.jpeg,.png,.crm"
                     disabled={uploadingNF}
                   />
                   {pedido.nf_url && (
@@ -227,7 +227,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
                     </Button>
                   )}
                 </div>
-                <p className="text-xs text-gray-500"><strong>Formatos aceitos:</strong> PDF, JPG, PNG</p>
+                <p className="text-xs text-gray-500"><strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM</p>
                 {uploadingNF && <p className="text-sm text-blue-600">Fazendo upload...</p>}
               </div>
 
@@ -240,7 +240,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
                       const file = e.target.files[0];
                       if (file) handleFileUpload(file, 'boleto');
                     }}
-                    accept=".pdf,.jpg,.jpeg,.png"
+                    accept=".pdf,.jpg,.jpeg,.png,.crm"
                     disabled={uploadingBoleto}
                   />
                   {pedido.boleto_url && (
@@ -253,7 +253,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
                     </Button>
                   )}
                 </div>
-                <p className="text-xs text-gray-500"><strong>Formatos aceitos:</strong> PDF, JPG, PNG</p>
+                <p className="text-xs text-gray-500"><strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM</p>
                 {uploadingBoleto && <p className="text-sm text-blue-600">Fazendo upload...</p>}
               </div>
             </div>
