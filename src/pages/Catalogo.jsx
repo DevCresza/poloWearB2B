@@ -201,8 +201,9 @@ export default function Catalogo() {
     // Salvar carrinho UMA VEZ com todos os itens
     salvarCarrinho(novoCarrinho);
 
+    const totalGrades = variantesComQuantidade.reduce((sum, [_, qtd]) => sum + qtd, 0);
     const mensagem = produto.tipo_venda === 'grade'
-      ? `${variantesComQuantidade.length} grade(s) de cor(es) diferente(s) adicionada(s) ao carrinho!`
+      ? `${totalGrades} Grade(s) adicionada(s) ao carrinho!`
       : `${variantesComQuantidade.length} cor(es) adicionada(s) ao carrinho!`;
     toast.success(mensagem);
     setShowDetailsModal(false);
