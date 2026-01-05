@@ -32,7 +32,7 @@ export default function GestaoMetas() {
   const [formData, setFormData] = useState({
     ano: new Date().getFullYear(),
     meses_selecionados: [new Date().getMonth() + 1],
-    tipo: 'geral',
+    tipo_entidade: 'geral', // geral, fornecedor, cliente
     fornecedor_id: '',
     user_id: '',
     valor_meta: 0,
@@ -79,10 +79,10 @@ export default function GestaoMetas() {
         return dataPedido >= dataInicio && dataPedido <= dataFim;
       });
 
-      // Filtrar por tipo de meta
-      if (meta.tipo === 'fornecedor') {
+      // Filtrar por tipo de meta (baseado nos IDs, não no campo tipo)
+      if (meta.fornecedor_id) {
         pedidos = pedidos.filter(p => p.fornecedor_id === meta.fornecedor_id);
-      } else if (meta.tipo === 'cliente') {
+      } else if (meta.user_id) {
         pedidos = pedidos.filter(p => p.comprador_user_id === meta.user_id);
       }
 
@@ -138,14 +138,27 @@ export default function GestaoMetas() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Função para calcular periodo_inicio e periodo_fim a partir de ano e mês
+      const calcularPeriodo = (ano, mes) => {
+        const inicio = new Date(ano, mes - 1, 1);
+        const fim = new Date(ano, mes, 0); // Último dia do mês
+        return {
+          periodo_inicio: inicio.toISOString().split('T')[0],
+          periodo_fim: fim.toISOString().split('T')[0]
+        };
+      };
+
       if (editingMeta) {
         // Ao editar, atualiza apenas o mês original da meta
+        const { periodo_inicio, periodo_fim } = calcularPeriodo(formData.ano, formData.meses_selecionados[0]);
         await Meta.update(editingMeta.id, {
           ano: formData.ano,
           mes: formData.meses_selecionados[0],
-          tipo: formData.tipo,
-          fornecedor_id: formData.fornecedor_id,
-          user_id: formData.user_id,
+          tipo: 'mensal', // Tipo válido para o banco
+          periodo_inicio,
+          periodo_fim,
+          fornecedor_id: formData.tipo_entidade === 'fornecedor' ? formData.fornecedor_id : null,
+          user_id: formData.tipo_entidade === 'cliente' ? formData.user_id : null,
           valor_meta: formData.valor_meta,
           pecas_meta: formData.pecas_meta
         });
@@ -158,12 +171,15 @@ export default function GestaoMetas() {
         }
 
         for (const mes of formData.meses_selecionados) {
+          const { periodo_inicio, periodo_fim } = calcularPeriodo(formData.ano, mes);
           await Meta.create({
             ano: formData.ano,
             mes: mes,
-            tipo: formData.tipo,
-            fornecedor_id: formData.fornecedor_id,
-            user_id: formData.user_id,
+            tipo: 'mensal', // Tipo válido para o banco
+            periodo_inicio,
+            periodo_fim,
+            fornecedor_id: formData.tipo_entidade === 'fornecedor' ? formData.fornecedor_id : null,
+            user_id: formData.tipo_entidade === 'cliente' ? formData.user_id : null,
             valor_meta: formData.valor_meta,
             pecas_meta: formData.pecas_meta
           });
@@ -176,7 +192,7 @@ export default function GestaoMetas() {
       setFormData({
         ano: new Date().getFullYear(),
         meses_selecionados: [new Date().getMonth() + 1],
-        tipo: 'geral',
+        tipo_entidade: 'geral',
         fornecedor_id: '',
         user_id: '',
         valor_meta: 0,
@@ -184,16 +200,22 @@ export default function GestaoMetas() {
       });
       loadData();
     } catch (error) {
+      console.error('Erro ao salvar meta:', error);
       toast.error('Erro ao salvar meta');
     }
   };
 
   const handleEdit = (meta) => {
     setEditingMeta(meta);
+    // Determinar tipo_entidade baseado nos IDs
+    let tipo_entidade = 'geral';
+    if (meta.fornecedor_id) tipo_entidade = 'fornecedor';
+    else if (meta.user_id) tipo_entidade = 'cliente';
+
     setFormData({
       ano: meta.ano,
       meses_selecionados: [meta.mes],
-      tipo: meta.tipo,
+      tipo_entidade,
       fornecedor_id: meta.fornecedor_id || '',
       user_id: meta.user_id || '',
       valor_meta: meta.valor_meta,
@@ -219,16 +241,16 @@ export default function GestaoMetas() {
   };
 
   const getNomeEntidade = (meta) => {
-    if (meta.tipo === 'geral') return 'Meta Geral';
-    if (meta.tipo === 'fornecedor') {
+    // Determinar tipo baseado nos IDs (não no campo tipo do banco)
+    if (meta.fornecedor_id) {
       const fornecedor = fornecedores.find(f => f.id === meta.fornecedor_id);
-      return fornecedor?.nome_marca || 'Fornecedor';
+      return fornecedor?.nome_marca || fornecedor?.nome_fantasia || 'Fornecedor';
     }
-    if (meta.tipo === 'cliente') {
+    if (meta.user_id) {
       const cliente = clientes.find(c => c.id === meta.user_id);
       return cliente?.nome_empresa || cliente?.full_name || 'Cliente';
     }
-    return '';
+    return 'Meta Geral';
   };
 
   const meses = [
@@ -472,9 +494,9 @@ export default function GestaoMetas() {
 
             <div>
               <Label>Tipo de Meta *</Label>
-              <Select 
-                value={formData.tipo} 
-                onValueChange={(value) => setFormData({...formData, tipo: value})}
+              <Select
+                value={formData.tipo_entidade}
+                onValueChange={(value) => setFormData({...formData, tipo_entidade: value, fornecedor_id: '', user_id: ''})}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -487,7 +509,7 @@ export default function GestaoMetas() {
               </Select>
             </div>
 
-            {formData.tipo === 'fornecedor' && (
+            {formData.tipo_entidade === 'fornecedor' && (
               <div>
                 <Label>Fornecedor *</Label>
                 <Select 
@@ -506,7 +528,7 @@ export default function GestaoMetas() {
               </div>
             )}
 
-            {formData.tipo === 'cliente' && (
+            {formData.tipo_entidade === 'cliente' && (
               <div>
                 <Label>Cliente *</Label>
                 <Select
