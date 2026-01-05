@@ -1433,23 +1433,6 @@ export default function Catalogo() {
                   );
                 })()}
                 
-                {/* Grade Info */}
-                {selectedProduto.tipo_venda === 'grade' && selectedProduto.grade_configuracao && (
-                  <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                    <h4 className="font-semibold mb-3">Composição da Grade:</h4>
-                    <div className="grid grid-cols-3 gap-2">
-                      {selectedProduto.grade_configuracao.tamanhos_disponiveis?.map(tamanho => (
-                        <div key={tamanho} className="bg-white p-2 rounded-lg text-center border border-gray-200">
-                          <div className="font-semibold">{tamanho}</div>
-                          <div className="text-sm text-gray-600">
-                            {selectedProduto.grade_configuracao.quantidades_por_tamanho[tamanho]} pç
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
                 {/* Stock */}
                 {selectedProduto.controla_estoque && (
                   <div className="flex items-center gap-2">
