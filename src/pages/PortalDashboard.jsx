@@ -10,11 +10,12 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { createPageUrl } from '@/utils';
 import { Link } from 'react-router-dom';
-import { 
-  ShoppingCart, Package, DollarSign, TrendingUp, AlertTriangle, 
+import {
+  ShoppingCart, Package, DollarSign, TrendingUp, AlertTriangle,
   CheckCircle, Clock, Truck, Eye, Calendar, BarChart3, FileText, X
 } from 'lucide-react';
 import AlertasVencimento from '../components/AlertasVencimento';
+import { formatCurrency } from '@/utils/exportUtils';
 
 export default function PortalDashboard() {
   const [user, setUser] = useState(null);
@@ -251,7 +252,7 @@ export default function PortalDashboard() {
         <Alert className="border-orange-300 bg-orange-50 rounded-2xl shadow-neumorphic">
           <AlertTriangle className="h-5 w-5 text-orange-600" />
           <AlertDescription className="text-orange-800">
-            Você possui R$ {stats.valorVencido.toFixed(2)} em títulos vencidos. 
+            Você possui {formatCurrency(stats.valorVencido)} em títulos vencidos. 
             <Link to={createPageUrl('MeusPedidos')} className="font-semibold underline ml-2">
               Ver detalhes
             </Link>
@@ -295,7 +296,7 @@ export default function PortalDashboard() {
             </div>
             <div>
               <p className="text-sm text-gray-600 mb-1">Valor Total</p>
-              <p className="text-2xl font-bold text-gray-900">R$ {stats.valorTotalComprado.toFixed(2)}</p>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.valorTotalComprado)}</p>
             </div>
           </CardContent>
         </Card>
@@ -309,7 +310,7 @@ export default function PortalDashboard() {
               </div>
               <div>
                 <p className="text-sm text-gray-600 mb-1">Valores em Aberto</p>
-                <p className="text-2xl font-bold text-gray-900">R$ {stats.valorEmAberto.toFixed(2)}</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.valorEmAberto)}</p>
               </div>
             </CardContent>
           </Card>
@@ -463,7 +464,7 @@ export default function PortalDashboard() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-green-600">R$ {pedido.valor_total?.toFixed(2)}</p>
+                      <p className="font-bold text-green-600">{formatCurrency(pedido.valor_total)}</p>
                       <Badge className={`${statusInfo.color} text-xs mt-1`}>
                         {statusInfo.label}
                       </Badge>
