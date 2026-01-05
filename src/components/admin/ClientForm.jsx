@@ -142,6 +142,83 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Seleção de Tipo de Cliente - Destacado no início */}
+          {!user && (
+            <div className="space-y-3">
+              <Label className="text-base font-semibold">Tipo de Cliente *</Label>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFormData({...formData, role: 'multimarca'})}
+                  className={`p-4 rounded-xl border-2 text-center transition-all ${
+                    formData.role === 'multimarca'
+                      ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                      : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className={`text-2xl mb-1 ${formData.role === 'multimarca' ? 'text-blue-600' : 'text-gray-400'}`}>🏪</div>
+                  <div className={`font-semibold ${formData.role === 'multimarca' ? 'text-blue-700' : 'text-gray-700'}`}>Multimarca</div>
+                  <div className="text-xs text-gray-500 mt-1">Loja própria</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({...formData, role: 'franqueado'})}
+                  className={`p-4 rounded-xl border-2 text-center transition-all ${
+                    formData.role === 'franqueado'
+                      ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-200'
+                      : 'border-gray-200 hover:border-purple-300 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className={`text-2xl mb-1 ${formData.role === 'franqueado' ? 'text-purple-600' : 'text-gray-400'}`}>🏢</div>
+                  <div className={`font-semibold ${formData.role === 'franqueado' ? 'text-purple-700' : 'text-gray-700'}`}>Franqueado</div>
+                  <div className="text-xs text-gray-500 mt-1">Franquia Polo</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({...formData, role: 'fornecedor'})}
+                  className={`p-4 rounded-xl border-2 text-center transition-all ${
+                    formData.role === 'fornecedor'
+                      ? 'border-green-500 bg-green-50 ring-2 ring-green-200'
+                      : 'border-gray-200 hover:border-green-300 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className={`text-2xl mb-1 ${formData.role === 'fornecedor' ? 'text-green-600' : 'text-gray-400'}`}>🏭</div>
+                  <div className={`font-semibold ${formData.role === 'fornecedor' ? 'text-green-700' : 'text-gray-700'}`}>Fornecedor</div>
+                  <div className="text-xs text-gray-500 mt-1">Fabrica produtos</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({...formData, role: 'admin'})}
+                  className={`p-4 rounded-xl border-2 text-center transition-all ${
+                    formData.role === 'admin'
+                      ? 'border-red-500 bg-red-50 ring-2 ring-red-200'
+                      : 'border-gray-200 hover:border-red-300 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className={`text-2xl mb-1 ${formData.role === 'admin' ? 'text-red-600' : 'text-gray-400'}`}>👑</div>
+                  <div className={`font-semibold ${formData.role === 'admin' ? 'text-red-700' : 'text-gray-700'}`}>Admin</div>
+                  <div className="text-xs text-gray-500 mt-1">Acesso total</div>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Edição - mostra select simples */}
+          {user && (
+            <div className="space-y-2">
+              <Label htmlFor="role">Tipo de Cliente *</Label>
+              <Select value={formData.role} onValueChange={value => setFormData({...formData, role: value})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="multimarca">Multimarca</SelectItem>
+                  <SelectItem value="franqueado">Franqueado</SelectItem>
+                  <SelectItem value="fornecedor">Fornecedor</SelectItem>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="grid md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <Label htmlFor="full_name">Nome Completo *</Label>
@@ -164,39 +241,25 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
             </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <Label htmlFor="password">Senha {!user && '*'} {!user && <span className="text-xs text-gray-500">(mínimo 6 caracteres)</span>}</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  value={formData.password}
-                  onChange={e => setFormData({...formData, password: e.target.value})}
-                  required={!user}
-                  minLength={6}
-                  placeholder={user ? "Deixe em branco para manter a atual" : "Mínimo 6 caracteres"}
-                />
-                <button
-                  type="button"
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4 text-gray-500" /> : <Eye className="w-4 h-4 text-gray-500" />}
-                </button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="role">Tipo de Cliente *</Label>
-              <Select value={formData.role} onValueChange={value => setFormData({...formData, role: value})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="multimarca">Multimarca</SelectItem>
-                  <SelectItem value="fornecedor">Fornecedor</SelectItem>
-                  <SelectItem value="franqueado">Franqueado</SelectItem>
-                  <SelectItem value="admin">Administrador</SelectItem>
-                </SelectContent>
-              </Select>
+          <div className="space-y-2">
+            <Label htmlFor="password">Senha {!user && '*'} {!user && <span className="text-xs text-gray-500">(mínimo 6 caracteres)</span>}</Label>
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                value={formData.password}
+                onChange={e => setFormData({...formData, password: e.target.value})}
+                required={!user}
+                minLength={6}
+                placeholder={user ? "Deixe em branco para manter a atual" : "Mínimo 6 caracteres"}
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4 text-gray-500" /> : <Eye className="w-4 h-4 text-gray-500" />}
+              </button>
             </div>
           </div>
           

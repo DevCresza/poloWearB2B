@@ -99,6 +99,7 @@ export default function GestaoClientes() {
   const getTipoNegocioColor = (tipo) => {
     const colors = {
       multimarca: 'bg-blue-100 text-blue-800',
+      franqueado: 'bg-purple-100 text-purple-800',
       fornecedor: 'bg-green-100 text-green-800'
     };
     return colors[tipo] || 'bg-gray-100 text-gray-800';
@@ -142,6 +143,7 @@ export default function GestaoClientes() {
                 <SelectContent>
                   <SelectItem value="all">Todos os tipos</SelectItem>
                   <SelectItem value="multimarca">Multimarca</SelectItem>
+                  <SelectItem value="franqueado">Franqueado</SelectItem>
                   <SelectItem value="fornecedor">Fornecedor</SelectItem>
                 </SelectContent>
               </Select>
