@@ -87,7 +87,7 @@ export const exportToPDF = (data, columns, title = 'Relatório', filename = 'exp
 
     // Adicionar data de geração
     doc.setFontSize(10);
-    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, 22);
+    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`, 14, 22);
 
     // Preparar dados para a tabela
     const headers = [columns.map(col => col.label)];
@@ -134,7 +134,7 @@ export const exportToPDF = (data, columns, title = 'Relatório', filename = 'exp
  */
 const generateTextReport = (data, columns, title) => {
   let text = `${title}\n`;
-  text += `Gerado em: ${new Date().toLocaleString('pt-BR')}\n`;
+  text += `Gerado em: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n`;
   text += '='.repeat(80) + '\n\n';
 
   // Cabeçalhos
@@ -170,17 +170,24 @@ export const formatCurrency = (value) => {
 };
 
 /**
- * Formata data
+ * Formata data (fuso horário de São Paulo)
  */
 export const formatDate = (date) => {
   if (!date) return '';
-  return new Date(date).toLocaleDateString('pt-BR');
+  return new Date(date).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 };
 
 /**
- * Formata data e hora
+ * Formata data e hora (fuso horário de São Paulo)
  */
 export const formatDateTime = (date) => {
   if (!date) return '';
-  return new Date(date).toLocaleString('pt-BR');
+  return new Date(date).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+};
+
+/**
+ * Retorna data/hora atual no fuso de São Paulo formatada
+ */
+export const formatNow = () => {
+  return new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 };

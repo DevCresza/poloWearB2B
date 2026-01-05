@@ -191,7 +191,7 @@ Número de Funcionários: ${formData.numero_funcionarios || 'Não informado'}
 OBSERVAÇÕES:
 ${formData.observacoes || 'Nenhuma observação'}
 
-Data do Cadastro: ${new Date().toLocaleString('pt-BR')}`
+Data do Cadastro: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`
       };
 
       // Salvar no banco
@@ -240,7 +240,7 @@ Funcionários: ${formData.numero_funcionarios || 'Não informado'}
 Observações: ${formData.observacoes || 'Nenhuma'}
 
 Origem: Formulário Site
-Data: ${new Date().toLocaleString('pt-BR')}`
+Data: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`
         });
       } catch (emailError) {
       }

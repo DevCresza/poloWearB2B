@@ -17,6 +17,7 @@ import {
 import { Pedido } from '@/api/entities';
 import { User as UserEntity } from '@/api/entities';
 import { UploadFile } from '@/api/integrations';
+import { formatDateTime } from '@/utils/exportUtils';
 
 export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentUser, userMap, fornecedorMap }) {
   const [confirmando, setConfirmando] = useState(false);
@@ -445,7 +446,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       </div>
                       {pedido.comprovante_pagamento_data && (
                         <p className="text-sm text-gray-600">
-                          Enviado em: {new Date(pedido.comprovante_pagamento_data).toLocaleString('pt-BR')}
+                          Enviado em: {formatDateTime(pedido.comprovante_pagamento_data)}
                         </p>
                       )}
                     </div>
@@ -488,7 +489,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       </div>
                       {pedido.boleto_data_upload && (
                         <p className="text-sm text-gray-600">
-                          Enviado em: {new Date(pedido.boleto_data_upload).toLocaleString('pt-BR')}
+                          Enviado em: {formatDateTime(pedido.boleto_data_upload)}
                         </p>
                       )}
                       {pedido.cliente_confirmou_boleto && (
@@ -589,7 +590,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       )}
                       {pedido.nf_data_upload && (
                         <p className="text-sm text-gray-600">
-                          Enviada em: {new Date(pedido.nf_data_upload).toLocaleString('pt-BR')}
+                          Enviada em: {formatDateTime(pedido.nf_data_upload)}
                         </p>
                       )}
                       {pedido.cliente_confirmou_nf && (
@@ -698,7 +699,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       </div>
                       {pedido.comprovante_pagamento_data && (
                         <p className="text-sm text-gray-600">
-                          Enviado em: {new Date(pedido.comprovante_pagamento_data).toLocaleString('pt-BR')}
+                          Enviado em: {formatDateTime(pedido.comprovante_pagamento_data)}
                         </p>
                       )}
                     </div>

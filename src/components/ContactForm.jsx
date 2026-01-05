@@ -110,7 +110,7 @@ ORIGEM: Formulário "Vamos Conversar" - Home Page
 
 --
 Este lead foi automaticamente salvo no CRM para acompanhamento.
-Data: ${new Date().toLocaleString('pt-BR')}`
+Data: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`
         });
       } catch (emailError) {
         // Não falha o processo se o email não enviar
