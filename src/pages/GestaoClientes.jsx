@@ -28,8 +28,11 @@ export default function GestaoClientes() {
   }, []);
 
   useEffect(() => {
-    let filtered = users.filter(user => user.role !== 'admin'); // Não mostrar admins
-    
+    // Filtrar admins e fornecedores (fornecedores têm página própria em GestaoFornecedores)
+    let filtered = users.filter(user =>
+      user.role !== 'admin' && user.tipo_negocio !== 'fornecedor'
+    );
+
     if (searchTerm) {
       filtered = filtered.filter(user =>
         user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -37,14 +40,12 @@ export default function GestaoClientes() {
         user.nome_empresa?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-    
-    // The filterTipoNegocio state will only contain 'all', 'multimarca', or 'fornecedor'
-    // If a user has tipo_negocio 'franqueado', it will be filtered out when multimarca/fornecedor is selected.
-    // When 'all' is selected, they will be included but display a default color.
+
+    // Filtrar por tipo de negócio (multimarca ou franqueado)
     if (filterTipoNegocio !== 'all') {
       filtered = filtered.filter(user => user.tipo_negocio === filterTipoNegocio);
     }
-    
+
     setFilteredUsers(filtered);
   }, [users, searchTerm, filterTipoNegocio]);
 
@@ -144,7 +145,6 @@ export default function GestaoClientes() {
                   <SelectItem value="all">Todos os tipos</SelectItem>
                   <SelectItem value="multimarca">Multimarca</SelectItem>
                   <SelectItem value="franqueado">Franqueado</SelectItem>
-                  <SelectItem value="fornecedor">Fornecedor</SelectItem>
                 </SelectContent>
               </Select>
             </div>
