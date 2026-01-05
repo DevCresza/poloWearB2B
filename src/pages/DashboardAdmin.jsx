@@ -21,6 +21,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { base44 } from '@/api/base44Client';
+import { exportToCSV, formatCurrency, formatDate } from '@/utils/exportUtils';
 
 export default function DashboardAdmin() {
   const [loading, setLoading] = useState(true);
@@ -354,22 +355,93 @@ export default function DashboardAdmin() {
 
   const exportarRelatorio = async () => {
     try {
-      const relatorio = {
-        periodo: `${mesSelecionado}/${anoSelecionado}`,
-        gerado_em: new Date().toISOString(),
-        stats: stats,
-        charts: chartData
-      };
+      // Preparar dados para exportação CSV
+      const exportData = [];
 
-      const blob = new Blob([JSON.stringify(relatorio, null, 2)], { type: 'application/json' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `relatorio-${anoSelecionado}-${mesSelecionado}.json`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      a.remove();
+      // Adicionar KPIs principais
+      exportData.push({
+        tipo: 'KPI',
+        indicador: 'Faturamento Total',
+        valor: stats.faturamentoTotal,
+        periodo: `${mesSelecionado}/${anoSelecionado}`
+      });
+      exportData.push({
+        tipo: 'KPI',
+        indicador: 'Total de Pedidos',
+        valor: stats.totalPedidos,
+        periodo: `${mesSelecionado}/${anoSelecionado}`
+      });
+      exportData.push({
+        tipo: 'KPI',
+        indicador: 'Ticket Médio',
+        valor: stats.ticketMedio,
+        periodo: `${mesSelecionado}/${anoSelecionado}`
+      });
+      exportData.push({
+        tipo: 'KPI',
+        indicador: 'Clientes Ativos',
+        valor: stats.clientesAtivos,
+        periodo: `${mesSelecionado}/${anoSelecionado}`
+      });
+      exportData.push({
+        tipo: 'KPI',
+        indicador: 'Pedidos Pendentes',
+        valor: stats.pedidosPendentes,
+        periodo: `${mesSelecionado}/${anoSelecionado}`
+      });
+      exportData.push({
+        tipo: 'KPI',
+        indicador: 'Valor em Aberto',
+        valor: stats.valorEmAberto,
+        periodo: `${mesSelecionado}/${anoSelecionado}`
+      });
+      exportData.push({
+        tipo: 'KPI',
+        indicador: 'Valor Vencido',
+        valor: stats.valorVencido,
+        periodo: `${mesSelecionado}/${anoSelecionado}`
+      });
+
+      // Adicionar dados de evolução
+      if (chartData.evolucaoPedidos && chartData.evolucaoPedidos.length > 0) {
+        chartData.evolucaoPedidos.forEach(item => {
+          exportData.push({
+            tipo: 'Evolução Mensal',
+            indicador: item.mes,
+            valor: item.valor,
+            periodo: `${anoSelecionado}`
+          });
+        });
+      }
+
+      // Adicionar produtos mais vendidos
+      if (chartData.produtosMaisVendidos && chartData.produtosMaisVendidos.length > 0) {
+        chartData.produtosMaisVendidos.forEach(item => {
+          exportData.push({
+            tipo: 'Produto Mais Vendido',
+            indicador: item.nome,
+            valor: item.quantidade,
+            periodo: `${mesSelecionado}/${anoSelecionado}`
+          });
+        });
+      }
+
+      // Definir colunas para CSV
+      const columns = [
+        { key: 'tipo', label: 'Tipo' },
+        { key: 'indicador', label: 'Indicador' },
+        { key: 'valor', label: 'Valor' },
+        { key: 'periodo', label: 'Período' }
+      ];
+
+      // Exportar CSV
+      exportToCSV(
+        exportData,
+        columns,
+        `relatorio-dashboard-${anoSelecionado}-${String(mesSelecionado).padStart(2, '0')}.csv`
+      );
+
+      toast.success('Relatório exportado com sucesso!');
     } catch (error) {
       toast.error('Erro ao exportar relatório');
     }
@@ -418,7 +490,7 @@ export default function DashboardAdmin() {
 
           <Button onClick={exportarRelatorio} variant="outline">
             <Download className="w-4 h-4 mr-2" />
-            Exportar
+            Exportar CSV
           </Button>
         </div>
       </div>
