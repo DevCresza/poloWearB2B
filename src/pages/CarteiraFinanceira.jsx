@@ -37,6 +37,7 @@ export default function CarteiraFinanceira() {
     proximosVencimentos: 0,
     totalPago: 0
   });
+  const [pedidosMap, setPedidosMap] = useState({});
 
   useEffect(() => {
     loadData();
@@ -78,6 +79,18 @@ export default function CarteiraFinanceira() {
 
       setTitulos(titulosList || []);
       setFornecedores(fornecedoresList || []);
+
+      // Carregar pedidos relacionados para mostrar comprovantes
+      if (titulosList && titulosList.length > 0) {
+        const pedidoIds = [...new Set(titulosList.map(t => t.pedido_id).filter(Boolean))];
+        const pedidosPromises = pedidoIds.map(id => Pedido.get(id).catch(() => null));
+        const pedidosResults = await Promise.all(pedidosPromises);
+        const pedidosMapTemp = {};
+        pedidosResults.forEach(p => {
+          if (p) pedidosMapTemp[p.id] = p;
+        });
+        setPedidosMap(pedidosMapTemp);
+      }
 
       calculateStats(titulosList);
     } catch (error) {
@@ -497,6 +510,7 @@ export default function CarteiraFinanceira() {
                         )}
                       </div>
 
+                      {/* Comprovante da Carteira */}
                       {titulo.comprovante_url && (
                         <div className="mt-2 flex items-center gap-2 text-sm">
                           {titulo.comprovante_analisado ? (
@@ -524,6 +538,36 @@ export default function CarteiraFinanceira() {
                           >
                             <FileText className="w-4 h-4 mr-1" />
                             Ver Comprovante
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Comprovante do Pedido (enviado pelo cliente em MeusPedidos) */}
+                      {!titulo.comprovante_url && pedidosMap[titulo.pedido_id]?.comprovante_pagamento_url && (
+                        <div className="mt-2 flex items-center gap-2 text-sm">
+                          {pedidosMap[titulo.pedido_id]?.status_pagamento === 'em_analise' ? (
+                            <Badge className="bg-yellow-100 text-yellow-800">
+                              <Clock className="w-3 h-3 mr-1" />
+                              Comprovante em Análise
+                            </Badge>
+                          ) : pedidosMap[titulo.pedido_id]?.status_pagamento === 'pago' ? (
+                            <Badge className="bg-green-100 text-green-800">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Pagamento Confirmado
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-blue-100 text-blue-800">
+                              <FileText className="w-3 h-3 mr-1" />
+                              Comprovante Enviado
+                            </Badge>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => window.open(pedidosMap[titulo.pedido_id].comprovante_pagamento_url, '_blank')}
+                          >
+                            <FileText className="w-4 h-4 mr-1" />
+                            Ver Comprovante do Pedido
                           </Button>
                         </div>
                       )}
