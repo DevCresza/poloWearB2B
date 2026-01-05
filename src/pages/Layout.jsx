@@ -90,48 +90,60 @@ export default function Layout({ children, currentPageName }) {
   const isFornecedor = currentUser.tipo_negocio === 'fornecedor';
   const isCliente = currentUser.tipo_negocio === 'multimarca' || currentUser.tipo_negocio === 'franqueado';
 
-  const navLinkClasses = "flex items-center gap-3 px-4 py-3 text-gray-700 rounded-lg transition-all hover:bg-white hover:shadow-md";
+  const isActiveLink = (pageName) => {
+    const targetPath = createPageUrl(pageName);
+    return location.pathname === targetPath;
+  };
+
+  const getNavLinkClasses = (pageName) => {
+    const baseClasses = "flex items-center gap-3 px-4 py-3 rounded-lg transition-all";
+    if (isActiveLink(pageName)) {
+      return `${baseClasses} bg-blue-600 text-white shadow-lg font-semibold`;
+    }
+    return `${baseClasses} text-gray-700 hover:bg-white hover:shadow-md`;
+  };
+
   const sectionTitleClasses = "px-4 pt-4 pb-2 text-xs font-semibold text-gray-400 uppercase";
 
   const NavLinks = () => (
     <>
       {/* Link Comum */}
-      <Link to={createPageUrl('PortalDashboard')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+      <Link to={createPageUrl('PortalDashboard')} className={getNavLinkClasses('PortalDashboard')} onClick={() => setMobileMenuOpen(false)}>
         <LayoutDashboard className="w-5 h-5" />
         <span>Dashboard</span>
       </Link>
-      
+
       {/* Meu Perfil - Link para todos */}
-      <Link to={createPageUrl('MeuPerfil')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+      <Link to={createPageUrl('MeuPerfil')} className={getNavLinkClasses('MeuPerfil')} onClick={() => setMobileMenuOpen(false)}>
         <UserPlus className="w-5 h-5" />
         <span>Meu Perfil</span>
       </Link>
-      
+
       {/* Links do Cliente */}
       {(isCliente || isAdmin) && (
         <div>
           {isAdmin && <p className={sectionTitleClasses}>Área do Cliente</p>}
-          <Link to={createPageUrl('Catalogo')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('Catalogo')} className={getNavLinkClasses('Catalogo')} onClick={() => setMobileMenuOpen(false)}>
             <ShoppingCart className="w-5 h-5" />
             <span>Catálogo</span>
           </Link>
-          <Link to={createPageUrl('Carrinho')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('Carrinho')} className={getNavLinkClasses('Carrinho')} onClick={() => setMobileMenuOpen(false)}>
             <ShoppingCart className="w-5 h-5" />
             <span>Carrinho</span>
           </Link>
-          <Link to={createPageUrl('MeusPedidos')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('MeusPedidos')} className={getNavLinkClasses('MeusPedidos')} onClick={() => setMobileMenuOpen(false)}>
             <Package className="w-5 h-5" />
             <span>Meus Pedidos</span>
           </Link>
-          <Link to={createPageUrl('CarteiraFinanceira')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('CarteiraFinanceira')} className={getNavLinkClasses('CarteiraFinanceira')} onClick={() => setMobileMenuOpen(false)}>
             <DollarSign className="w-5 h-5" />
             <span>Carteira</span>
           </Link>
-          <Link to={createPageUrl('HistoricoCompras')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('HistoricoCompras')} className={getNavLinkClasses('HistoricoCompras')} onClick={() => setMobileMenuOpen(false)}>
             <TrendingUp className="w-5 h-5" />
             <span>Histórico</span>
           </Link>
-          <Link to={createPageUrl('Recursos')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('Recursos')} className={getNavLinkClasses('Recursos')} onClick={() => setMobileMenuOpen(false)}>
             <BookOpen className="w-5 h-5" />
             <span>Conteúdos</span>
           </Link>
@@ -142,62 +154,62 @@ export default function Layout({ children, currentPageName }) {
       {(isFornecedor || isAdmin) && (
         <div>
           <p className={isAdmin ? sectionTitleClasses : "sr-only"}>Área do Fornecedor</p>
-          <Link to={createPageUrl('GestaoProdutos')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('GestaoProdutos')} className={getNavLinkClasses('GestaoProdutos')} onClick={() => setMobileMenuOpen(false)}>
             <ClipboardList className="w-5 h-5" />
             <span>{isAdmin ? 'Todos Produtos' : 'Meus Produtos'}</span>
           </Link>
-          <Link to={createPageUrl('GestaoEstoque')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('GestaoEstoque')} className={getNavLinkClasses('GestaoEstoque')} onClick={() => setMobileMenuOpen(false)}>
             <Package className="w-5 h-5" />
             <span>Gestão de Estoque</span>
           </Link>
-          <Link to={createPageUrl('GestaoCapsulas')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('GestaoCapsulas')} className={getNavLinkClasses('GestaoCapsulas')} onClick={() => setMobileMenuOpen(false)}>
             <ImageIcon className="w-5 h-5" />
             <span>Cápsulas</span>
           </Link>
-          <Link to={createPageUrl('PedidosFornecedor')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('PedidosFornecedor')} className={getNavLinkClasses('PedidosFornecedor')} onClick={() => setMobileMenuOpen(false)}>
             <Package className="w-5 h-5" />
             <span>{isAdmin ? 'Pedidos Fornecedores' : 'Meus Pedidos'}</span>
           </Link>
         </div>
       )}
-      
+
       {/* Links de Administração */}
       {isAdmin && (
         <div>
           <p className={sectionTitleClasses}>Administração</p>
-          <Link to={createPageUrl('Admin')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('Admin')} className={getNavLinkClasses('Admin')} onClick={() => setMobileMenuOpen(false)}>
             <Shield className="w-5 h-5" />
             <span>Painel Admin</span>
           </Link>
-          <Link to={createPageUrl('DashboardAdmin')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('DashboardAdmin')} className={getNavLinkClasses('DashboardAdmin')} onClick={() => setMobileMenuOpen(false)}>
             <BarChart3 className="w-5 h-5" />
             <span>Analytics</span>
           </Link>
-          <Link to={createPageUrl('UserManagement')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('UserManagement')} className={getNavLinkClasses('UserManagement')} onClick={() => setMobileMenuOpen(false)}>
             <Users className="w-5 h-5" />
             <span>Gestão de Usuários</span>
           </Link>
-          <Link to={createPageUrl('CrmDashboard')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('CrmDashboard')} className={getNavLinkClasses('CrmDashboard')} onClick={() => setMobileMenuOpen(false)}>
             <TrendingUp className="w-5 h-5" />
             <span>CRM & Leads</span>
           </Link>
-          <Link to={createPageUrl('GestaoClientes')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('GestaoClientes')} className={getNavLinkClasses('GestaoClientes')} onClick={() => setMobileMenuOpen(false)}>
             <UserPlus className="w-5 h-5" />
             <span>Clientes</span>
           </Link>
-          <Link to={createPageUrl('GestaoFornecedores')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('GestaoFornecedores')} className={getNavLinkClasses('GestaoFornecedores')} onClick={() => setMobileMenuOpen(false)}>
             <Building className="w-5 h-5" />
             <span>Fornecedores</span>
           </Link>
-          <Link to={createPageUrl('PedidosAdmin')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('PedidosAdmin')} className={getNavLinkClasses('PedidosAdmin')} onClick={() => setMobileMenuOpen(false)}>
             <Package className="w-5 h-5" />
             <span>Todos Pedidos</span>
           </Link>
-          <Link to={createPageUrl('GestaoMetas')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('GestaoMetas')} className={getNavLinkClasses('GestaoMetas')} onClick={() => setMobileMenuOpen(false)}>
             <Target className="w-5 h-5" />
             <span>Metas</span>
           </Link>
-          <Link to={createPageUrl('Recursos')} className={navLinkClasses} onClick={() => setMobileMenuOpen(false)}>
+          <Link to={createPageUrl('Recursos')} className={getNavLinkClasses('Recursos')} onClick={() => setMobileMenuOpen(false)}>
             <BookOpen className="w-5 h-5" />
             <span>Conteúdos</span>
           </Link>
