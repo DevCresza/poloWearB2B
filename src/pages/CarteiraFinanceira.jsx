@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import {
   DollarSign, Calendar, AlertTriangle, CheckCircle, Clock,
@@ -30,6 +31,12 @@ export default function CarteiraFinanceira() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadingComprovante, setUploadingComprovante] = useState(false);
   const [comprovanteFile, setComprovanteFile] = useState(null);
+
+  // Estados para modal de recusa
+  const [showRecusaModal, setShowRecusaModal] = useState(false);
+  const [tituloParaRecusar, setTituloParaRecusar] = useState(null);
+  const [motivoRecusa, setMotivoRecusa] = useState('');
+  const [processandoRecusa, setProcessandoRecusa] = useState(false);
 
   const [stats, setStats] = useState({
     totalAberto: 0,
@@ -184,54 +191,89 @@ export default function CarteiraFinanceira() {
     }
   };
 
-  const handleAprovarComprovante = async (titulo, aprovado) => {
+  // Função para aprovar comprovante
+  const handleAprovarComprovante = async (titulo) => {
     try {
       const updateData = {
         comprovante_analisado: true,
-        comprovante_aprovado: aprovado
+        comprovante_aprovado: true,
+        status: 'pago',
+        data_pagamento: new Date().toISOString()
       };
-
-      if (aprovado) {
-        updateData.status = 'pago';
-        updateData.data_pagamento = new Date().toISOString();
-      } else {
-        const motivo = prompt('Motivo da recusa:');
-        if (!motivo) return;
-        updateData.motivo_recusa_comprovante = motivo;
-      }
 
       await Carteira.update(titulo.id, updateData);
 
       // Atualizar totais do cliente
-      if (aprovado) {
-        const cliente = await User.get(titulo.cliente_user_id);
-        const novoTotalAberto = (cliente.total_em_aberto || 0) - titulo.valor;
-        const novoTotalVencido = titulo.status === 'vencido' 
-          ? (cliente.total_vencido || 0) - titulo.valor 
-          : cliente.total_vencido;
+      const cliente = await User.get(titulo.cliente_user_id);
+      const novoTotalAberto = (cliente.total_em_aberto || 0) - titulo.valor;
+      const novoTotalVencido = titulo.status === 'vencido'
+        ? (cliente.total_vencido || 0) - titulo.valor
+        : cliente.total_vencido;
 
-        await User.update(titulo.cliente_user_id, {
-          total_em_aberto: Math.max(0, novoTotalAberto),
-          total_vencido: Math.max(0, novoTotalVencido)
-        });
-      }
+      await User.update(titulo.cliente_user_id, {
+        total_em_aberto: Math.max(0, novoTotalAberto),
+        total_vencido: Math.max(0, novoTotalVencido)
+      });
 
       // Notificar cliente
       const pedido = await Pedido.get(titulo.pedido_id);
-      const cliente = await User.get(titulo.cliente_user_id);
-      
+
       await SendEmail({
         to: cliente.email,
-        subject: `Comprovante ${aprovado ? 'Aprovado' : 'Recusado'} - Pedido #${pedido.id.slice(-8).toUpperCase()}`,
-        body: aprovado 
-          ? `Seu comprovante de pagamento foi aprovado!\n\nPedido: #${pedido.id.slice(-8).toUpperCase()}\nValor: R$ ${titulo.valor.toFixed(2)}`
-          : `Seu comprovante de pagamento foi recusado.\n\nMotivo: ${updateData.motivo_recusa_comprovante}\n\nPor favor, envie um novo comprovante.`
+        subject: `Comprovante Aprovado - Pedido #${pedido.id.slice(-8).toUpperCase()}`,
+        body: `Seu comprovante de pagamento foi aprovado!\n\nPedido: #${pedido.id.slice(-8).toUpperCase()}\nValor: R$ ${titulo.valor.toFixed(2)}`
       });
 
-      toast.success(aprovado ? 'Comprovante aprovado!' : 'Comprovante recusado!');
+      toast.success('Comprovante aprovado!');
       loadData();
     } catch (error) {
-      toast.error('Erro ao processar comprovante');
+      toast.error('Erro ao aprovar comprovante');
+    }
+  };
+
+  // Função para abrir modal de recusa
+  const handleIniciarRecusa = (titulo) => {
+    setTituloParaRecusar(titulo);
+    setMotivoRecusa('');
+    setShowRecusaModal(true);
+  };
+
+  // Função para confirmar recusa do comprovante
+  const handleConfirmarRecusa = async () => {
+    if (!motivoRecusa.trim()) {
+      toast.error('Por favor, informe o motivo da recusa.');
+      return;
+    }
+
+    setProcessandoRecusa(true);
+    try {
+      const updateData = {
+        comprovante_analisado: true,
+        comprovante_aprovado: false,
+        motivo_recusa_comprovante: motivoRecusa.trim()
+      };
+
+      await Carteira.update(tituloParaRecusar.id, updateData);
+
+      // Notificar cliente
+      const pedido = await Pedido.get(tituloParaRecusar.pedido_id);
+      const cliente = await User.get(tituloParaRecusar.cliente_user_id);
+
+      await SendEmail({
+        to: cliente.email,
+        subject: `Comprovante Recusado - Pedido #${pedido.id.slice(-8).toUpperCase()}`,
+        body: `Seu comprovante de pagamento foi recusado.\n\nMotivo: ${motivoRecusa.trim()}\n\nPor favor, envie um novo comprovante.`
+      });
+
+      toast.success('Comprovante recusado. Cliente notificado.');
+      setShowRecusaModal(false);
+      setTituloParaRecusar(null);
+      setMotivoRecusa('');
+      loadData();
+    } catch (error) {
+      toast.error('Erro ao recusar comprovante');
+    } finally {
+      setProcessandoRecusa(false);
     }
   };
 
@@ -599,14 +641,14 @@ export default function CarteiraFinanceira() {
                       {user?.role === 'admin' && titulo.comprovante_url && !titulo.comprovante_analisado && (
                         <>
                           <Button
-                            onClick={() => handleAprovarComprovante(titulo, true)}
+                            onClick={() => handleAprovarComprovante(titulo)}
                             size="sm"
                             className="bg-green-600"
                           >
                             Aprovar
                           </Button>
                           <Button
-                            onClick={() => handleAprovarComprovante(titulo, false)}
+                            onClick={() => handleIniciarRecusa(titulo)}
                             size="sm"
                             variant="destructive"
                           >
@@ -684,6 +726,89 @@ export default function CarteiraFinanceira() {
                 className="bg-blue-600"
               >
                 {uploadingComprovante ? 'Enviando...' : 'Enviar Comprovante'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Recusa de Comprovante */}
+      <Dialog open={showRecusaModal} onOpenChange={setShowRecusaModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" />
+              Recusar Comprovante
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {tituloParaRecusar && (
+              <div className="p-4 bg-gray-50 rounded-lg border">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-gray-600">Valor do título:</span>
+                  <span className="font-bold text-lg">R$ {tituloParaRecusar.valor?.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Vencimento:</span>
+                  <span>{new Date(tituloParaRecusar.data_vencimento).toLocaleDateString('pt-BR')}</span>
+                </div>
+                {tituloParaRecusar.comprovante_url && (
+                  <div className="mt-3 pt-3 border-t">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => window.open(tituloParaRecusar.comprovante_url, '_blank')}
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      Visualizar Comprovante Enviado
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="motivoRecusa" className="text-sm font-medium">
+                Motivo da Recusa *
+              </Label>
+              <Textarea
+                id="motivoRecusa"
+                value={motivoRecusa}
+                onChange={(e) => setMotivoRecusa(e.target.value)}
+                placeholder="Descreva o motivo da recusa do comprovante (ex: valor incorreto, comprovante ilegível, data não confere, etc.)"
+                className="min-h-[120px] resize-none"
+              />
+              <p className="text-xs text-gray-500">
+                Este motivo será enviado ao cliente por e-mail para que ele possa enviar um novo comprovante.
+              </p>
+            </div>
+
+            <Alert className="border-orange-200 bg-orange-50">
+              <AlertTriangle className="h-4 w-4 text-orange-600" />
+              <AlertDescription className="text-orange-800 text-sm">
+                <strong>Atenção:</strong> Ao recusar, o cliente será notificado e poderá enviar um novo comprovante.
+              </AlertDescription>
+            </Alert>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowRecusaModal(false);
+                  setTituloParaRecusar(null);
+                  setMotivoRecusa('');
+                }}
+                disabled={processandoRecusa}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleConfirmarRecusa}
+                disabled={processandoRecusa || !motivoRecusa.trim()}
+                variant="destructive"
+              >
+                {processandoRecusa ? 'Processando...' : 'Confirmar Recusa'}
               </Button>
             </div>
           </div>
