@@ -1,4 +1,7 @@
 import { toast } from 'sonner';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
+
 // Utilitários para exportação de dados para CSV e PDF
 
 /**
@@ -57,24 +60,19 @@ export const exportToCSV = (data, columns, filename = 'export.csv') => {
 };
 
 /**
- * Exporta dados para PDF usando texto simples (sem dependências externas)
- * Para PDF mais complexos, seria necessário adicionar jsPDF
+ * Exporta dados para PDF usando jsPDF
  * @param {Array} data - Array de objetos com os dados
  * @param {Array} columns - Array com as colunas {key, label}
  * @param {string} title - Título do relatório
  * @param {string} filename - Nome do arquivo
  */
-export const exportToPDF = async (data, columns, title = 'Relatório', filename = 'export.pdf') => {
+export const exportToPDF = (data, columns, title = 'Relatório', filename = 'export.pdf') => {
   if (!data || data.length === 0) {
     toast.info('Não há dados para exportar');
     return;
   }
 
   try {
-    // Importar jsPDF dinamicamente
-    const { jsPDF } = await import('jspdf');
-    await import('jspdf-autotable');
-
     const doc = new jsPDF();
 
     // Adicionar título
@@ -105,7 +103,7 @@ export const exportToPDF = async (data, columns, title = 'Relatório', filename 
       })
     );
 
-    // Adicionar tabela
+    // Adicionar tabela usando autoTable
     doc.autoTable({
       head: headers,
       body: rows,
@@ -118,23 +116,10 @@ export const exportToPDF = async (data, columns, title = 'Relatório', filename 
 
     // Salvar PDF
     doc.save(filename);
+    toast.success('PDF exportado com sucesso!');
   } catch (error) {
-
-    // Fallback: gerar relatório em texto
-    const text = generateTextReport(data, columns, title);
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-
-    link.setAttribute('href', url);
-    link.setAttribute('download', filename.replace('.pdf', '.txt'));
-    link.style.visibility = 'hidden';
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    toast.info('PDF não disponível. Relatório exportado como TXT.');
+    console.error('Erro ao gerar PDF:', error);
+    toast.error('Erro ao gerar PDF. Tente novamente.');
   }
 };
 

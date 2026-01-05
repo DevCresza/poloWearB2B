@@ -306,7 +306,7 @@ export default function CarteiraFinanceira() {
     return fornecedor?.nome_marca || 'N/A';
   };
 
-  const handleExport = async (format) => {
+  const handleExport = (format) => {
     try {
       const filteredData = filteredTitulos;
 
@@ -335,7 +335,7 @@ export default function CarteiraFinanceira() {
       ];
 
       if (format === 'pdf') {
-        await exportToPDF(
+        exportToPDF(
           exportData,
           columns,
           'Carteira Financeira - Polo Wear',
