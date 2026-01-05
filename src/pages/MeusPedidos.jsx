@@ -18,7 +18,7 @@ import {
   Download, CreditCard, Calendar, MapPin, Receipt, Upload,
   AlertTriangle, ArrowUpCircle, DollarSign
 } from 'lucide-react';
-import { formatCurrency } from '@/utils/exportUtils';
+import { formatCurrency, exportToCSV, formatDate } from '@/utils/exportUtils';
 
 export default function MeusPedidos() {
   const [pedidos, setPedidos] = useState([]);
@@ -216,6 +216,49 @@ export default function MeusPedidos() {
     return fornecedor ? fornecedor.nome_marca : 'N/A';
   };
 
+  const handleExportCSV = () => {
+    const exportData = filteredPedidos.map(pedido => {
+      const statusInfo = getStatusInfo(pedido.status);
+      const paymentInfo = getPaymentStatusInfo(pedido.status_pagamento);
+      const itens = Array.isArray(pedido.itens) ? pedido.itens : JSON.parse(pedido.itens || '[]');
+      const totalItens = itens.reduce((sum, item) => sum + item.quantidade, 0);
+
+      return {
+        numero_pedido: `#${pedido.id.slice(-8).toUpperCase()}`,
+        fornecedor: getFornecedorNome(pedido.fornecedor_id),
+        data_pedido: formatDate(pedido.created_date),
+        status: statusInfo.label,
+        status_pagamento: paymentInfo.label,
+        metodo_pagamento: pedido.metodo_pagamento?.replace('_', ' ').toUpperCase() || '',
+        quantidade_itens: totalItens,
+        valor_total: pedido.valor_total,
+        data_prevista_entrega: pedido.data_prevista_entrega ? formatDate(pedido.data_prevista_entrega) : '',
+        codigo_rastreio: pedido.codigo_rastreio || '',
+        transportadora: pedido.transportadora || ''
+      };
+    });
+
+    const columns = [
+      { key: 'numero_pedido', label: 'Nº Pedido' },
+      { key: 'fornecedor', label: 'Fornecedor' },
+      { key: 'data_pedido', label: 'Data do Pedido' },
+      { key: 'status', label: 'Status' },
+      { key: 'status_pagamento', label: 'Status Pagamento' },
+      { key: 'metodo_pagamento', label: 'Método Pagamento' },
+      { key: 'quantidade_itens', label: 'Qtd. Itens' },
+      { key: 'valor_total', label: 'Valor Total (R$)' },
+      { key: 'data_prevista_entrega', label: 'Previsão Entrega' },
+      { key: 'codigo_rastreio', label: 'Código Rastreio' },
+      { key: 'transportadora', label: 'Transportadora' }
+    ];
+
+    exportToCSV(
+      exportData,
+      columns,
+      `meus_pedidos_${new Date().toISOString().split('T')[0]}.csv`
+    );
+  };
+
   const filteredPedidos = pedidos.filter(pedido => {
     const matchesSearch = pedido.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          getFornecedorNome(pedido.fornecedor_id).toLowerCase().includes(searchTerm.toLowerCase());
@@ -333,12 +376,21 @@ export default function MeusPedidos() {
               <option value="finalizado">Finalizados</option>
             </select>
 
-            <Button 
+            <Button
               onClick={() => setShowFinanceiroModal(true)}
               className="bg-green-600 hover:bg-green-700 rounded-xl"
             >
               <CreditCard className="w-4 h-4 mr-2" />
               Carteira Financeira
+            </Button>
+
+            <Button
+              onClick={handleExportCSV}
+              variant="outline"
+              className="rounded-xl"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Exportar CSV
             </Button>
           </div>
         </CardContent>
