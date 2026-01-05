@@ -104,32 +104,34 @@ export default function GestaoMetas() {
         }
       });
 
-      const percentualValor = meta.valor_meta > 0 
-        ? (valorRealizado / meta.valor_meta) * 100 
+      const percentualValor = meta.valor_meta > 0
+        ? (valorRealizado / meta.valor_meta) * 100
         : 0;
-      const percentualPecas = meta.pecas_meta > 0 
-        ? (pecasRealizadas / meta.pecas_meta) * 100 
+      const percentualPecas = meta.pecas_meta > 0
+        ? (pecasRealizadas / meta.pecas_meta) * 100
         : 0;
+
+      // Usar o menor percentual como percentual geral
+      const percentualAtingido = Math.min(percentualValor, percentualPecas);
 
       let status = 'abaixo';
-      const menorPercentual = Math.min(percentualValor, percentualPecas);
-      if (menorPercentual >= 100) status = 'superada';
-      else if (menorPercentual >= 90) status = 'atingida';
-      else if (menorPercentual >= 70) status = 'atencao';
+      if (percentualAtingido >= 100) status = 'superada';
+      else if (percentualAtingido >= 90) status = 'atingida';
+      else if (percentualAtingido >= 70) status = 'atencao';
 
       await Meta.update(meta.id, {
-        valor_realizado: valorRealizado,
+        valor_atual: valorRealizado,
         pecas_realizadas: pecasRealizadas,
-        percentual_valor: percentualValor,
-        percentual_pecas: percentualPecas,
+        percentual_atingido: percentualAtingido,
         status: status
       });
 
-      // Atualizar no estado local
-      meta.valor_realizado = valorRealizado;
+      // Atualizar no estado local (usando nomes amigáveis para a UI)
+      meta.valor_atual = valorRealizado;
       meta.pecas_realizadas = pecasRealizadas;
-      meta.percentual_valor = percentualValor;
-      meta.percentual_pecas = percentualPecas;
+      meta.percentual_atingido = percentualAtingido;
+      meta.percentual_valor = percentualValor; // Para exibição na UI
+      meta.percentual_pecas = percentualPecas; // Para exibição na UI
       meta.status = status;
     } catch (error) {
     }
@@ -353,13 +355,13 @@ export default function GestaoMetas() {
                     <span className="text-sm font-medium">Faturamento</span>
                   </div>
                   <span className="text-sm font-bold">
-                    {meta.percentual_valor.toFixed(1)}%
+                    {(meta.percentual_valor || 0).toFixed(1)}%
                   </span>
                 </div>
-                <Progress value={Math.min(meta.percentual_valor, 100)} className="h-2" />
+                <Progress value={Math.min(meta.percentual_valor || 0, 100)} className="h-2" />
                 <div className="flex justify-between mt-1 text-xs text-gray-600">
-                  <span>R$ {meta.valor_realizado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                  <span>R$ {meta.valor_meta.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  <span>R$ {(meta.valor_atual || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  <span>R$ {(meta.valor_meta || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
 
@@ -371,13 +373,13 @@ export default function GestaoMetas() {
                     <span className="text-sm font-medium">Peças</span>
                   </div>
                   <span className="text-sm font-bold">
-                    {meta.percentual_pecas.toFixed(1)}%
+                    {(meta.percentual_pecas || 0).toFixed(1)}%
                   </span>
                 </div>
-                <Progress value={Math.min(meta.percentual_pecas, 100)} className="h-2" />
+                <Progress value={Math.min(meta.percentual_pecas || 0, 100)} className="h-2" />
                 <div className="flex justify-between mt-1 text-xs text-gray-600">
-                  <span>{meta.pecas_realizadas} pç</span>
-                  <span>{meta.pecas_meta} pç</span>
+                  <span>{meta.pecas_realizadas || 0} pç</span>
+                  <span>{meta.pecas_meta || 0} pç</span>
                 </div>
               </div>
 
@@ -387,13 +389,13 @@ export default function GestaoMetas() {
                   <div>
                     <span className="text-gray-600">Falta Faturar:</span>
                     <p className="font-semibold text-orange-600">
-                      R$ {Math.max(0, meta.valor_meta - meta.valor_realizado).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {Math.max(0, (meta.valor_meta || 0) - (meta.valor_atual || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </p>
                   </div>
                   <div>
                     <span className="text-gray-600">Falta Vender:</span>
                     <p className="font-semibold text-orange-600">
-                      {Math.max(0, meta.pecas_meta - meta.pecas_realizadas)} peças
+                      {Math.max(0, (meta.pecas_meta || 0) - (meta.pecas_realizadas || 0))} peças
                     </p>
                   </div>
                 </div>
