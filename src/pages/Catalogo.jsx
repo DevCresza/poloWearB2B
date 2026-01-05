@@ -881,7 +881,7 @@ export default function Catalogo() {
                 <SelectContent>
                   <SelectItem value="all">Todos Fornecedores</SelectItem>
                   {fornecedores.map(f => (
-                    <SelectItem key={f.id} value={f.id}>{f.nome_marca}</SelectItem>
+                    <SelectItem key={f.id} value={f.id}>{f.razao_social || f.nome_fantasia || f.nome_marca}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

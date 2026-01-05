@@ -614,7 +614,7 @@ export default function HistoricoCompras() {
               <SelectContent>
                 <SelectItem value="todos">Todos os fornecedores</SelectItem>
                 {fornecedores.map(f => (
-                  <SelectItem key={f.id} value={f.id}>{f.nome_marca}</SelectItem>
+                  <SelectItem key={f.id} value={f.id}>{f.razao_social || f.nome_fantasia || f.nome_marca}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

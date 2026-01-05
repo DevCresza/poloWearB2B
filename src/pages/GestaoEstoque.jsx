@@ -288,7 +288,7 @@ export default function GestaoEstoque() {
                 >
                   <option value="todos">Todos os Fornecedores</option>
                   {fornecedores.map(f => (
-                    <option key={f.id} value={f.id}>{f.nome_marca}</option>
+                    <option key={f.id} value={f.id}>{f.razao_social || f.nome_fantasia || f.nome_marca}</option>
                   ))}
                 </select>
 

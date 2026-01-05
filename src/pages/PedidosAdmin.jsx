@@ -244,7 +244,7 @@ export default function PedidosAdmin() {
   ];
 
   const userMap = new Map(users.map(u => [u.id, u.empresa || u.razao_social || u.nome_marca || u.full_name]));
-  const fornecedorMap = new Map(fornecedores.map(f => [f.id, f.nome_marca]));
+  const fornecedorMap = new Map(fornecedores.map(f => [f.id, f.razao_social || f.nome_fantasia || f.nome_marca]));
 
   if (loading) {
     return (
@@ -343,7 +343,7 @@ export default function PedidosAdmin() {
                 <SelectContent>
                   <SelectItem value="all">Todos Fornecedores</SelectItem>
                   {fornecedores.map(f => (
-                    <SelectItem key={f.id} value={f.id}>{f.nome_marca}</SelectItem>
+                    <SelectItem key={f.id} value={f.id}>{f.razao_social || f.nome_fantasia || f.nome_marca}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
