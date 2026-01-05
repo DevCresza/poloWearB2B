@@ -1,14 +1,43 @@
-// Integrations - Substituído por dados mockados
+// Integrations - Usa Supabase quando configurado, senão usa mock
+import { isSupabaseConfigured } from '@/lib/supabase';
+import { Core as MockCore } from './mockIntegrations';
+import { supabaseIntegrations } from './supabaseIntegrations';
 
-import { Core } from './mockIntegrations';
+// Funções que usam Supabase Storage quando disponível
+export const UploadFile = async (params) => {
+  if (isSupabaseConfigured()) {
+    return supabaseIntegrations.UploadFile(params);
+  }
+  return MockCore.UploadFile(params);
+};
 
-export { Core };
+export const UploadPrivateFile = async (params) => {
+  if (isSupabaseConfigured()) {
+    return supabaseIntegrations.UploadPrivateFile(params);
+  }
+  return MockCore.UploadPrivateFile(params);
+};
 
-// Re-exportando funções individuais para compatibilidade
-export const InvokeLLM = (params) => Core.InvokeLLM(params);
-export const SendEmail = (params) => Core.SendEmail(params);
-export const UploadFile = (params) => Core.UploadFile(params);
-export const GenerateImage = (params) => Core.GenerateImage(params);
-export const ExtractDataFromUploadedFile = (params) => Core.ExtractDataFromUploadedFile(params);
-export const CreateFileSignedUrl = (params) => Core.CreateFileSignedUrl(params);
-export const UploadPrivateFile = (params) => Core.UploadPrivateFile(params);
+export const CreateFileSignedUrl = async (params) => {
+  if (isSupabaseConfigured()) {
+    return supabaseIntegrations.CreateFileSignedUrl(params);
+  }
+  return MockCore.CreateFileSignedUrl(params);
+};
+
+// Funções que ainda usam mock (não dependem de storage)
+export const InvokeLLM = (params) => MockCore.InvokeLLM(params);
+export const SendEmail = (params) => MockCore.SendEmail(params);
+export const GenerateImage = (params) => MockCore.GenerateImage(params);
+export const ExtractDataFromUploadedFile = (params) => MockCore.ExtractDataFromUploadedFile(params);
+
+// Core export para compatibilidade
+export const Core = {
+  InvokeLLM,
+  SendEmail,
+  UploadFile,
+  GenerateImage,
+  ExtractDataFromUploadedFile,
+  CreateFileSignedUrl,
+  UploadPrivateFile,
+};
