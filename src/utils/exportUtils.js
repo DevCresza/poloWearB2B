@@ -47,16 +47,22 @@ export const exportToCSV = (data, columns, filename = 'export.csv') => {
 
   // Criar blob e download
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
   const url = URL.createObjectURL(blob);
 
-  link.setAttribute('href', url);
-  link.setAttribute('download', filename);
-  link.style.visibility = 'hidden';
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.style.cssText = 'visibility:hidden;position:fixed;';
 
   document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+
+  // Usar setTimeout para garantir que o DOM foi atualizado
+  setTimeout(() => {
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success('CSV exportado com sucesso!');
+  }, 100);
 };
 
 /**
