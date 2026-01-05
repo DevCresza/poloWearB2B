@@ -49,6 +49,10 @@ export default function ImageEditor({
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
 
+    if (!ctx) {
+      throw new Error('Não foi possível criar contexto do canvas');
+    }
+
     const maxSize = Math.max(image.width, image.height);
     const safeArea = 2 * ((maxSize / 2) * Math.sqrt(2));
 
@@ -65,21 +69,42 @@ export default function ImageEditor({
       safeArea / 2 - image.height * 0.5
     );
 
-    const data = ctx.getImageData(0, 0, safeArea, safeArea);
+    // Usar uma abordagem mais segura para evitar problemas com tainted canvas
+    const croppedCanvas = document.createElement('canvas');
+    const croppedCtx = croppedCanvas.getContext('2d');
 
-    canvas.width = pixelCrop.width;
-    canvas.height = pixelCrop.height;
+    if (!croppedCtx) {
+      throw new Error('Não foi possível criar contexto do canvas de crop');
+    }
 
-    ctx.putImageData(
-      data,
-      Math.round(0 - safeArea / 2 + image.width * 0.5 - pixelCrop.x),
-      Math.round(0 - safeArea / 2 + image.height * 0.5 - pixelCrop.y)
+    croppedCanvas.width = pixelCrop.width;
+    croppedCanvas.height = pixelCrop.height;
+
+    // Desenhar diretamente no canvas de crop para evitar getImageData/putImageData
+    croppedCtx.drawImage(
+      canvas,
+      pixelCrop.x + (safeArea / 2 - image.width * 0.5),
+      pixelCrop.y + (safeArea / 2 - image.height * 0.5),
+      pixelCrop.width,
+      pixelCrop.height,
+      0,
+      0,
+      pixelCrop.width,
+      pixelCrop.height
     );
 
-    return new Promise((resolve) => {
-      canvas.toBlob((blob) => {
-        resolve(blob);
-      }, 'image/jpeg', 0.92);
+    return new Promise((resolve, reject) => {
+      croppedCanvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error('Falha ao gerar imagem recortada. Tente novamente.'));
+          }
+        },
+        'image/jpeg',
+        0.92
+      );
     });
   };
 
