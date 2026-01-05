@@ -306,14 +306,14 @@ export default function PedidosAdmin() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm opacity-90 mb-1">Valor Total de Todos os Pedidos</p>
-              <p className="text-4xl font-bold">R$ {valorTotalGeral.toFixed(2)}</p>
+              <p className="text-4xl font-bold">{formatCurrency(valorTotalGeral)}</p>
             </div>
             <DollarSign className="w-16 h-16 opacity-50" />
           </div>
           <div className="mt-4 pt-4 border-t border-white/20">
             <p className="text-sm opacity-90">
               Total de {filteredPedidos.length} pedido(s) • 
-              Finalizados: {totaisPorStatus.finalizado.count} (R$ {totaisPorStatus.finalizado.valor.toFixed(2)})
+              Finalizados: {totaisPorStatus.finalizado.count} ({formatCurrency(totaisPorStatus.finalizado.valor)})
             </p>
           </div>
         </CardContent>
@@ -472,7 +472,7 @@ export default function PedidosAdmin() {
                           <td className="p-4">{fornecedorMap.get(pedido.fornecedor_id) || 'N/A'}</td>
                           <td className="p-4">
                             <span className="font-semibold text-green-600">
-                              R$ {pedido.valor_total?.toFixed(2)}
+                              {formatCurrency(pedido.valor_total)}
                             </span>
                           </td>
                           <td className="p-4">

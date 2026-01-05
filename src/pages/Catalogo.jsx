@@ -18,6 +18,7 @@ import {
   Plus, Minus, Check, AlertTriangle, Filter, SlidersHorizontal, Sparkles, Truck, Clock
 } from 'lucide-react';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { formatCurrency } from '@/utils/exportUtils';
 
 export default function Catalogo() {
   const [user, setUser] = useState(null);
@@ -696,7 +697,7 @@ export default function Catalogo() {
               </Badge>
               <div className="text-right">
                 <p className="text-lg sm:text-xl lg:text-2xl font-bold text-blue-600">
-                  R$ {produto.preco_por_peca?.toFixed(2)}
+                  {formatCurrency(produto.preco_por_peca)}
                 </p>
                 <p className="text-[10px] sm:text-xs text-gray-500">por peça</p>
               </div>
@@ -704,7 +705,7 @@ export default function Catalogo() {
             
             {produto.tipo_venda === 'grade' && (
               <p className="text-[10px] sm:text-xs text-gray-600 bg-gray-50 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg">
-                Grade: {produto.total_pecas_grade} peças • R$ {produto.preco_grade_completa?.toFixed(2)}
+                Grade: {produto.total_pecas_grade} peças • {formatCurrency(produto.preco_grade_completa)}
               </p>
             )}
 
@@ -1168,14 +1169,14 @@ export default function Catalogo() {
                 <div className="bg-blue-50 p-4 rounded-xl space-y-2 border border-blue-200">
                   <div className="text-sm text-gray-600 mb-1">Preço por Peça</div>
                   <div className="text-3xl font-bold text-blue-600">
-                    R$ {selectedProduto.preco_por_peca?.toFixed(2)}
+                    {formatCurrency(selectedProduto.preco_por_peca)}
                   </div>
                   {selectedProduto.tipo_venda === 'grade' && (
                     <div className="pt-2 mt-2 border-t border-blue-200">
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-gray-700">Grade completa ({selectedProduto.total_pecas_grade} peças):</span>
                         <span className="text-xl font-bold text-blue-700">
-                          R$ {selectedProduto.preco_grade_completa?.toFixed(2)}
+                          {formatCurrency(selectedProduto.preco_grade_completa)}
                         </span>
                       </div>
                     </div>
@@ -1545,7 +1546,7 @@ export default function Catalogo() {
                       <div className="flex justify-between items-center">
                         <span className="font-semibold text-gray-700">Total:</span>
                         <span className="text-3xl font-bold text-blue-600">
-                          R$ {(getPricePerPiece(selectedProduto) * (selectedProduto.tipo_venda === 'grade' ? selectedProduto.total_pecas_grade : 1) * quantidadeModal).toFixed(2)}
+                          {formatCurrency(getPricePerPiece(selectedProduto) * (selectedProduto.tipo_venda === 'grade' ? selectedProduto.total_pecas_grade : 1) * quantidadeModal)}
                         </span>
                       </div>
                       {selectedProduto.tipo_venda === 'grade' && (
@@ -1946,7 +1947,7 @@ export default function Catalogo() {
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-lg font-semibold text-gray-900">Valor unitário da cápsula:</span>
                       <span className="text-2xl font-bold text-green-600">
-                        R$ {valorTotalCapsula.toFixed(2)}
+                        {formatCurrency(valorTotalCapsula)}
                       </span>
                     </div>
                     {quantidadeCapsula > 1 && (
@@ -1955,7 +1956,7 @@ export default function Catalogo() {
                           Total ({quantidadeCapsula}x cápsulas):
                         </span>
                         <span className="text-3xl font-bold text-green-700">
-                          R$ {valorComQuantidade.toFixed(2)}
+                          {formatCurrency(valorComQuantidade)}
                         </span>
                       </div>
                     )}

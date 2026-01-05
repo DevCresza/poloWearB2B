@@ -483,7 +483,7 @@ export default function HistoricoCompras() {
                       <p className="text-sm text-gray-600">{item.pedidos} pedidos</p>
                     </div>
                     <p className="font-bold text-green-600">
-                      R$ {item.valor.toFixed(2)}
+                      {formatCurrency(item.valor)}
                     </p>
                   </div>
                 ))}
@@ -529,7 +529,7 @@ export default function HistoricoCompras() {
                         </div>
                       </div>
                       <p className="font-bold text-green-600">
-                        R$ {produto.valor_total.toFixed(2)}
+                        {formatCurrency(produto.valor_total)}
                       </p>
                     </div>
                   );
@@ -652,7 +652,7 @@ export default function HistoricoCompras() {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold text-green-600">R$ {pedido.valor_total?.toFixed(2)}</p>
+                  <p className="font-bold text-green-600">{formatCurrency(pedido.valor_total)}</p>
                   <Badge className="bg-green-100 text-green-800 mt-1">
                     Finalizado
                   </Badge>

@@ -21,6 +21,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
+import { formatCurrency } from '@/utils/exportUtils';
 
 export default function Carrinho() {
   const navigate = useNavigate();
@@ -230,8 +231,8 @@ export default function Carrinho() {
       if (fornecedor && fornecedor.pedido_minimo_valor > 0) {
         if (grupo.total < fornecedor.pedido_minimo_valor) {
           toast.error(
-            `O pedido para ${fornecedor.nome_marca} não atingiu o valor mínimo de R$ ${fornecedor.pedido_minimo_valor.toFixed(2)}. ` +
-            `Valor atual: R$ ${grupo.total.toFixed(2)}`
+            `O pedido para ${fornecedor.nome_marca} não atingiu o valor mínimo de ${formatCurrency(fornecedor.pedido_minimo_valor)}. ` +
+            `Valor atual: ${formatCurrency(grupo.total)}`
           );
           setFinalizando(prev => ({ ...prev, [fornecedorId]: false }));
           return;
@@ -478,9 +479,9 @@ export default function Carrinho() {
                         )}
                         <AlertDescription className={`text-sm ${atingiuMinimo ? 'text-green-800' : 'text-yellow-800'}`}>
                           {atingiuMinimo ? (
-                            `Valor mínimo atingido (R$ ${valorMinimo.toFixed(2)})`
+                            `Valor mínimo atingido (${formatCurrency(valorMinimo)})`
                           ) : (
-                            `Valor mínimo: R$ ${valorMinimo.toFixed(2)} (Faltam R$ ${(valorMinimo - grupo.total).toFixed(2)})`
+                            `Valor mínimo: ${formatCurrency(valorMinimo)} (Faltam ${formatCurrency(valorMinimo - grupo.total)})`
                           )}
                         </AlertDescription>
                       </Alert>
@@ -571,7 +572,7 @@ export default function Carrinho() {
                                   })()}
 
                                   <p className="text-lg font-semibold text-purple-700 mt-2">
-                                    R$ {item.preco_unitario?.toFixed(2)} por cápsula
+                                    {formatCurrency(item.preco_unitario)} por cápsula
                                   </p>
                                 </div>
 
@@ -606,7 +607,7 @@ export default function Carrinho() {
                                   </div>
 
                                   <p className="text-base font-bold text-purple-900">
-                                    R$ {(item.preco_unitario * item.quantidade).toFixed(2)}
+                                    {formatCurrency(item.preco_unitario * item.quantidade)}
                                   </p>
                                 </div>
                               </div>
@@ -662,7 +663,7 @@ export default function Carrinho() {
                                 </div>
                               )}
                               <p className="text-sm text-gray-600 mt-2">
-                                R$ {preco.toFixed(2)} cada
+                                {formatCurrency(preco)} cada
                               </p>
                             </div>
 
@@ -700,7 +701,7 @@ export default function Carrinho() {
 
                               <div className="text-right">
                                 <p className="text-lg font-bold text-green-600">
-                                  R$ {(preco * item.quantidade).toFixed(2)}
+                                  {formatCurrency(preco * item.quantidade)}
                                 </p>
                               </div>
                             </div>
@@ -716,7 +717,7 @@ export default function Carrinho() {
                       <div className="flex justify-between items-center">
                         <span className="font-semibold text-lg">Total:</span>
                         <span className="text-2xl sm:text-3xl font-bold text-green-600">
-                          R$ {grupo.total.toFixed(2)}
+                          {formatCurrency(grupo.total)}
                         </span>
                       </div>
 
@@ -782,7 +783,7 @@ export default function Carrinho() {
 
                       {!atingiuMinimo && (
                         <p className="text-xs text-center text-yellow-700">
-                          Adicione mais R$ {(valorMinimo - grupo.total).toFixed(2)} para atingir o valor mínimo deste fornecedor
+                          Adicione mais {formatCurrency(valorMinimo - grupo.total)} para atingir o valor mínimo deste fornecedor
                         </p>
                       )}
                     </div>

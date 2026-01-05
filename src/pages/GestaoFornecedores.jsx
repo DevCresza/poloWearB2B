@@ -11,6 +11,7 @@ import FornecedorForm from '../components/admin/FornecedorForm';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { formatCurrency } from '@/utils/exportUtils';
 
 export default function GestaoFornecedores() {
   const [fornecedores, setFornecedores] = useState([]);
@@ -199,7 +200,7 @@ export default function GestaoFornecedores() {
                       <TableCell className="font-medium">{fornecedor.nome_marca}</TableCell>
                       <TableCell>{fornecedor.razao_social}</TableCell>
                       <TableCell>{fornecedor.cnpj}</TableCell>
-                      <TableCell>R$ {fornecedor.pedido_minimo_valor?.toFixed(2) || '0.00'}</TableCell>
+                      <TableCell>{formatCurrency(fornecedor.pedido_minimo_valor || 0)}</TableCell>
                       <TableCell> {/* New cell for email and password */}
                         <div>
                           <div className="font-medium">{fornecedor.email_fornecedor || '-'}</div>

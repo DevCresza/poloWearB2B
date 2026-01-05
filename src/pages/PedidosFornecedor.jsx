@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
+import { formatCurrency } from '@/utils/exportUtils';
 
 export default function PedidosFornecedor() {
   const [user, setUser] = useState(null);
@@ -150,7 +151,7 @@ export default function PedidosFornecedor() {
             <div style="padding: 30px; background: white;">
               <p>Seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi aprovado!</p>
               <p><strong>Data prevista de entrega:</strong> ${new Date(dataEntrega).toLocaleDateString('pt-BR')}</p>
-              <p>Valor total: R$ ${selectedPedido.valor_total.toFixed(2)}</p>
+              <p>Valor total: ${formatCurrency(selectedPedido.valor_total)}</p>
               <p style="margin-top: 30px;">Acompanhe o status do seu pedido no sistema.</p>
             </div>
           </div>
@@ -266,7 +267,7 @@ export default function PedidosFornecedor() {
               <p>Seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi faturado!</p>
               <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
                 <p><strong>Nota Fiscal:</strong> #${nfNumero}</p>
-                <p><strong>Valor:</strong> R$ ${selectedPedido.valor_total.toFixed(2)}</p>
+                <p><strong>Valor:</strong> ${formatCurrency(selectedPedido.valor_total)}</p>
                 <p><strong>Vencimento:</strong> ${dataVencimento.toLocaleDateString('pt-BR')}</p>
               </div>
               <div style="text-align: center; margin-top: 30px;">
@@ -722,13 +723,13 @@ export default function PedidosFornecedor() {
                             <br />
                             Motivo: {cliente.motivo_bloqueio || 'Não especificado'}
                             <br />
-                            Total em aberto: R$ {(cliente.total_em_aberto || 0).toFixed(2)}
+                            Total em aberto: {formatCurrency(cliente.total_em_aberto || 0)}
                           </>
                         ) : (
                           <>
                             <strong>Cliente com valores vencidos.</strong>
                             <br />
-                            Total vencido: R$ {(cliente.total_vencido || 0).toFixed(2)}
+                            Total vencido: {formatCurrency(cliente.total_vencido || 0)}
                           </>
                         )}
                       </AlertDescription>
@@ -744,7 +745,7 @@ export default function PedidosFornecedor() {
                         {/* Title and client info moved to CardHeader */}
                         <div className="text-right">
                           <p className="text-2xl font-bold text-green-600">
-                            R$ {pedido.valor_total?.toFixed(2)}
+                            {formatCurrency(pedido.valor_total)}
                           </p>
                           <Badge className={`mt-2 ${statusBadge.color}`}>
                             {statusBadge.label}
@@ -1178,7 +1179,7 @@ export default function PedidosFornecedor() {
             {selectedPedido && (
               <div className="bg-gray-50 p-3 rounded-lg">
                 <p className="text-sm text-gray-600">Pedido #{selectedPedido.id.slice(-8).toUpperCase()}</p>
-                <p className="font-semibold text-lg">R$ {selectedPedido.valor_total?.toFixed(2)}</p>
+                <p className="font-semibold text-lg">{formatCurrency(selectedPedido.valor_total)}</p>
                 {selectedPedido.comprovante_pagamento_url && (
                   <Button
                     variant="link"

@@ -13,11 +13,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
-import { 
-  Package, Clock, CheckCircle, Truck, X, Eye, FileText, 
+import {
+  Package, Clock, CheckCircle, Truck, X, Eye, FileText,
   Download, CreditCard, Calendar, MapPin, Receipt, Upload,
   AlertTriangle, ArrowUpCircle, DollarSign
 } from 'lucide-react';
+import { formatCurrency } from '@/utils/exportUtils';
 
 export default function MeusPedidos() {
   const [pedidos, setPedidos] = useState([]);
@@ -270,7 +271,7 @@ export default function MeusPedidos() {
               <div>
                 <p className="text-sm text-gray-600">Valor em Aberto</p>
                 <p className="text-3xl font-bold text-yellow-600">
-                  R$ {totalEmAberto.toFixed(2)}
+                  {formatCurrency(totalEmAberto)}
                 </p>
               </div>
               <DollarSign className="w-12 h-12 text-yellow-600 opacity-20" />
@@ -284,7 +285,7 @@ export default function MeusPedidos() {
               <div>
                 <p className="text-sm text-gray-600">Valores Vencidos</p>
                 <p className="text-3xl font-bold text-red-600">
-                  R$ {totalVencido.toFixed(2)}
+                  {formatCurrency(totalVencido)}
                 </p>
               </div>
               <AlertTriangle className="w-12 h-12 text-red-600 opacity-20" />
@@ -385,7 +386,7 @@ export default function MeusPedidos() {
                         
                         <div className="text-right">
                           <p className="text-2xl font-bold text-blue-600">
-                            R$ {pedido.valor_total?.toFixed(2)}
+                            {formatCurrency(pedido.valor_total)}
                           </p>
                           <Badge className={`mt-2 ${statusInfo.color}`}>
                             <statusInfo.icon className="w-3 h-3 mr-1" />
@@ -598,7 +599,7 @@ export default function MeusPedidos() {
                           </p>
                         </div>
                         <p className="font-semibold text-blue-600">
-                          R$ {(item.preco * item.quantidade).toFixed(2)}
+                          {formatCurrency(item.preco * item.quantidade)}
                         </p>
                       </div>
                     ))}
@@ -607,7 +608,7 @@ export default function MeusPedidos() {
                     
                     <div className="flex justify-between items-center text-lg font-bold">
                       <span>Total:</span>
-                      <span className="text-blue-600">R$ {selectedPedido.valor_total?.toFixed(2)}</span>
+                      <span className="text-blue-600">{formatCurrency(selectedPedido.valor_total)}</span>
                     </div>
                   </div>
                 </CardContent>
@@ -677,7 +678,7 @@ export default function MeusPedidos() {
                   <CardContent className="p-4">
                     <p className="text-sm text-gray-600">Total em Aberto</p>
                     <p className="text-2xl font-bold text-yellow-600">
-                      R$ {totalEmAberto.toFixed(2)}
+                      {formatCurrency(totalEmAberto)}
                     </p>
                   </CardContent>
                 </Card>
@@ -686,7 +687,7 @@ export default function MeusPedidos() {
                   <CardContent className="p-4">
                     <p className="text-sm text-gray-600">Valores Vencidos</p>
                     <p className="text-2xl font-bold text-red-600">
-                      R$ {totalVencido.toFixed(2)}
+                      {formatCurrency(totalVencido)}
                     </p>
                   </CardContent>
                 </Card>
@@ -727,7 +728,7 @@ export default function MeusPedidos() {
                                 </div>
                                 
                                 <p className="text-2xl font-bold text-blue-600">
-                                  R$ {titulo.valor.toFixed(2)}
+                                  {formatCurrency(titulo.valor)}
                                 </p>
                                 
                                 {titulo.status === 'em_analise' && (
@@ -809,7 +810,7 @@ export default function MeusPedidos() {
                   Pedido #{selectedPedido.id.slice(-8).toUpperCase()}
                 </p>
                 <p className="font-semibold text-lg text-blue-600">
-                  R$ {selectedPedido.valor_total?.toFixed(2)}
+                  {formatCurrency(selectedPedido.valor_total)}
                 </p>
                 {selectedPedido.comprovante_pagamento_url && (
                   <div className="flex items-center gap-2 text-green-600">

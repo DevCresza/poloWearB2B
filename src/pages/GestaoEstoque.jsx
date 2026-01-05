@@ -23,6 +23,7 @@ import {
   Search, Filter, Download, Plus, History, BarChart3
 } from 'lucide-react';
 import MovimentacaoEstoqueForm from '../components/estoque/MovimentacaoEstoqueForm';
+import { formatCurrency } from '@/utils/exportUtils';
 
 export default function GestaoEstoque() {
   const [produtos, setProdutos] = useState([]);
@@ -233,7 +234,7 @@ export default function GestaoEstoque() {
               <TrendingUp className="w-8 h-8 text-purple-600 opacity-80" />
             </div>
             <p className="text-sm text-gray-600">Valor em Estoque</p>
-            <p className="text-2xl font-bold text-purple-600">R$ {valorEstoque.toFixed(2)}</p>
+            <p className="text-2xl font-bold text-purple-600">{formatCurrency(valorEstoque)}</p>
           </CardContent>
         </Card>
       </div>

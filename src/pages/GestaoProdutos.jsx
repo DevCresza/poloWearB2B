@@ -404,11 +404,11 @@ export default function GestaoProdutos() {
                             <div className="text-sm">
                               {produto.tipo_venda === 'grade' ? (
                                 <>
-                                  <div className="font-semibold">R$ {produto.preco_grade_completa?.toFixed(2)}</div>
-                                  <div className="text-gray-500">R$ {produto.preco_por_peca?.toFixed(2)}/pç</div>
+                                  <div className="font-semibold">{formatCurrency(produto.preco_grade_completa)}</div>
+                                  <div className="text-gray-500">{formatCurrency(produto.preco_por_peca)}/pç</div>
                                 </>
                               ) : (
-                                <div className="font-semibold">R$ {produto.preco_por_peca?.toFixed(2)}</div>
+                                <div className="font-semibold">{formatCurrency(produto.preco_por_peca)}</div>
                               )}
                             </div>
                           </TableCell>

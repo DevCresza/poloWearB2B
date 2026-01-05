@@ -18,6 +18,7 @@ import {
 import { consultarCep, formatCepForDisplay } from '@/lib/cepHelpers';
 import { uploadAvatar, updateAvatar, getDefaultAvatar } from '@/lib/avatarHelpers';
 import AvatarEditor from '@/components/AvatarEditor';
+import { formatCurrency } from '@/utils/exportUtils';
 
 export default function MeuPerfil() {
   const [user, setUser] = useState(null);
@@ -307,7 +308,7 @@ export default function MeuPerfil() {
                 <DollarSign className="w-8 h-8 text-green-600" />
               </div>
               <p className="text-sm text-gray-600">Valor Total Comprado</p>
-              <p className="text-2xl font-bold text-gray-900">R$ {stats.valorTotal.toFixed(2)}</p>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.valorTotal)}</p>
             </CardContent>
           </Card>
 
@@ -543,12 +544,12 @@ export default function MeuPerfil() {
               <Separator />
               <div className="flex justify-between items-center py-2">
                 <span className="text-gray-600">Total em aberto:</span>
-                <span className="font-semibold text-orange-600">R$ {(user.total_em_aberto || 0).toFixed(2)}</span>
+                <span className="font-semibold text-orange-600">{formatCurrency(user.total_em_aberto || 0)}</span>
               </div>
               <Separator />
               <div className="flex justify-between items-center py-2">
                 <span className="text-gray-600">Total vencido:</span>
-                <span className="font-semibold text-red-600">R$ {(user.total_vencido || 0).toFixed(2)}</span>
+                <span className="font-semibold text-red-600">{formatCurrency(user.total_vencido || 0)}</span>
               </div>
             </>
           )}

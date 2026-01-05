@@ -172,7 +172,7 @@ export default function CarteiraFinanceira() {
           
           Cliente: ${user.nome_empresa || user.full_name}
           Pedido: #${pedido.id.slice(-8).toUpperCase()}
-          Valor: R$ ${selectedTitulo.valor.toFixed(2)}
+          Valor: ${formatCurrency(selectedTitulo.valor)}
           Vencimento: ${new Date(selectedTitulo.data_vencimento).toLocaleDateString('pt-BR')}
           
           Comprovante: ${uploadResult.file_url}
@@ -221,7 +221,7 @@ export default function CarteiraFinanceira() {
       await SendEmail({
         to: cliente.email,
         subject: `Comprovante Aprovado - Pedido #${pedido.id.slice(-8).toUpperCase()}`,
-        body: `Seu comprovante de pagamento foi aprovado!\n\nPedido: #${pedido.id.slice(-8).toUpperCase()}\nValor: R$ ${titulo.valor.toFixed(2)}`
+        body: `Seu comprovante de pagamento foi aprovado!\n\nPedido: #${pedido.id.slice(-8).toUpperCase()}\nValor: ${formatCurrency(titulo.valor)}`
       });
 
       toast.success('Comprovante aprovado!');
@@ -538,7 +538,7 @@ export default function CarteiraFinanceira() {
                       <div className="grid md:grid-cols-3 gap-2 text-sm">
                         <div>
                           <span className="text-gray-600">Valor:</span>
-                          <span className="font-bold ml-2">R$ {titulo.valor?.toFixed(2)}</span>
+                          <span className="font-bold ml-2">{formatCurrency(titulo.valor)}</span>
                         </div>
                         <div>
                           <span className="text-gray-600">Vencimento:</span>
@@ -682,7 +682,7 @@ export default function CarteiraFinanceira() {
             {selectedTitulo && (
               <div className="p-4 bg-gray-50 rounded-lg">
                 <p className="text-sm text-gray-600">Valor:</p>
-                <p className="text-2xl font-bold">R$ {selectedTitulo.valor?.toFixed(2)}</p>
+                <p className="text-2xl font-bold">{formatCurrency(selectedTitulo.valor)}</p>
                 <p className="text-sm text-gray-600 mt-2">
                   Vencimento: {new Date(selectedTitulo.data_vencimento).toLocaleDateString('pt-BR')}
                 </p>
@@ -746,7 +746,7 @@ export default function CarteiraFinanceira() {
               <div className="p-4 bg-gray-50 rounded-lg border">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm text-gray-600">Valor do título:</span>
-                  <span className="font-bold text-lg">R$ {tituloParaRecusar.valor?.toFixed(2)}</span>
+                  <span className="font-bold text-lg">{formatCurrency(tituloParaRecusar.valor)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Vencimento:</span>
