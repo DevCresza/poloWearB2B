@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Produto } from '@/api/entities';
 import { Pedido } from '@/api/entities';
 import { User } from '@/api/entities';
@@ -42,7 +42,7 @@ export default function SugestoesIA({ onAddToCart }) {
               dataUltimaCompra.set(item.produto_id, dataPedido);
             }
           });
-        } catch (e) {
+        } catch (_e) {
         }
       });
 
@@ -131,13 +131,13 @@ Retorne em JSON com formato:
           });
 
           setSugestoes(sugestoesComIA);
-        } catch (error) {
+        } catch (_error) {
           setSugestoes(produtosSugeridos);
         }
       } else {
         setSugestoes([]);
       }
-    } catch (error) {
+    } catch (_error) {
     } finally {
       setLoading(false);
     }

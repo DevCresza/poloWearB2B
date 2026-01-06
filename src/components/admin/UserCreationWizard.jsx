@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { PendingUser } from '@/api/entities';
 import { User } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';

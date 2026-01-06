@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Produto } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { MovimentacaoEstoque } from '@/api/entities';
@@ -87,7 +87,7 @@ export default function GestaoEstoque() {
       setProdutos(produtosList || []);
       setFornecedores(fornecedoresList || []);
       setMovimentacoes(movimentacoesList || []);
-    } catch (error) {
+    } catch (_error) {
     } finally {
       setLoading(false);
     }

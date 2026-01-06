@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Meta } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { User } from '@/api/entities';

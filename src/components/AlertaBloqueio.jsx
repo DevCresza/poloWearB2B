@@ -26,7 +26,7 @@ export default function AlertaBloqueio() {
         setShowModal(true);
         sessionStorage.setItem('bloqueio_visto', 'true');
       }
-    } catch (error) {
+    } catch (_error) {
     }
   };
 

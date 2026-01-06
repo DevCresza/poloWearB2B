@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Pedido } from '@/api/entities';
 import { toast } from 'sonner';
 import { Produto } from '@/api/entities'; // Not used in this file, but kept from original imports

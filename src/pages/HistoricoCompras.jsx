@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { User } from '@/api/entities';
 import { Pedido } from '@/api/entities';
 import { Produto } from '@/api/entities';
@@ -69,7 +69,7 @@ export default function HistoricoCompras() {
       setFornecedores(fornecedoresList || []);
 
       calculateStats(pedidosList, produtosList);
-    } catch (error) {
+    } catch (_error) {
     } finally {
       setLoading(false);
     }
@@ -102,7 +102,7 @@ export default function HistoricoCompras() {
             produtosMap[item.produto_id].ultima_compra = pedido.created_date;
           }
         });
-      } catch (e) {
+      } catch (_e) {
       }
     });
 
@@ -164,7 +164,7 @@ export default function HistoricoCompras() {
             categoriaMap[produto.categoria] += item.quantidade;
           }
         });
-      } catch (e) {
+      } catch (_e) {
       }
     });
 
@@ -246,7 +246,7 @@ export default function HistoricoCompras() {
       });
 
       setSugestoesIA(response);
-    } catch (error) {
+    } catch (_error) {
       toast.info('Não foi possível gerar sugestões no momento.');
     } finally {
       setLoadingSugestoes(false);
@@ -318,7 +318,7 @@ export default function HistoricoCompras() {
           `historico_compras_${new Date().toISOString().split('T')[0]}.csv`
         );
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao exportar dados.');
     }
   };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { User } from '@/api/entities';
 import { Pedido } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
@@ -52,7 +52,7 @@ export default function Carrinho() {
 
       setFornecedores(fornecedoresList || []);
       setProdutos(produtosList || []);
-    } catch (error) {
+    } catch (_error) {
     } finally {
       setLoading(false);
     }
@@ -76,7 +76,7 @@ export default function Carrinho() {
       if (!item.fotos) return null;
       const fotos = typeof item.fotos === 'string' ? JSON.parse(item.fotos) : item.fotos;
       return fotos && fotos.length > 0 ? fotos[0] : null;
-    } catch (e) {
+    } catch (_e) {
       return null;
     }
   };
@@ -375,7 +375,7 @@ export default function Carrinho() {
       if (novoCarrinho.length === 0) {
         navigate(createPageUrl('MeusPedidos'));
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao processar o pedido. Tente novamente.');
     } finally {
       setFinalizando(prev => ({ ...prev, [fornecedorId]: false }));

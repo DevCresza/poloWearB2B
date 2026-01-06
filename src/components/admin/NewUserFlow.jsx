@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { PendingUser } from '@/api/entities';
 import { User } from '@/api/entities';
 import { Alert, AlertDescription } from '@/components/ui/alert';

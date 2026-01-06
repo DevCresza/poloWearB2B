@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { User } from '@/api/entities';
 import { PendingUser } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';

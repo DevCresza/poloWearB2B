@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { User } from '@/api/entities';
 import { Pedido } from '@/api/entities';
 import { Produto } from '@/api/entities';
@@ -182,7 +182,7 @@ export default function PortalDashboard() {
       setProdutos(produtosList);
       setCarteira(carteiraList);
 
-    } catch (error) {
+    } catch (_error) {
     } finally {
       setLoading(false);
     }

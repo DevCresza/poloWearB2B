@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Carteira } from '@/api/entities';
 import { User } from '@/api/entities';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -95,7 +95,7 @@ export default function AlertasVencimento() {
       const alertasFiltrados = alertasAtivos.filter(a => !dismissedIds.includes(a.id));
 
       setAlertas(alertasFiltrados);
-    } catch (error) {
+    } catch (_error) {
     } finally {
       setLoading(false);
     }

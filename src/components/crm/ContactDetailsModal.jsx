@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Contact } from '@/api/entities';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -26,7 +26,7 @@ export default function ContactDetailsModal({ contact, onClose, onUpdate }) {
       });
       toast.success('Observações salvas com sucesso!');
       onUpdate();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao salvar observações.');
     } finally {
       setSaving(false);

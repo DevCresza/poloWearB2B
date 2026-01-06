@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,7 +47,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
       await Pedido.update(pedido.id, updateData);
       toast.info(`${tipo === 'nf' ? 'Nota Fiscal' : 'Boleto'} enviado com sucesso!`);
       onUpdate();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao fazer upload do arquivo.');
     } finally {
       setUploadingNF(false);
@@ -84,12 +84,12 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
       // Enviar notificação de mudança de status
       try {
         await base44.functions.invoke('notificarMudancaStatus', { pedidoId: pedido.id });
-      } catch (error) {
+      } catch (_error) {
       }
 
       toast.success('Pedido atualizado com sucesso!');
       onUpdate();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao atualizar pedido. Tente novamente.');
     } finally {
       setSalvando(false);

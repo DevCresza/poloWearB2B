@@ -19,7 +19,7 @@ const loadUserFromStorage = () => {
     if (savedUser) {
       try {
         currentUser = JSON.parse(savedUser);
-      } catch (error) {
+      } catch (_error) {
         localStorage.removeItem('currentUser');
       }
     }

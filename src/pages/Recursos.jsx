@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Recurso } from '@/api/entities';
 import { User } from '@/api/entities';
 import { Card, CardContent } from '@/components/ui/card';
@@ -54,7 +54,7 @@ export default function Recursos() {
       }
 
       setRecursos(recursosList || []);
-    } catch (error) {
+    } catch (_error) {
     } finally {
       setLoading(false);
     }
@@ -65,7 +65,7 @@ export default function Recursos() {
       await Recurso.update(recurso.id, {
         visualizacoes: (recurso.visualizacoes || 0) + 1
       });
-    } catch (error) {
+    } catch (_error) {
     }
 
     setSelectedRecurso(recurso);

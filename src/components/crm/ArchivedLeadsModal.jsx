@@ -39,7 +39,7 @@ export default function ArchivedLeadsModal({ open, onClose, onExport }) {
       });
 
       setArchivedLeads(result || []);
-    } catch (error) {
+    } catch (_error) {
     } finally {
       setLoading(false);
     }

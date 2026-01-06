@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { User } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,7 +54,7 @@ export default function GestaoClientes() {
     try {
       const usersList = await User.list();
       setUsers(usersList);
-    } catch (error) {
+    } catch (_error) {
     } finally {
       setLoading(false);
     }
@@ -77,7 +77,7 @@ export default function GestaoClientes() {
         await User.delete(userId);
         toast.success('Usuário excluído com sucesso.');
         loadUsers();
-      } catch (error) {
+      } catch (_error) {
         toast.error('Falha ao excluir o usuário. Tente novamente.');
       }
     }

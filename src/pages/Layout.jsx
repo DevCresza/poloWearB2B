@@ -1,6 +1,6 @@
 
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
@@ -43,7 +43,7 @@ export default function Layout({ children, currentPageName }) {
       try {
         const user = await User.me();
         setCurrentUser(user);
-      } catch (error) {
+      } catch (_error) {
         setCurrentUser(null);
         // Redireciona para login se não autenticado e está tentando acessar página protegida
         const portalPages = [
@@ -67,7 +67,7 @@ export default function Layout({ children, currentPageName }) {
       try {
         await User.logout();
         navigate('/Login');
-      } catch (error) {
+      } catch (_error) {
         toast.info('Não foi possível sair do sistema. Tente novamente.');
       }
     }

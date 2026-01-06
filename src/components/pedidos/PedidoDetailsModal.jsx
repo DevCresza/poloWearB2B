@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -45,7 +45,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       toast.success('Boleto enviado com sucesso!');
       setBoletoFile(null);
       onUpdate();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao enviar boleto');
     } finally {
       setUploading(false);
@@ -70,7 +70,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       toast.success('Nota Fiscal enviada com sucesso!');
       setNfFile(null);
       onUpdate();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao enviar nota fiscal');
     } finally {
       setUploading(false);
@@ -92,7 +92,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       await Pedido.update(pedido.id, updateData);
       toast.success('Status de pagamento atualizado!');
       onUpdate();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao atualizar status');
     }
   };
@@ -135,7 +135,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       await Pedido.update(pedido.id, updateData);
       onUpdate();
       toast.success('Confirmação registrada com sucesso!');
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao registrar confirmação');
     } finally {
       setConfirmando(false);
@@ -145,7 +145,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   let itens = [];
   try {
     itens = typeof pedido.itens === 'string' ? JSON.parse(pedido.itens) : pedido.itens;
-  } catch (e) {
+  } catch (_e) {
   }
 
   return (

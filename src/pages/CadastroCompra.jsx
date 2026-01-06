@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -91,7 +91,7 @@ export default function CadastroCompra() {
       } else {
         toast.error('CEP não encontrado.');
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao buscar CEP. Verifique sua conexão.');
     }
   };
@@ -116,7 +116,7 @@ export default function CadastroCompra() {
       } else {
         toast.error('CEP não encontrado.');
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao buscar CEP. Verifique sua conexão.');
     }
   };
@@ -247,7 +247,7 @@ Data: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`
       
       setSuccess(true);
       
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao enviar solicitação. Tente novamente.');
     } finally {
       setLoading(false);

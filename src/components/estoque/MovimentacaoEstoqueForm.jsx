@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -91,7 +91,7 @@ export default function MovimentacaoEstoqueForm({ produto, fornecedor, onClose, 
 
       toast.success('Movimentação registrada com sucesso!');
       onSuccess();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao registrar movimentação. Tente novamente.');
     } finally {
       setSalvando(false);

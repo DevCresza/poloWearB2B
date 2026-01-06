@@ -1,4 +1,3 @@
-import React from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +28,7 @@ export default function RecursoDetailsModal({ recurso, onClose, onEdit, onDelete
         await Recurso.delete(recurso.id);
         toast.success('Recurso excluído com sucesso!');
         onDelete();
-      } catch (error) {
+      } catch (_error) {
         toast.error('Erro ao excluir recurso.');
       }
     }
@@ -49,7 +48,7 @@ export default function RecursoDetailsModal({ recurso, onClose, onEdit, onDelete
             } else if (url.hostname.includes('youtu.be')) {
               videoId = url.pathname.slice(1);
             }
-          } catch (e) {
+          } catch (_e) {
           }
 
           if (videoId) {
@@ -118,7 +117,7 @@ export default function RecursoDetailsModal({ recurso, onClose, onEdit, onDelete
                 ))}
               </div>
             );
-          } catch (e) {
+          } catch (_e) {
             return <p className="text-gray-300">{recurso.conteudo}</p>;
           }
         }

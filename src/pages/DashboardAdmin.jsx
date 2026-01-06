@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { User } from '@/api/entities';
 import { Pedido } from '@/api/entities';
 import { Produto } from '@/api/entities';
@@ -145,7 +145,7 @@ export default function DashboardAdmin() {
         detalhes: atrasadosDetalhados
       });
 
-    } catch (error) {
+    } catch (_error) {
     } finally {
       setLoading(false);
     }
@@ -315,7 +315,7 @@ export default function DashboardAdmin() {
           produtosVendidos[key].quantidade += item.quantidade || 0;
           produtosVendidos[key].valor += (item.preco * item.quantidade) || 0;
         });
-      } catch (e) {
+      } catch (_e) {
       }
     });
 
@@ -442,7 +442,7 @@ export default function DashboardAdmin() {
       );
 
       toast.success('Relatório exportado com sucesso!');
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao exportar relatório');
     }
   };

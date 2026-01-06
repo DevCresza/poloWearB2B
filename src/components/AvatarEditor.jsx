@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import Cropper from 'react-easy-crop';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -88,7 +88,7 @@ export default function AvatarEditor({ open, onClose, imageSrc, onSave }) {
 
       onSave(croppedImageBlob);
       onClose();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao processar a imagem. Tente novamente.');
     } finally {
       setSaving(false);

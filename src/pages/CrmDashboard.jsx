@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Contact } from '@/api/entities';
 import { User } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,7 +32,7 @@ export default function CrmDashboard() {
     try {
       const contactsList = await Contact.list('-created_at');
       setContacts(contactsList || []); // Garantir que sempre seja array
-    } catch (error) {
+    } catch (_error) {
       setContacts([]); // Definir array vazio em caso de erro
     } finally {
       setLoading(false);
@@ -43,7 +43,7 @@ export default function CrmDashboard() {
     setFilters(prev => ({ ...prev, [filterType]: value }));
   };
 
-  const filteredContacts = React.useMemo(() => {
+  const filteredContacts = useMemo(() => {
     let filtered = contacts || [];
     
     if (searchTerm) {
@@ -72,7 +72,7 @@ export default function CrmDashboard() {
         ultimo_contato: new Date().toISOString()
       });
       loadContacts();
-    } catch (error) {
+    } catch (_error) {
     }
   };
 
@@ -122,7 +122,7 @@ export default function CrmDashboard() {
           `leads_crm_${new Date().toISOString().split('T')[0]}.csv`
         );
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao exportar dados.');
     }
   };
@@ -172,7 +172,7 @@ export default function CrmDashboard() {
       toast.success('Cliente criado com sucesso! Um email de boas-vindas foi enviado.');
       loadContacts();
 
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao criar cliente. Verifique se o email já não está cadastrado no sistema.');
     }
   };

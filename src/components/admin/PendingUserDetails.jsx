@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,7 +22,7 @@ export default function PendingUserDetails({ pendingUser, onClose, onUpdate, for
       toast.success(`Status atualizado para: ${newStatus}`);
       onUpdate();
       onClose();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Falha ao atualizar status.');
     } finally {
       setUpdating(false);
@@ -36,7 +36,7 @@ export default function PendingUserDetails({ pendingUser, onClose, onUpdate, for
         toast.success('Usuário pendente excluído com sucesso.');
         onUpdate();
         onClose();
-      } catch (error) {
+      } catch (_error) {
         toast.error('Falha ao excluir usuário.');
       }
     }

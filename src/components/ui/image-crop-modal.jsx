@@ -79,7 +79,7 @@ export default function ImageCropModal({ open, onClose, imageSrc, onCropComplete
       const croppedImageUrl = URL.createObjectURL(croppedImageBlob);
       onCropComplete(croppedImageUrl, croppedImageBlob);
       onClose();
-    } catch (e) {
+    } catch (_e) {
     }
   };
 

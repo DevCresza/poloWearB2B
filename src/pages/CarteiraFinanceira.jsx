@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { User } from '@/api/entities';
 import { Carteira } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
@@ -100,7 +100,7 @@ export default function CarteiraFinanceira() {
       }
 
       calculateStats(titulosList);
-    } catch (error) {
+    } catch (_error) {
     } finally {
       setLoading(false);
     }
@@ -184,7 +184,7 @@ export default function CarteiraFinanceira() {
       setComprovanteFile(null);
       setSelectedTitulo(null);
       loadData();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao enviar comprovante. Tente novamente.');
     } finally {
       setUploadingComprovante(false);
@@ -226,7 +226,7 @@ export default function CarteiraFinanceira() {
 
       toast.success('Comprovante aprovado!');
       loadData();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao aprovar comprovante');
     }
   };
@@ -270,7 +270,7 @@ export default function CarteiraFinanceira() {
       setTituloParaRecusar(null);
       setMotivoRecusa('');
       loadData();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao recusar comprovante');
     } finally {
       setProcessandoRecusa(false);
@@ -348,7 +348,7 @@ export default function CarteiraFinanceira() {
           `carteira_financeira_${new Date().toISOString().split('T')[0]}.csv`
         );
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao exportar dados.');
     }
   };

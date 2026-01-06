@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { WhatsappTemplate } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,7 +33,7 @@ export default function ConfigWhatsApp() {
     try {
       const list = await WhatsappTemplate.list('-created_at');
       setTemplates(list || []);
-    } catch (error) {
+    } catch (_error) {
     } finally {
       setLoading(false);
     }
@@ -51,7 +51,7 @@ export default function ConfigWhatsApp() {
       setEditingTemplate(null);
       setFormData({ nome: '', titulo: '', mensagem: '', ativo: true });
       loadTemplates();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao salvar template');
     }
   };
@@ -72,7 +72,7 @@ export default function ConfigWhatsApp() {
     try {
       await WhatsappTemplate.delete(id);
       loadTemplates();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao excluir template');
     }
   };

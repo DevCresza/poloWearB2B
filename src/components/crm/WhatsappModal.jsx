@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { WhatsappTemplate } from '@/api/entities';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -26,7 +26,7 @@ export default function WhatsappModal({ contacts, onClose }) {
     try {
       const templatesList = await WhatsappTemplate.list();
       setTemplates(templatesList.filter(t => t.ativo));
-    } catch (error) {
+    } catch (_error) {
     }
   };
 

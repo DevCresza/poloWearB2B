@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Pedido } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
@@ -54,7 +54,7 @@ export default function MeusPedidos() {
       setPedidos(pedidosList || []);
       setFornecedores(fornecedoresList || []);
       setCarteira(carteiraList || []);
-    } catch (error) {
+    } catch (_error) {
     } finally {
       setLoading(false);
     }
@@ -151,7 +151,7 @@ export default function MeusPedidos() {
         const pedidoAtualizado = await Pedido.get(pedidoId);
         setSelectedPedido(pedidoAtualizado);
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao registrar confirmação. Tente novamente.');
     }
   };
@@ -173,7 +173,7 @@ export default function MeusPedidos() {
       toast.success('Comprovante enviado com sucesso! Aguarde análise do financeiro.');
       loadData();
       setShowFinanceiroModal(false);
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao enviar comprovante. Tente novamente.');
     } finally {
       setUploadingComprovante(false);
@@ -204,7 +204,7 @@ export default function MeusPedidos() {
       setComprovanteFile(null);
       setSelectedPedido(null);
       loadData();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao enviar comprovante. Tente novamente.');
     } finally {
       setUploadingComprovante(false);

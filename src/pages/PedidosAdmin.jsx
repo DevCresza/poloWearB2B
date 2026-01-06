@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Pedido } from '@/api/entities';
 import { User } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
@@ -51,7 +51,7 @@ export default function PedidosAdmin() {
       setPedidos(pedidosList || []);
       setUsers(usersList || []);
       setFornecedores(fornecedoresList || []);
-    } catch (error) {
+    } catch (_error) {
     } finally {
       setLoading(false);
     }
@@ -99,7 +99,7 @@ export default function PedidosAdmin() {
           `pedidos_${new Date().toISOString().split('T')[0]}.csv`
         );
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao exportar dados.');
     }
   };
@@ -109,7 +109,7 @@ export default function PedidosAdmin() {
     try {
       await Pedido.update(pedidoId, { status: newStatus });
       await loadData();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Falha ao atualizar status.');
     } finally {
       setUpdatingPedidoId(null);
@@ -125,7 +125,7 @@ export default function PedidosAdmin() {
       };
       await Pedido.update(pedidoId, updateData);
       await loadData();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Falha ao atualizar status do pagamento.');
     } finally {
       setUpdatingPedidoId(null);
@@ -165,7 +165,7 @@ export default function PedidosAdmin() {
   };
 
   // Filtrar pedidos
-  const filteredPedidos = React.useMemo(() => {
+  const filteredPedidos = useMemo(() => {
     let filtered = pedidos || [];
     
     if (searchTerm) {

@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,7 +46,7 @@ export default function RecursoForm({ recurso, onClose, onSuccess }) {
       const result = await UploadFile({ file });
       const fileUrl = result.url || result.file_url;
       setFormData({ ...formData, [field]: fileUrl });
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao fazer upload do arquivo.');
     } finally {
       setUploadingFile(false);
@@ -102,7 +101,7 @@ export default function RecursoForm({ recurso, onClose, onSuccess }) {
 
       toast.success(recurso ? 'Conteúdo atualizado com sucesso!' : 'Conteúdo criado com sucesso!');
       onSuccess();
-    } catch (error) {
+    } catch (_error) {
       toast.error('Erro ao salvar Conteúdo. Tente novamente.');
     } finally {
       setSalvando(false);
