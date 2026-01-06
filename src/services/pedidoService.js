@@ -190,10 +190,6 @@ class PedidoService extends BaseService {
         updated_at: new Date().toISOString()
       });
 
-        pedidoId,
-        status: novoStatus
-      });
-
       return this.handleSuccess(updatedPedido);
     } catch (error) {
       return this.handleError(error);

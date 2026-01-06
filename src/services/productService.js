@@ -174,11 +174,6 @@ class ProductService extends BaseService {
         data_movimentacao: new Date().toISOString()
       });
 
-        produtoId,
-        anterior: produto.estoque_atual,
-        novo: novoEstoque
-      });
-
       return this.handleSuccess(updatedProduct);
     } catch (error) {
       return this.handleError(error);

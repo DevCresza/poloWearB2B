@@ -85,10 +85,6 @@ class ContactService extends BaseService {
         updated_at: new Date().toISOString()
       });
 
-        contactId,
-        status: novoStatus
-      });
-
       return this.handleSuccess(updated);
     } catch (error) {
       return this.handleError(error);
