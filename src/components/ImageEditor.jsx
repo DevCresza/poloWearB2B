@@ -119,10 +119,13 @@ export default function ImageEditor({
         rotation
       );
 
-      onSave(croppedImageBlob);
-      onClose();
+      // Aguardar o onSave terminar - o callback decide se fecha ou não
+      await Promise.resolve(onSave(croppedImageBlob));
+      // NÃO chamar onClose aqui - o callback onSave controla o fechamento
+      // Isso permite que o ImageUploader processe múltiplos arquivos em sequência
     } catch (_error) {
       toast.error('Erro ao processar a imagem. Tente novamente.');
+      onClose();
     } finally {
       setSaving(false);
     }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Upload, X, GripVertical } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
@@ -13,6 +13,9 @@ export default function ImageUploader({ images = [], onImagesChange, maxImages =
   const [currentImageToEdit, setCurrentImageToEdit] = useState(null);
   const [pendingFiles, setPendingFiles] = useState([]);
 
+  // Ref para acumular imagens durante uploads múltiplos (evita problema de closure stale)
+  const accumulatedImagesRef = useRef([]);
+
   const handleFileSelect = (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
@@ -24,6 +27,9 @@ export default function ImageUploader({ images = [], onImagesChange, maxImages =
     }
 
     const filesToProcess = files.slice(0, remainingSlots);
+
+    // Inicializar ref com imagens atuais para acumular durante uploads múltiplos
+    accumulatedImagesRef.current = [...images];
 
     // Converter primeiro arquivo para base64 e abrir editor
     const file = filesToProcess[0];
@@ -54,26 +60,41 @@ export default function ImageUploader({ images = [], onImagesChange, maxImages =
         throw new Error(result.error || 'Erro ao fazer upload');
       }
 
-      // Adicionar URL ao array de imagens (como string simples, pois são fotos gerais)
-      onImagesChange([...images, result.url]);
+      // Acumular no ref para manter estado atualizado entre uploads múltiplos
+      accumulatedImagesRef.current = [...accumulatedImagesRef.current, result.url];
+
+      // Capturar pendingFiles atual antes de qualquer operação assíncrona
+      const currentPendingFiles = [...pendingFiles];
 
       // Se houver mais arquivos pendentes, processar o próximo
-      if (pendingFiles.length > 0) {
-        const nextFile = pendingFiles[0];
+      if (currentPendingFiles.length > 0) {
+        const nextFile = currentPendingFiles[0];
+        // Atualizar pendingFiles ANTES de iniciar o reader
+        setPendingFiles(currentPendingFiles.slice(1));
+
         const reader = new FileReader();
         reader.onloadend = () => {
           setCurrentImageToEdit(reader.result);
-          setPendingFiles(pendingFiles.slice(1));
-          setShowEditor(true);
+          // Modal já está aberto, não precisa setar showEditor
         };
         reader.readAsDataURL(nextFile);
       } else {
+        // Todos os arquivos processados - atualizar estado final e fechar modal
+        onImagesChange(accumulatedImagesRef.current);
         setCurrentImageToEdit(null);
+        setShowEditor(false);
+        accumulatedImagesRef.current = [];
       }
     } catch (error) {
       toast.error(`Erro ao fazer upload da imagem: ${error.message}`);
+      // Em caso de erro, salvar as imagens já acumuladas
+      if (accumulatedImagesRef.current.length > images.length) {
+        onImagesChange(accumulatedImagesRef.current);
+      }
       setCurrentImageToEdit(null);
+      setShowEditor(false);
       setPendingFiles([]);
+      accumulatedImagesRef.current = [];
     } finally {
       setUploading(false);
     }
@@ -217,6 +238,11 @@ export default function ImageUploader({ images = [], onImagesChange, maxImages =
             setShowEditor(false);
             setCurrentImageToEdit(null);
             setPendingFiles([]);
+            // Se havia imagens acumuladas antes de fechar, salvar elas
+            if (accumulatedImagesRef.current.length > images.length) {
+              onImagesChange(accumulatedImagesRef.current);
+            }
+            accumulatedImagesRef.current = [];
           }}
           imageSrc={currentImageToEdit}
           onSave={handleSaveEditedImage}
