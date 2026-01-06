@@ -284,14 +284,14 @@ export default function UserManagement() {
                         </TableCell>
                         <TableCell>
                           <Select
-                            value={user.role}
+                            value={user.role || 'user'}
                             onValueChange={(newRole) => handleRoleChange(user.id, newRole)}
                             disabled={updatingUserId === user.id || currentUser.id === user.id}
                           >
-                            <SelectTrigger className="w-[120px]">
-                              <SelectValue />
+                            <SelectTrigger className="w-[130px]">
+                              <SelectValue placeholder="Selecione" />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent position="popper" sideOffset={5}>
                               <SelectItem value="admin">Admin</SelectItem>
                               <SelectItem value="user">Usuário</SelectItem>
                             </SelectContent>
