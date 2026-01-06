@@ -60,6 +60,12 @@ export default function PedidosFornecedor() {
   const [uploading, setUploading] = useState(false);
   const [novoStatusPagamento, setNovoStatusPagamento] = useState('');
 
+  // Estados para parcelas do boleto
+  const [qtdParcelas, setQtdParcelas] = useState(1);
+  const [parcelas, setParcelas] = useState([{ dataVencimento: '', boletoFile: null }]);
+  const [boletoUnico, setBoletoUnico] = useState(false);
+  const [boletoUnicoFile, setBoletoUnicoFile] = useState(null);
+
   useEffect(() => {
     loadPedidos(); // Changed from loadData to loadPedidos
   }, []);
@@ -215,15 +221,52 @@ export default function PedidosFornecedor() {
       return;
     }
 
+    // Validar se método é boleto e tem parcelas configuradas
+    const metodoPagamentoFinal = metodoPagamento || selectedPedido.metodo_pagamento;
+    const isBoleto = metodoPagamentoFinal === 'boleto' || metodoPagamentoFinal === 'boleto_faturado';
+
+    if (isBoleto) {
+      // Validar datas de vencimento
+      const datasInvalidas = parcelas.some(p => !p.dataVencimento);
+      if (datasInvalidas) {
+        toast.info('Informe a data de vencimento de todas as parcelas');
+        return;
+      }
+
+      // Validar boletos (se não for único, cada parcela precisa ter boleto)
+      if (!boletoUnico) {
+        const boletosIncompletos = parcelas.some(p => !p.boletoFile);
+        if (boletosIncompletos) {
+          toast.info('Envie o boleto de cada parcela ou marque "Arquivo único com todos os boletos"');
+          return;
+        }
+      } else if (!boletoUnicoFile) {
+        toast.info('Envie o arquivo único com todos os boletos');
+        return;
+      }
+    }
+
     setUploading(true);
     try {
       // Upload NF
       const nfUpload = await UploadFile({ file: nfFile });
-      
-      let boletoUrl = null;
-      if (boletoFile) {
-        const boletoUpload = await UploadFile({ file: boletoFile });
-        boletoUrl = boletoUpload.file_url;
+
+      // Upload dos boletos
+      let boletosUrls = [];
+      let boletoUnicoUrl = null;
+
+      if (isBoleto) {
+        if (boletoUnico && boletoUnicoFile) {
+          const upload = await UploadFile({ file: boletoUnicoFile });
+          boletoUnicoUrl = upload.file_url;
+        } else {
+          for (const parcela of parcelas) {
+            if (parcela.boletoFile) {
+              const upload = await UploadFile({ file: parcela.boletoFile });
+              boletosUrls.push(upload.file_url);
+            }
+          }
+        }
       }
 
       // Atualizar pedido
@@ -232,25 +275,54 @@ export default function PedidosFornecedor() {
         nf_url: nfUpload.file_url,
         nf_numero: nfNumero,
         nf_data_upload: new Date().toISOString(),
-        boleto_url: boletoUrl,
-        boleto_data_upload: boletoUrl ? new Date().toISOString() : null,
+        boleto_url: boletoUnicoUrl || boletosUrls[0] || null,
+        boleto_data_upload: (boletoUnicoUrl || boletosUrls.length > 0) ? new Date().toISOString() : null,
         metodo_pagamento_original: selectedPedido.metodo_pagamento,
-        metodo_pagamento: metodoPagamento || selectedPedido.metodo_pagamento
+        metodo_pagamento: metodoPagamentoFinal,
+        qtd_parcelas: isBoleto ? qtdParcelas : 1,
+        parcelas_info: isBoleto ? JSON.stringify(parcelas.map((p, i) => ({
+          numero: i + 1,
+          dataVencimento: p.dataVencimento,
+          boletoUrl: boletoUnicoUrl || boletosUrls[i] || null
+        }))) : null
       });
 
-      // Criar títulos na carteira financeira
-      const dataVencimento = new Date();
-      dataVencimento.setDate(dataVencimento.getDate() + 30); // 30 dias para vencimento
+      // Criar títulos na carteira financeira para cada parcela
+      const valorParcela = selectedPedido.valor_total / qtdParcelas;
 
-      await Carteira.create({
-        pedido_id: selectedPedido.id,
-        cliente_user_id: selectedPedido.comprador_user_id,
-        fornecedor_id: selectedPedido.fornecedor_id,
-        tipo: 'a_receber',
-        valor: selectedPedido.valor_total,
-        data_vencimento: dataVencimento.toISOString().split('T')[0],
-        status: 'pendente'
-      });
+      for (let i = 0; i < qtdParcelas; i++) {
+        const dataVencimentoParcela = isBoleto ? parcelas[i].dataVencimento : (() => {
+          const d = new Date();
+          d.setDate(d.getDate() + 30);
+          return d.toISOString().split('T')[0];
+        })();
+
+        await Carteira.create({
+          pedido_id: selectedPedido.id,
+          cliente_user_id: selectedPedido.comprador_user_id,
+          fornecedor_id: selectedPedido.fornecedor_id,
+          tipo: 'a_receber',
+          valor: valorParcela,
+          data_vencimento: dataVencimentoParcela,
+          status: 'pendente',
+          parcela_numero: i + 1,
+          total_parcelas: qtdParcelas,
+          boleto_url: boletoUnicoUrl || boletosUrls[i] || null,
+          descricao: qtdParcelas > 1 ? `Parcela ${i + 1}/${qtdParcelas} - NF #${nfNumero}` : `NF #${nfNumero}`
+        });
+      }
+
+      // Montar lista de parcelas para o email
+      const parcelasHtml = parcelas.map((p, i) => `
+        <tr>
+          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${i + 1}/${qtdParcelas}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${formatCurrency(valorParcela)}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${new Date(p.dataVencimento + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">
+            ${(boletoUnicoUrl || boletosUrls[i]) ? `<a href="${boletoUnicoUrl || boletosUrls[i]}" style="color: #4f46e5;">Baixar</a>` : '-'}
+          </td>
+        </tr>
+      `).join('');
 
       // Notificar cliente
       const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
@@ -267,21 +339,34 @@ export default function PedidosFornecedor() {
               <p>Seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi faturado!</p>
               <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
                 <p><strong>Nota Fiscal:</strong> #${nfNumero}</p>
-                <p><strong>Valor:</strong> ${formatCurrency(selectedPedido.valor_total)}</p>
-                <p><strong>Vencimento:</strong> ${dataVencimento.toLocaleDateString('pt-BR')}</p>
+                <p><strong>Valor Total:</strong> ${formatCurrency(selectedPedido.valor_total)}</p>
+                ${qtdParcelas > 1 ? `<p><strong>Parcelado em:</strong> ${qtdParcelas}x de ${formatCurrency(valorParcela)}</p>` : ''}
               </div>
+
+              ${isBoleto && qtdParcelas > 0 ? `
+                <h3 style="margin-top: 20px;">📅 Parcelas e Vencimentos</h3>
+                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                  <thead>
+                    <tr style="background: #f3f4f6;">
+                      <th style="padding: 8px; text-align: left;">Parcela</th>
+                      <th style="padding: 8px; text-align: left;">Valor</th>
+                      <th style="padding: 8px; text-align: left;">Vencimento</th>
+                      <th style="padding: 8px; text-align: left;">Boleto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${parcelasHtml}
+                  </tbody>
+                </table>
+              ` : ''}
+
               <div style="text-align: center; margin-top: 30px;">
                 <a href="${nfUpload.file_url}" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px;">
                   Baixar Nota Fiscal
                 </a>
-                ${boletoUrl ? `
-                  <a href="${boletoUrl}" style="display: inline-block; background: #10b981; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; margin-left: 10px;">
-                    Baixar Boleto
-                  </a>
-                ` : ''}
               </div>
               <p style="margin-top: 30px; font-size: 14px; color: #6b7280;">
-                Por favor, confirme o recebimento destes documentos no sistema.
+                Você receberá um lembrete por e-mail no vencimento de cada parcela.
               </p>
             </div>
           </div>
@@ -291,8 +376,9 @@ export default function PedidosFornecedor() {
       toast.success('Pedido faturado com sucesso!');
       setShowFaturarModal(false);
       resetFaturarForm();
-      loadPedidos(); // Changed from loadData
+      loadPedidos();
     } catch (error) {
+      console.error('Erro ao faturar:', error);
       toast.error('Erro ao faturar pedido');
     } finally {
       setUploading(false);
@@ -474,6 +560,42 @@ export default function PedidosFornecedor() {
     setBoletoFile(null);
     setNfNumero('');
     setMetodoPagamento('');
+    setQtdParcelas(1);
+    setParcelas([{ dataVencimento: '', boletoFile: null }]);
+    setBoletoUnico(false);
+    setBoletoUnicoFile(null);
+  };
+
+  // Função para atualizar quantidade de parcelas
+  const handleQtdParcelasChange = (qtd) => {
+    const novaQtd = parseInt(qtd) || 1;
+    setQtdParcelas(novaQtd);
+
+    // Calcular datas sugeridas (30 em 30 dias a partir de hoje)
+    const novasParcelas = [];
+    for (let i = 0; i < novaQtd; i++) {
+      const dataBase = new Date();
+      dataBase.setDate(dataBase.getDate() + (30 * (i + 1)));
+      novasParcelas.push({
+        dataVencimento: parcelas[i]?.dataVencimento || dataBase.toISOString().split('T')[0],
+        boletoFile: parcelas[i]?.boletoFile || null
+      });
+    }
+    setParcelas(novasParcelas);
+  };
+
+  // Função para atualizar data de uma parcela específica
+  const handleParcelaDataChange = (index, data) => {
+    const novasParcelas = [...parcelas];
+    novasParcelas[index] = { ...novasParcelas[index], dataVencimento: data };
+    setParcelas(novasParcelas);
+  };
+
+  // Função para atualizar boleto de uma parcela específica
+  const handleParcelaBoletoChange = (index, file) => {
+    const novasParcelas = [...parcelas];
+    novasParcelas[index] = { ...novasParcelas[index], boletoFile: file };
+    setParcelas(novasParcelas);
   };
 
   const resetEnvioForm = () => {
@@ -969,7 +1091,7 @@ export default function PedidosFornecedor() {
 
       {/* Modal de Faturamento */}
       <Dialog open={showFaturarModal} onOpenChange={setShowFaturarModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Faturar Pedido</DialogTitle>
           </DialogHeader>
@@ -998,26 +1120,20 @@ export default function PedidosFornecedor() {
             </div>
 
             <div>
-              <Label htmlFor="boletoFile">Upload do Boleto (opcional)</Label>
-              <Input
-                id="boletoFile"
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png,.crm"
-                onChange={(e) => setBoletoFile(e.target.files[0])}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                <strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM | Envie o boleto caso o pagamento seja via boleto bancário
-              </p>
-            </div>
-
-            <div>
               <Label htmlFor="metodoPagamento">Método de Pagamento</Label>
-              <Select value={metodoPagamento} onValueChange={setMetodoPagamento}>
+              <Select value={metodoPagamento} onValueChange={(value) => {
+                setMetodoPagamento(value);
+                // Se mudar para boleto, inicializar parcelas
+                if (value === 'boleto' || value === 'boleto_faturado') {
+                  handleQtdParcelasChange(1);
+                }
+              }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Manter método original" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="boleto">Boleto</SelectItem>
+                  <SelectItem value="boleto_faturado">Boleto Faturado (30 dias)</SelectItem>
                   <SelectItem value="a_vista">À Vista</SelectItem>
                   <SelectItem value="pix">PIX</SelectItem>
                 </SelectContent>
@@ -1027,11 +1143,120 @@ export default function PedidosFornecedor() {
               </p>
             </div>
 
-            <div className="flex justify-end gap-3">
+            {/* Seção de Parcelas - aparece quando método é boleto */}
+            {(metodoPagamento === 'boleto' || metodoPagamento === 'boleto_faturado' ||
+              (!metodoPagamento && (selectedPedido?.metodo_pagamento === 'boleto' || selectedPedido?.metodo_pagamento === 'boleto_faturado'))) && (
+              <div className="border rounded-lg p-4 bg-blue-50 space-y-4">
+                <h4 className="font-semibold text-blue-900 flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  Configuração de Parcelas do Boleto
+                </h4>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="qtdParcelas">Quantidade de Parcelas</Label>
+                    <Select value={String(qtdParcelas)} onValueChange={handleQtdParcelasChange}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
+                          <SelectItem key={n} value={String(n)}>{n}x</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-end">
+                    <p className="text-sm text-blue-800">
+                      <strong>Valor por parcela:</strong><br />
+                      {formatCurrency(selectedPedido?.valor_total / qtdParcelas)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Opção de upload único ou individual */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="boletoUnico"
+                    checked={boletoUnico}
+                    onChange={(e) => setBoletoUnico(e.target.checked)}
+                    className="rounded border-gray-300"
+                  />
+                  <Label htmlFor="boletoUnico" className="cursor-pointer text-sm">
+                    Arquivo único com todos os boletos (PDF com múltiplas páginas)
+                  </Label>
+                </div>
+
+                {boletoUnico ? (
+                  <div>
+                    <Label>Upload do arquivo com todos os boletos *</Label>
+                    <Input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,.crm"
+                      onChange={(e) => setBoletoUnicoFile(e.target.files[0])}
+                    />
+                    {boletoUnicoFile && (
+                      <p className="text-xs text-green-600 mt-1">Arquivo selecionado: {boletoUnicoFile.name}</p>
+                    )}
+                  </div>
+                ) : null}
+
+                {/* Parcelas individuais */}
+                <div className="space-y-3">
+                  <Label>Parcelas e Vencimentos *</Label>
+                  {parcelas.map((parcela, index) => (
+                    <div key={index} className="bg-white p-3 rounded-lg border border-blue-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge className="bg-blue-600">Parcela {index + 1}/{qtdParcelas}</Badge>
+                        <span className="text-sm text-gray-600">
+                          {formatCurrency(selectedPedido?.valor_total / qtdParcelas)}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs">Data de Vencimento *</Label>
+                          <Input
+                            type="date"
+                            value={parcela.dataVencimento}
+                            onChange={(e) => handleParcelaDataChange(index, e.target.value)}
+                            min={new Date().toISOString().split('T')[0]}
+                          />
+                        </div>
+                        {!boletoUnico && (
+                          <div>
+                            <Label className="text-xs">Boleto da Parcela *</Label>
+                            <Input
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png,.crm"
+                              onChange={(e) => handleParcelaBoletoChange(index, e.target.files[0])}
+                            />
+                            {parcela.boletoFile && (
+                              <p className="text-xs text-green-600 mt-1 truncate">
+                                {parcela.boletoFile.name}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <Alert className="bg-yellow-50 border-yellow-200">
+                  <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                  <AlertDescription className="text-yellow-800 text-sm">
+                    O cliente receberá um e-mail de cobrança automática no dia do vencimento de cada parcela.
+                  </AlertDescription>
+                </Alert>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => setShowFaturarModal(false)}>
                 Cancelar
               </Button>
-              <Button 
+              <Button
                 onClick={handleFaturar}
                 disabled={uploading}
                 className="bg-indigo-600 hover:bg-indigo-700"
