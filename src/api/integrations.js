@@ -1,5 +1,5 @@
 // Integrations - Usa Supabase quando configurado, senão usa mock
-import { isSupabaseConfigured } from '@/lib/supabase';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { Core as MockCore } from './mockIntegrations';
 import { supabaseIntegrations } from './supabaseIntegrations';
 
@@ -25,9 +25,32 @@ export const CreateFileSignedUrl = async (params) => {
   return MockCore.CreateFileSignedUrl(params);
 };
 
+// Envio de email via Edge Function do Supabase (Resend)
+export const SendEmail = async (params) => {
+  if (isSupabaseConfigured()) {
+    try {
+      const { data, error } = await supabase.functions.invoke('sendEmail', {
+        body: params
+      });
+
+      if (error) {
+        console.error('Erro ao enviar email via Edge Function:', error);
+        // Fallback para mock em caso de erro
+        return MockCore.SendEmail(params);
+      }
+
+      return data;
+    } catch (err) {
+      console.error('Erro ao chamar Edge Function sendEmail:', err);
+      // Fallback para mock em caso de erro
+      return MockCore.SendEmail(params);
+    }
+  }
+  return MockCore.SendEmail(params);
+};
+
 // Funções que ainda usam mock (não dependem de storage)
 export const InvokeLLM = (params) => MockCore.InvokeLLM(params);
-export const SendEmail = (params) => MockCore.SendEmail(params);
 export const GenerateImage = (params) => MockCore.GenerateImage(params);
 export const ExtractDataFromUploadedFile = (params) => MockCore.ExtractDataFromUploadedFile(params);
 
