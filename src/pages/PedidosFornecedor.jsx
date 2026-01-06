@@ -45,6 +45,7 @@ export default function PedidosFornecedor() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showBoletoModal, setShowBoletoModal] = useState(false);
   const [showStatusPagamentoModal, setShowStatusPagamentoModal] = useState(false);
+  const [showCancelarModal, setShowCancelarModal] = useState(false);
   
   // Forms
   const [motivoRecusa, setMotivoRecusa] = useState('');
@@ -59,6 +60,7 @@ export default function PedidosFornecedor() {
   
   const [uploading, setUploading] = useState(false);
   const [novoStatusPagamento, setNovoStatusPagamento] = useState('');
+  const [motivoCancelamento, setMotivoCancelamento] = useState('');
 
   // Estados para parcelas do boleto
   const [qtdParcelas, setQtdParcelas] = useState(1);
@@ -525,6 +527,52 @@ export default function PedidosFornecedor() {
       loadPedidos();
     } catch (error) {
       toast.error('Erro ao atualizar status');
+    }
+  };
+
+  // Handler para cancelar pedido
+  const handleCancelarPedido = async () => {
+    if (!motivoCancelamento) {
+      toast.info('Informe o motivo do cancelamento');
+      return;
+    }
+
+    try {
+      await Pedido.update(selectedPedido.id, {
+        status: 'cancelado',
+        motivo_cancelamento: motivoCancelamento,
+        data_cancelamento: new Date().toISOString()
+      });
+
+      // Notificar cliente
+      const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
+      await SendEmail({
+        from_name: 'POLO B2B',
+        to: cliente?.email,
+        subject: `❌ Pedido Cancelado - #${selectedPedido.id.slice(-8).toUpperCase()}`,
+        body: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); padding: 30px; text-align: center;">
+              <h1 style="color: white; margin: 0;">❌ Pedido Cancelado</h1>
+            </div>
+            <div style="padding: 30px; background: white;">
+              <p>O pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi cancelado.</p>
+              <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <strong>Motivo:</strong> ${motivoCancelamento}
+              </div>
+              <p><strong>Valor do pedido:</strong> ${formatCurrency(selectedPedido.valor_total)}</p>
+              <p style="margin-top: 20px;">Se tiver dúvidas, entre em contato conosco.</p>
+            </div>
+          </div>
+        `
+      });
+
+      toast.info('Pedido cancelado');
+      setShowCancelarModal(false);
+      setMotivoCancelamento('');
+      loadPedidos();
+    } catch (error) {
+      toast.error('Erro ao cancelar pedido');
     }
   };
 
@@ -1022,6 +1070,21 @@ export default function PedidosFornecedor() {
                         <Eye className="w-4 h-4 mr-2" />
                         Ver Detalhes
                       </Button>
+
+                      {/* Botão para cancelar pedido - aparece em todos status exceto cancelado e finalizado */}
+                      {!['cancelado', 'finalizado'].includes(pedido.status) && (
+                        <Button
+                          variant="outline"
+                          className="border-red-300 text-red-700 hover:bg-red-50"
+                          onClick={() => {
+                            setSelectedPedido(pedido);
+                            setShowCancelarModal(true);
+                          }}
+                        >
+                          <XCircle className="w-4 h-4 mr-2" />
+                          Cancelar Pedido
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -1428,9 +1491,11 @@ export default function PedidosFornecedor() {
                   <SelectItem value="em_analise">Em Análise (comprovante recebido)</SelectItem>
                   <SelectItem value="pago">Pago / Confirmado</SelectItem>
                   <SelectItem value="atrasado">Atrasado</SelectItem>
-                  <SelectItem value="cancelado">Cancelado</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-gray-500 mt-1">
+                Para cancelar o pedido, use o botão "Cancelar Pedido" na lista.
+              </p>
             </div>
 
             <div className="flex justify-end gap-3">
@@ -1438,13 +1503,70 @@ export default function PedidosFornecedor() {
                 setShowStatusPagamentoModal(false);
                 setNovoStatusPagamento('');
               }}>
-                Cancelar
+                Voltar
               </Button>
               <Button
                 onClick={handleAlterarStatusPagamento}
                 className="bg-blue-600 hover:bg-blue-700"
               >
                 Salvar Status
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Cancelamento de Pedido */}
+      <Dialog open={showCancelarModal} onOpenChange={setShowCancelarModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <XCircle className="w-5 h-5" />
+              Cancelar Pedido
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {selectedPedido && (
+              <Alert className="border-red-200 bg-red-50">
+                <AlertTriangle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-800">
+                  <strong>Atenção:</strong> Esta ação não pode ser desfeita. O cliente será notificado por e-mail.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {selectedPedido && (
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <p className="text-sm text-gray-600">Pedido #{selectedPedido.id.slice(-8).toUpperCase()}</p>
+                <p className="font-semibold text-lg">{formatCurrency(selectedPedido.valor_total)}</p>
+                <p className="text-sm text-gray-600">Status atual: {statusLabels[selectedPedido.status] || selectedPedido.status}</p>
+              </div>
+            )}
+
+            <div>
+              <Label htmlFor="motivoCancelamento">Motivo do Cancelamento *</Label>
+              <Textarea
+                id="motivoCancelamento"
+                value={motivoCancelamento}
+                onChange={(e) => setMotivoCancelamento(e.target.value)}
+                placeholder="Explique o motivo do cancelamento..."
+                rows={4}
+              />
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => {
+                setShowCancelarModal(false);
+                setMotivoCancelamento('');
+              }}>
+                Voltar
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleCancelarPedido}
+                disabled={!motivoCancelamento}
+              >
+                Confirmar Cancelamento
               </Button>
             </div>
           </div>
