@@ -338,10 +338,12 @@ export default function MeuPerfil() {
       <Card className="bg-slate-100 rounded-2xl shadow-neumorphic">
         <Tabs defaultValue="pessoal">
           <CardHeader>
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className={`grid w-full ${user.role === 'admin' ? 'grid-cols-3' : 'grid-cols-2'}`}>
               <TabsTrigger value="pessoal">Dados Pessoais</TabsTrigger>
               <TabsTrigger value="empresa">Dados da Empresa</TabsTrigger>
-              <TabsTrigger value="permissoes">Permissões</TabsTrigger>
+              {user.role === 'admin' && (
+                <TabsTrigger value="permissoes">Permissões</TabsTrigger>
+              )}
             </TabsList>
           </CardHeader>
 
@@ -493,29 +495,31 @@ export default function MeuPerfil() {
               </div>
             </TabsContent>
 
-            {/* Permissões */}
-            <TabsContent value="permissoes" className="space-y-4">
-              <Alert>
-                <Shield className="h-4 w-4" />
-                <AlertDescription>
-                  Suas permissões de acesso são gerenciadas pelos administradores do sistema.
-                  Entre em contato caso precise solicitar alterações.
-                </AlertDescription>
-              </Alert>
+            {/* Permissões - Apenas para Admin */}
+            {user.role === 'admin' && (
+              <TabsContent value="permissoes" className="space-y-4">
+                <Alert>
+                  <Shield className="h-4 w-4" />
+                  <AlertDescription>
+                    Suas permissões de acesso são gerenciadas pelos administradores do sistema.
+                    Entre em contato caso precise solicitar alterações.
+                  </AlertDescription>
+                </Alert>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {user.permissoes && Object.entries(user.permissoes).map(([key, value]) => (
-                  <div key={key} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <span className="text-sm text-gray-700 capitalize">
-                      {key.replace(/_/g, ' ')}
-                    </span>
-                    <Badge className={value ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
-                      {value ? 'Permitido' : 'Bloqueado'}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            </TabsContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {user.permissoes && Object.entries(user.permissoes).map(([key, value]) => (
+                    <div key={key} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <span className="text-sm text-gray-700 capitalize">
+                        {key.replace(/_/g, ' ')}
+                      </span>
+                      <Badge className={value ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                        {value ? 'Permitido' : 'Bloqueado'}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </TabsContent>
+            )}
           </CardContent>
         </Tabs>
       </Card>
