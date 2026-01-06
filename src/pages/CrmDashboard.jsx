@@ -78,8 +78,6 @@ export default function CrmDashboard() {
 
   const handleExport = async (format) => {
     try {
-      const filteredContacts = getFilteredContacts();
-
       // Preparar dados para exportação
       const exportData = filteredContacts.map(contact => ({
         nome: contact.nome,

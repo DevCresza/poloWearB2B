@@ -60,7 +60,7 @@ export default function PedidosAdmin() {
   const handleExport = async (format) => {
     try {
       // Preparar dados para exportação
-      const exportData = getFilteredPedidos().map(pedido => ({
+      const exportData = filteredPedidos.map(pedido => ({
         id: pedido.id.substring(0, 8),
         data: formatDateTime(pedido.created_date),
         cliente: userMap.get(pedido.comprador_user_id) || 'Desconhecido',

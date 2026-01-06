@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { SendEmail } from '@/api/integrations';
 import { CheckCircle, Send, User, Mail, Phone, Building, MapPin, AlertCircle, Store, DollarSign } from 'lucide-react';
 import { Contact } from '@/api/entities';
+import { toast } from 'sonner';
 
 export default function ContactForm() {
   const [formData, setFormData] = useState({
