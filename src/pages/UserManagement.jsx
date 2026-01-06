@@ -14,7 +14,8 @@ import { Shield, LogIn, Users as UsersIcon, Plus, Edit, ExternalLink, Copy, Chec
 import UserCreationWizard from '../components/admin/UserCreationWizard';
 import PendingUserDetails from '../components/admin/PendingUserDetails';
 import { toast } from 'sonner';
-import ClientForm from '../components/admin/ClientForm'; // New import for editing users
+import ClientForm from '../components/admin/ClientForm';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -128,10 +129,24 @@ export default function UserManagement() {
     }
     if (window.confirm(`Tem certeza que deseja excluir o usuário "${userName}"? Esta ação não pode ser desfeita.`)) {
       try {
+        // 1. Deletar do Supabase Auth via Edge Function
+        if (isSupabaseConfigured()) {
+          const { error: authError } = await supabase.functions.invoke('deleteAuthUser', {
+            body: { userId }
+          });
+
+          if (authError) {
+            console.error('Erro ao deletar do Auth:', authError);
+            // Continuar mesmo se falhar no Auth (pode já ter sido deletado)
+          }
+        }
+
+        // 2. Deletar da tabela users
         await User.delete(userId);
         toast.success('Usuário excluído com sucesso.');
         loadData();
       } catch (error) {
+        console.error('Erro ao excluir usuário:', error);
         toast.error('Falha ao excluir o usuário. Tente novamente.');
       }
     }
