@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Produto } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
+import { User } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,9 @@ import { Package, DollarSign, Palette, Ruler, Video, Calendar, AlertTriangle, Sa
 export default function ProductForm({ produto, onSuccess, onCancel }) {
   const [submitting, setSubmitting] = useState(false); // Renamed from 'loading'
   const [fornecedores, setFornecedores] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isUserFornecedor, setIsUserFornecedor] = useState(false);
+  const [userFornecedorId, setUserFornecedorId] = useState(null);
   
   const [formData, setFormData] = useState(produto || {
     nome: '',
@@ -161,9 +165,40 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
 
   const loadFornecedores = async () => {
     try {
-      const fornecedoresList = await Fornecedor.list();
-      setFornecedores(fornecedoresList);
+      // Carregar usuário atual
+      const user = await User.me();
+      setCurrentUser(user);
+
+      // Verificar se é usuário fornecedor
+      if (user.tipo_negocio === 'fornecedor') {
+        setIsUserFornecedor(true);
+
+        // Buscar o fornecedor associado ao usuário
+        const fornecedoresDoUsuario = await Fornecedor.filter({ responsavel_user_id: user.id });
+
+        if (fornecedoresDoUsuario && fornecedoresDoUsuario.length > 0) {
+          const fornecedor = fornecedoresDoUsuario[0];
+          setFornecedores([fornecedor]);
+          setUserFornecedorId(fornecedor.id);
+
+          // Se for novo produto, pré-selecionar o fornecedor automaticamente
+          if (!produto) {
+            setFormData(prev => ({
+              ...prev,
+              fornecedor_id: fornecedor.id
+            }));
+          }
+        } else {
+          toast.error('Nenhum fornecedor associado ao seu usuário. Contate o administrador.');
+          setFornecedores([]);
+        }
+      } else {
+        // Admin vê todos os fornecedores
+        const fornecedoresList = await Fornecedor.list();
+        setFornecedores(fornecedoresList);
+      }
     } catch (error) {
+      console.error('Erro ao carregar fornecedores:', error);
     }
   };
 
@@ -427,8 +462,9 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                   <Select
                     value={formData.fornecedor_id || undefined}
                     onValueChange={(value) => setFormData({...formData, fornecedor_id: value})}
+                    disabled={isUserFornecedor}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={isUserFornecedor ? 'bg-gray-100' : ''}>
                       <SelectValue placeholder="Selecione o fornecedor" />
                     </SelectTrigger>
                     <SelectContent>
@@ -439,6 +475,9 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                       ))}
                     </SelectContent>
                   </Select>
+                  {isUserFornecedor && (
+                    <p className="text-xs text-gray-500">Fornecedor associado à sua conta</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
