@@ -474,10 +474,25 @@ export default function MeusPedidos() {
                       )}
 
                       {pedido.codigo_rastreio && (
-                        <div className="flex items-center gap-2 text-sm">
+                        <div className="flex items-center gap-2 text-sm flex-wrap">
                           <Truck className="w-4 h-4 text-orange-600" />
                           <span className="text-gray-600">Rastreio:</span>
                           <code className="bg-gray-200 px-2 py-1 rounded">{pedido.codigo_rastreio}</code>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs rounded-lg"
+                            onClick={() => {
+                              if (pedido.link_rastreio) {
+                                window.open(pedido.link_rastreio, '_blank');
+                              } else {
+                                window.open(`https://www.google.com/search?q=${encodeURIComponent(pedido.codigo_rastreio)}`, '_blank');
+                              }
+                            }}
+                          >
+                            <Truck className="w-3 h-3 mr-1" />
+                            Rastrear Pedido
+                          </Button>
                         </div>
                       )}
 
@@ -665,6 +680,53 @@ export default function MeusPedidos() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Informações de Transporte */}
+              {(selectedPedido.transportadora || selectedPedido.codigo_rastreio) && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Truck className="w-5 h-5 text-orange-600" />
+                      Informações de Transporte
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {selectedPedido.transportadora && (
+                      <p className="text-gray-700">
+                        <strong>Transportadora:</strong> {selectedPedido.transportadora}
+                      </p>
+                    )}
+                    {selectedPedido.codigo_rastreio && (
+                      <div className="space-y-2">
+                        <p className="text-gray-700">
+                          <strong>Código de Rastreio:</strong>{' '}
+                          <code className="bg-gray-200 px-2 py-1 rounded">{selectedPedido.codigo_rastreio}</code>
+                        </p>
+                        <Button
+                          variant="outline"
+                          className="rounded-xl"
+                          onClick={() => {
+                            if (selectedPedido.link_rastreio) {
+                              window.open(selectedPedido.link_rastreio, '_blank');
+                            } else {
+                              window.open(`https://www.google.com/search?q=${encodeURIComponent(selectedPedido.codigo_rastreio)}`, '_blank');
+                            }
+                          }}
+                        >
+                          <Truck className="w-4 h-4 mr-2" />
+                          Rastrear Pedido
+                        </Button>
+                      </div>
+                    )}
+                    {selectedPedido.data_prevista_entrega && (
+                      <p className="text-gray-700">
+                        <strong>Previsão de Entrega:</strong>{' '}
+                        {new Date(selectedPedido.data_prevista_entrega).toLocaleDateString('pt-BR')}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Endereço de Entrega */}
               {selectedPedido.endereco_entrega && (

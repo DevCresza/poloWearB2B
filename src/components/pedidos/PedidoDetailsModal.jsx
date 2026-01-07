@@ -329,16 +329,20 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                   {pedido.codigo_rastreio && (
                     <div className="mt-2">
                       <p className="text-gray-700">Código de Rastreio: <strong>{pedido.codigo_rastreio}</strong></p>
-                      {pedido.link_rastreio && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="mt-2"
-                          onClick={() => window.open(pedido.link_rastreio, '_blank')}
-                        >
-                          Rastrear Pedido
-                        </Button>
-                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2"
+                        onClick={() => {
+                          if (pedido.link_rastreio) {
+                            window.open(pedido.link_rastreio, '_blank');
+                          } else {
+                            window.open(`https://www.google.com/search?q=${encodeURIComponent(pedido.codigo_rastreio)}`, '_blank');
+                          }
+                        }}
+                      >
+                        Rastrear Pedido
+                      </Button>
                     </div>
                   )}
                 </div>
