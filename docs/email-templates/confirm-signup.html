@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confirmar Email - POLO B2B</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f4f5; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+
+          <!-- Header com gradiente -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); padding: 40px 40px 30px 40px; text-align: center;">
+              <img src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68f7cbd8537575fa5229f1e6/e064af0f6_image.png" alt="POLO Wear" width="80" height="80" style="margin-bottom: 16px;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;">Bem-vindo!</h1>
+              <p style="color: #a7f3d0; margin: 8px 0 0 0; font-size: 16px;">Portal B2B POLO Wear</p>
+            </td>
+          </tr>
+
+          <!-- Conteudo -->
+          <tr>
+            <td style="padding: 40px;">
+              <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">
+                Ola,
+              </p>
+
+              <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">
+                Obrigado por se cadastrar no <strong>Portal B2B POLO Wear</strong>!
+              </p>
+
+              <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 32px 0;">
+                Para ativar sua conta e comecar a fazer pedidos, confirme seu email clicando no botao abaixo:
+              </p>
+
+              <!-- Botao -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td align="center">
+                    <a href="{{ .ConfirmationURL }}" style="display: inline-block; background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: #ffffff; text-decoration: none; padding: 16px 48px; border-radius: 8px; font-size: 16px; font-weight: 600; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);">
+                      Confirmar Meu Email
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Info box -->
+              <div style="background-color: #ecfdf5; border-left: 4px solid #10b981; padding: 16px; margin: 32px 0; border-radius: 0 8px 8px 0;">
+                <p style="color: #065f46; font-size: 14px; margin: 0;">
+                  Apos confirmar, voce tera acesso ao catalogo de produtos, podera fazer pedidos e acompanhar suas compras.
+                </p>
+              </div>
+
+              <!-- Link alternativo -->
+              <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 24px 0 8px 0;">
+                Se o botao nao funcionar, copie e cole o link abaixo no seu navegador:
+              </p>
+              <p style="background-color: #f3f4f6; padding: 12px; border-radius: 6px; word-break: break-all; margin: 0;">
+                <a href="{{ .ConfirmationURL }}" style="color: #10b981; font-size: 13px; text-decoration: none;">{{ .ConfirmationURL }}</a>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Divisor -->
+          <tr>
+            <td style="padding: 0 40px;">
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 0;">
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 24px 40px 32px 40px; text-align: center;">
+              <p style="color: #9ca3af; font-size: 13px; margin: 0 0 8px 0;">
+                Este email foi enviado automaticamente pelo sistema.
+              </p>
+              <p style="color: #9ca3af; font-size: 13px; margin: 0 0 16px 0;">
+                Se voce nao criou esta conta, ignore este email.
+              </p>
+              <p style="color: #6b7280; font-size: 14px; font-weight: 500; margin: 0;">
+                POLO Wear - Portal B2B
+              </p>
+              <p style="color: #9ca3af; font-size: 12px; margin: 8px 0 0 0;">
+                2025 Todos os direitos reservados
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
