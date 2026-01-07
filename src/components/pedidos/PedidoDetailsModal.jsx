@@ -344,12 +344,19 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                 </div>
               )}
 
-              {pedido.status === 'em_transporte' || pedido.status === 'finalizado' ? (
-                !pedido.cliente_confirmou_recebimento && currentUser?.tipo_negocio === 'multimarca' ? (
+              {(pedido.status === 'em_transporte' || pedido.status === 'finalizado') && (
+                pedido.cliente_confirmou_recebimento ? (
+                  <Alert className="border-green-200 bg-green-50">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <AlertDescription className="text-green-800">
+                      Recebimento confirmado pelo cliente
+                    </AlertDescription>
+                  </Alert>
+                ) : currentUser?.tipo_negocio === 'multimarca' ? (
                   <Alert className="border-green-200 bg-green-50">
                     <AlertDescription className="flex items-center justify-between">
                       <span>Confirme o recebimento do produto:</span>
-                      <Button 
+                      <Button
                         onClick={() => handleConfirmarRecebimento('produto')}
                         disabled={confirmando}
                         className="bg-green-600"
@@ -360,14 +367,14 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                     </AlertDescription>
                   </Alert>
                 ) : (
-                  <Alert className="border-green-200 bg-green-50">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    <AlertDescription className="text-green-800">
-                      Recebimento confirmado pelo cliente
+                  <Alert className="border-yellow-200 bg-yellow-50">
+                    <Clock className="h-4 w-4 text-yellow-600" />
+                    <AlertDescription className="text-yellow-800">
+                      Aguardando confirmação de recebimento pelo cliente
                     </AlertDescription>
                   </Alert>
                 )
-              ) : null}
+              )}
             </TabsContent>
 
             {/* Tab: Pagamento */}
