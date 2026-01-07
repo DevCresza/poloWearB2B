@@ -55,6 +55,7 @@ export default function PedidosFornecedor() {
   const [nfNumero, setNfNumero] = useState('');
   const [transportadora, setTransportadora] = useState('');
   const [codigoRastreio, setCodigoRastreio] = useState('');
+  const [linkRastreio, setLinkRastreio] = useState('');
   const [dataEnvio, setDataEnvio] = useState('');
   
   const [uploading, setUploading] = useState(false);
@@ -397,6 +398,7 @@ export default function PedidosFornecedor() {
         status: 'em_transporte',
         transportadora,
         codigo_rastreio: codigoRastreio,
+        link_rastreio: linkRastreio || null,
         data_envio_real: dataEnvio
       });
 
@@ -653,6 +655,7 @@ export default function PedidosFornecedor() {
   const resetEnvioForm = () => {
     setTransportadora('');
     setCodigoRastreio('');
+    setLinkRastreio('');
     setDataEnvio('');
   };
 
@@ -1360,6 +1363,19 @@ export default function PedidosFornecedor() {
                 onChange={(e) => setCodigoRastreio(e.target.value)}
                 placeholder="Ex: BR123456789BR"
               />
+            </div>
+
+            <div>
+              <Label htmlFor="linkRastreio">Link de Rastreio</Label>
+              <Input
+                id="linkRastreio"
+                value={linkRastreio}
+                onChange={(e) => setLinkRastreio(e.target.value)}
+                placeholder="Cole o link de rastreio da transportadora"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Cole o link direto do site da transportadora para o cliente rastrear
+              </p>
             </div>
 
             <div>

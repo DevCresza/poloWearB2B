@@ -18,6 +18,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
     data_prevista_entrega: pedido.data_prevista_entrega || '',
     transportadora: pedido.transportadora || '',
     codigo_rastreio: pedido.codigo_rastreio || '',
+    link_rastreio: pedido.link_rastreio || '',
     motivo_recusa: pedido.motivo_recusa || '',
     observacoes_fornecedor: pedido.observacoes_fornecedor || ''
   });
@@ -194,6 +195,19 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
                   onChange={(e) => setFormData({ ...formData, codigo_rastreio: e.target.value })}
                   placeholder="Ex: BR123456789BR"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="link_rastreio">Link de Rastreio</Label>
+                <Input
+                  id="link_rastreio"
+                  value={formData.link_rastreio}
+                  onChange={(e) => setFormData({ ...formData, link_rastreio: e.target.value })}
+                  placeholder="Cole o link de rastreio da transportadora"
+                />
+                <p className="text-xs text-gray-500">
+                  Link direto do site da transportadora para o cliente rastrear
+                </p>
               </div>
             </>
           )}
