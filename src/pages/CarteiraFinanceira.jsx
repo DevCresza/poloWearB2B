@@ -170,7 +170,7 @@ export default function CarteiraFinanceira() {
         body: `
           Um novo comprovante de pagamento foi enviado pelo cliente.
           
-          Cliente: ${user.nome_empresa || user.full_name}
+          Cliente: ${user.empresa || user.full_name}
           Pedido: #${pedido.id.slice(-8).toUpperCase()}
           Valor: ${formatCurrency(selectedTitulo.valor)}
           Vencimento: ${new Date(selectedTitulo.data_vencimento).toLocaleDateString('pt-BR')}

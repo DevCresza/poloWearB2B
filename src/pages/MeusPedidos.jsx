@@ -1,10 +1,10 @@
 
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
 import { Pedido } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { User } from '@/api/entities';
 import { Carteira } from '@/api/entities';
+import { UploadFile } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -160,7 +160,7 @@ export default function MeusPedidos() {
     setUploadingComprovante(true);
     try {
       // Upload do arquivo
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_url } = await UploadFile({ file });
 
       // Atualizar título com comprovante
       await Carteira.update(tituloId, {
@@ -190,7 +190,7 @@ export default function MeusPedidos() {
     setUploadingComprovante(true);
     try {
       // Upload do arquivo
-      const { file_url } = await base44.integrations.Core.UploadFile({ file: comprovanteFile });
+      const { file_url } = await UploadFile({ file: comprovanteFile });
 
       // Atualizar pedido com comprovante
       await Pedido.update(selectedPedido.id, {

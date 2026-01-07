@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sparkles, TrendingUp, Clock, Star, ShoppingCart } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
+import { InvokeLLM } from '@/api/integrations';
 
 export default function SugestoesIA({ onAddToCart }) {
   const [sugestoes, setSugestoes] = useState([]);
@@ -100,7 +100,7 @@ Retorne em JSON com formato:
 [{"produto_nome": "...", "motivo": "...", "beneficio": "..."}]
           `;
 
-          const iaResponse = await base44.integrations.Core.InvokeLLM({
+          const iaResponse = await InvokeLLM({
             prompt: prompt,
             response_json_schema: {
               type: "object",

@@ -114,16 +114,21 @@ export default function GestaoMetas() {
       // Usar o menor percentual como percentual geral
       const percentualAtingido = Math.min(percentualValor, percentualPecas);
 
-      let status = 'abaixo';
-      if (percentualAtingido >= 100) status = 'superada';
-      else if (percentualAtingido >= 90) status = 'atingida';
-      else if (percentualAtingido >= 70) status = 'atencao';
+      // Status para exibição na UI
+      let displayStatus = 'abaixo';
+      if (percentualAtingido >= 100) displayStatus = 'superada';
+      else if (percentualAtingido >= 90) displayStatus = 'atingida';
+      else if (percentualAtingido >= 70) displayStatus = 'atencao';
+
+      // Status para o banco de dados (valores válidos: ativa, atingida, nao_atingida, cancelada)
+      let dbStatus = 'ativa';
+      if (percentualAtingido >= 90) dbStatus = 'atingida';
 
       await Meta.update(meta.id, {
         valor_atual: valorRealizado,
         pecas_realizadas: pecasRealizadas,
         percentual_atingido: percentualAtingido,
-        status: status
+        status: dbStatus
       });
 
       // Atualizar no estado local (usando nomes amigáveis para a UI)
@@ -132,7 +137,7 @@ export default function GestaoMetas() {
       meta.percentual_atingido = percentualAtingido;
       meta.percentual_valor = percentualValor; // Para exibição na UI
       meta.percentual_pecas = percentualPecas; // Para exibição na UI
-      meta.status = status;
+      meta.status = displayStatus; // Status de exibição para UI
     } catch (error) {
     }
   };
@@ -250,7 +255,7 @@ export default function GestaoMetas() {
     }
     if (meta.user_id) {
       const cliente = clientes.find(c => c.id === meta.user_id);
-      return cliente?.nome_empresa || cliente?.full_name || 'Cliente';
+      return cliente?.empresa || cliente?.full_name || 'Cliente';
     }
     return 'Meta Geral';
   };
@@ -543,7 +548,7 @@ export default function GestaoMetas() {
                   <SelectContent>
                     {clientes.map(c => (
                       <SelectItem key={c.id} value={c.id}>
-                        {c.nome_empresa || c.full_name}
+                        {c.empresa || c.full_name}
                       </SelectItem>
                     ))}
                   </SelectContent>

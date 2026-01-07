@@ -37,7 +37,7 @@ export default function GestaoClientes() {
       filtered = filtered.filter(user =>
         user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.nome_empresa?.toLowerCase().includes(searchTerm.toLowerCase())
+        user.empresa?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
@@ -190,7 +190,7 @@ export default function GestaoClientes() {
                       <TableCell>
                         <div>
                           <div className="font-medium">{user.full_name}</div>
-                          <div className="text-sm text-gray-600">{user.nome_empresa}</div>
+                          <div className="text-sm text-gray-600">{user.empresa}</div>
                         </div>
                       </TableCell>
                       <TableCell>

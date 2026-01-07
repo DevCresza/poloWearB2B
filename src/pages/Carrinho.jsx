@@ -317,10 +317,7 @@ export default function Carrinho() {
         categoria: 'Pedido'
       });
 
-      try {
-        await base44.functions.invoke('notificarPedidoFornecedor', { pedidoId: pedido.id });
-      } catch (notifError) {
-      }
+      // Notificação ao fornecedor é feita via SendEmail após criação do pedido
 
       // Remover itens do carrinho
       const novoCarrinho = carrinho.filter(item => {

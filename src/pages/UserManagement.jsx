@@ -288,7 +288,7 @@ export default function UserManagement() {
                         <TableCell>
                           {user.tipo_negocio === 'fornecedor'
                             ? `Fornecedor: ${fornecedorMap.get(user.fornecedor_id) || 'N/A'}`
-                            : user.nome_empresa || 'Pessoa Física'}
+                            : user.empresa || 'Pessoa Física'}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">

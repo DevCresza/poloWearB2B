@@ -71,17 +71,13 @@ export default function MovimentacaoEstoqueForm({ produto, fornecedor, onClose, 
       // Criar movimentação
       await MovimentacaoEstoque.create({
         produto_id: produto.id,
-        fornecedor_id: produto.fornecedor_id,
-        tipo_movimentacao: formData.tipo_movimentacao,
-        quantidade: quantidadeMovimentacao,
+        tipo: formData.tipo_movimentacao,
+        quantidade_grades: quantidadeMovimentacao,
         quantidade_anterior: estoqueAnterior,
         quantidade_atual: estoqueNovo,
         motivo: formData.motivo,
-        usuario_id: currentUser.id,
-        observacoes: formData.observacoes,
-        documento: formData.documento,
-        valor_unitario: produto.custo_por_peca || 0,
-        valor_total: (produto.custo_por_peca || 0) * Math.abs(quantidadeMovimentacao) * (produto.total_pecas_grade || 0)
+        user_id: currentUser.id,
+        observacoes: formData.observacoes
       });
 
       // Atualizar estoque do produto

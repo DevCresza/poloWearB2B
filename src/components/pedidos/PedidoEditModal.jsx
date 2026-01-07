@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Pedido } from '@/api/entities';
-import { base44 } from '@/api/base44Client';
+import { UploadFile } from '@/api/integrations';
 import { Save, X, Upload, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -33,7 +33,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
     }
 
     try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_url } = await UploadFile({ file });
       
       const updateData = {};
       if (tipo === 'nf') {
@@ -81,11 +81,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
 
       await Pedido.update(pedido.id, updateData);
 
-      // Enviar notificação de mudança de status
-      try {
-        await base44.functions.invoke('notificarMudancaStatus', { pedidoId: pedido.id });
-      } catch (_error) {
-      }
+      // Notificação de mudança de status é feita via SendEmail quando necessário
 
       toast.success('Pedido atualizado com sucesso!');
       onUpdate();

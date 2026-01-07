@@ -596,7 +596,7 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
                               htmlFor={`cliente-${cliente.id}`}
                               className="font-medium text-gray-900 cursor-pointer"
                             >
-                              {cliente.nome_empresa || cliente.full_name}
+                              {cliente.empresa || cliente.full_name}
                             </label>
                             <p className="text-sm text-gray-600">{cliente.email}</p>
                             {cliente.codigo_cliente && (

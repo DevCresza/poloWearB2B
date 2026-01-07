@@ -21,9 +21,8 @@ import {
   Package, Clock, CheckCircle, XCircle, Calendar, DollarSign,
   FileText, Upload, Download, Filter, Eye, Edit, Truck, AlertTriangle
 } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
-import { formatCurrency } from '@/utils/exportUtils';
+import { formatCurrency, exportToPDF, formatDate } from '@/utils/exportUtils';
 
 export default function PedidosFornecedor() {
   const [user, setUser] = useState(null);
@@ -540,8 +539,7 @@ export default function PedidosFornecedor() {
     try {
       await Pedido.update(selectedPedido.id, {
         status: 'cancelado',
-        motivo_cancelamento: motivoCancelamento,
-        data_cancelamento: new Date().toISOString()
+        motivo_recusa: motivoCancelamento
       });
 
       // Notificar cliente
@@ -576,31 +574,37 @@ export default function PedidosFornecedor() {
     }
   };
 
-  const handleExportPDF = async () => {
-    try {
-      // Se é admin, exporta todos os pedidos. Se é fornecedor, exporta apenas os seus.
-      const params = {};
-      if (user?.role !== 'admin' && fornecedorAtual) {
-        params.fornecedor_id = fornecedorAtual.id;
-      }
-
-      const response = await base44.functions.invoke('exportPedidosFornecedor', params);
-
-      const blob = new Blob([response.data], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `pedidos-${new Date().toISOString().split('T')[0]}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      a.remove();
-
-      toast.success('PDF exportado com sucesso!');
-    } catch (error) {
-      console.error('Erro ao exportar PDF:', error);
-      toast.error('Erro ao exportar relatório');
+  const handleExportPDF = () => {
+    // Filtrar pedidos conforme permissão do usuário
+    let pedidosParaExportar = pedidos;
+    if (user?.role !== 'admin' && fornecedorAtual) {
+      pedidosParaExportar = pedidos.filter(p => p.fornecedor_id === fornecedorAtual.id);
     }
+
+    // Aplicar filtros atuais
+    if (statusFilter !== 'todos') {
+      pedidosParaExportar = pedidosParaExportar.filter(p => p.status === statusFilter);
+    }
+
+    // Definir colunas para o PDF
+    const columns = [
+      { key: 'id_formatado', label: 'Pedido' },
+      { key: 'cliente_nome', label: 'Cliente' },
+      { key: 'status', label: 'Status' },
+      { key: 'valor_formatado', label: 'Valor' },
+      { key: 'data_formatada', label: 'Data' }
+    ];
+
+    // Preparar dados para exportação
+    const data = pedidosParaExportar.map(p => ({
+      id_formatado: `#${p.id?.slice(-8).toUpperCase() || 'N/A'}`,
+      cliente_nome: clientes.find(c => c.id === p.comprador_user_id)?.full_name || 'N/A',
+      status: p.status?.charAt(0).toUpperCase() + p.status?.slice(1) || 'N/A',
+      valor_formatado: formatCurrency(p.valor_total),
+      data_formatada: formatDate(p.created_date)
+    }));
+
+    exportToPDF(data, columns, 'Relatório de Pedidos', `pedidos-${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   const resetFaturarForm = () => {
