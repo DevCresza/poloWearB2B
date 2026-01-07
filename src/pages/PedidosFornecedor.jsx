@@ -228,22 +228,10 @@ export default function PedidosFornecedor() {
     const isBoleto = metodoPagamentoFinal === 'boleto' || metodoPagamentoFinal === 'boleto_faturado';
 
     if (isBoleto) {
-      // Validar datas de vencimento
+      // Validar datas de vencimento das parcelas
       const datasInvalidas = parcelas.some(p => !p.dataVencimento);
       if (datasInvalidas) {
         toast.info('Informe a data de vencimento de todas as parcelas');
-        return;
-      }
-
-      // Validar boletos (se não for único, cada parcela precisa ter boleto)
-      if (!boletoUnico) {
-        const boletosIncompletos = parcelas.some(p => !p.boletoFile);
-        if (boletosIncompletos) {
-          toast.info('Envie o boleto de cada parcela ou marque "Arquivo único com todos os boletos"');
-          return;
-        }
-      } else if (!boletoUnicoFile) {
-        toast.info('Envie o arquivo único com todos os boletos');
         return;
       }
     }
@@ -253,39 +241,19 @@ export default function PedidosFornecedor() {
       // Upload NF
       const nfUpload = await UploadFile({ file: nfFile });
 
-      // Upload dos boletos
-      let boletosUrls = [];
-      let boletoUnicoUrl = null;
-
-      if (isBoleto) {
-        if (boletoUnico && boletoUnicoFile) {
-          const upload = await UploadFile({ file: boletoUnicoFile });
-          boletoUnicoUrl = upload.file_url;
-        } else {
-          for (const parcela of parcelas) {
-            if (parcela.boletoFile) {
-              const upload = await UploadFile({ file: parcela.boletoFile });
-              boletosUrls.push(upload.file_url);
-            }
-          }
-        }
-      }
-
-      // Atualizar pedido
+      // Atualizar pedido (sem boleto - será enviado depois)
       await Pedido.update(selectedPedido.id, {
         status: 'faturado',
         nf_url: nfUpload.file_url,
         nf_numero: nfNumero,
         nf_data_upload: new Date().toISOString(),
-        boleto_url: boletoUnicoUrl || boletosUrls[0] || null,
-        boleto_data_upload: (boletoUnicoUrl || boletosUrls.length > 0) ? new Date().toISOString() : null,
         metodo_pagamento_original: selectedPedido.metodo_pagamento,
         metodo_pagamento: metodoPagamentoFinal,
         qtd_parcelas: isBoleto ? qtdParcelas : 1,
         parcelas_info: isBoleto ? JSON.stringify(parcelas.map((p, i) => ({
           numero: i + 1,
           dataVencimento: p.dataVencimento,
-          boletoUrl: boletoUnicoUrl || boletosUrls[i] || null
+          boletoUrl: null
         }))) : null
       });
 
@@ -309,22 +277,20 @@ export default function PedidosFornecedor() {
           status: 'pendente',
           parcela_numero: i + 1,
           total_parcelas: qtdParcelas,
-          boleto_url: boletoUnicoUrl || boletosUrls[i] || null,
+          boleto_url: null,
           descricao: qtdParcelas > 1 ? `Parcela ${i + 1}/${qtdParcelas} - NF #${nfNumero}` : `NF #${nfNumero}`
         });
       }
 
       // Montar lista de parcelas para o email
-      const parcelasHtml = parcelas.map((p, i) => `
+      const parcelasHtml = isBoleto ? parcelas.map((p, i) => `
         <tr>
           <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${i + 1}/${qtdParcelas}</td>
           <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${formatCurrency(valorParcela)}</td>
           <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${new Date(p.dataVencimento + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">
-            ${(boletoUnicoUrl || boletosUrls[i]) ? `<a href="${boletoUnicoUrl || boletosUrls[i]}" style="color: #4f46e5;">Baixar</a>` : '-'}
-          </td>
+          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">A enviar</td>
         </tr>
-      `).join('');
+      `).join('') : '';
 
       // Notificar cliente
       const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
@@ -360,6 +326,9 @@ export default function PedidosFornecedor() {
                     ${parcelasHtml}
                   </tbody>
                 </table>
+                <p style="font-size: 14px; color: #6b7280; margin-top: 10px;">
+                  <em>Os boletos serão enviados pelo fornecedor antes do vencimento.</em>
+                </p>
               ` : ''}
 
               <div style="text-align: center; margin-top: 30px;">
@@ -375,7 +344,7 @@ export default function PedidosFornecedor() {
         `
       });
 
-      toast.success('Pedido faturado com sucesso!');
+      toast.success('Pedido faturado com sucesso! Não esqueça de enviar o boleto antes do vencimento.');
       setShowFaturarModal(false);
       resetFaturarForm();
       loadPedidos();
@@ -1219,7 +1188,7 @@ export default function PedidosFornecedor() {
               <div className="border rounded-lg p-4 bg-blue-50 space-y-4">
                 <h4 className="font-semibold text-blue-900 flex items-center gap-2">
                   <FileText className="w-4 h-4" />
-                  Configuração de Parcelas do Boleto
+                  Configuração de Parcelas
                 </h4>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -1244,48 +1213,17 @@ export default function PedidosFornecedor() {
                   </div>
                 </div>
 
-                {/* Opção de upload único ou individual */}
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="boletoUnico"
-                    checked={boletoUnico}
-                    onChange={(e) => setBoletoUnico(e.target.checked)}
-                    className="rounded border-gray-300"
-                  />
-                  <Label htmlFor="boletoUnico" className="cursor-pointer text-sm">
-                    Arquivo único com todos os boletos (PDF com múltiplas páginas)
-                  </Label>
-                </div>
-
-                {boletoUnico ? (
-                  <div>
-                    <Label>Upload do arquivo com todos os boletos *</Label>
-                    <Input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png,.crm"
-                      onChange={(e) => setBoletoUnicoFile(e.target.files[0])}
-                    />
-                    {boletoUnicoFile && (
-                      <p className="text-xs text-green-600 mt-1">Arquivo selecionado: {boletoUnicoFile.name}</p>
-                    )}
-                  </div>
-                ) : null}
-
-                {/* Parcelas individuais */}
+                {/* Parcelas - apenas datas de vencimento */}
                 <div className="space-y-3">
-                  <Label>Parcelas e Vencimentos *</Label>
+                  <Label>Datas de Vencimento *</Label>
                   {parcelas.map((parcela, index) => (
                     <div key={index} className="bg-white p-3 rounded-lg border border-blue-200">
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-4">
                         <Badge className="bg-blue-600">Parcela {index + 1}/{qtdParcelas}</Badge>
                         <span className="text-sm text-gray-600">
                           {formatCurrency(selectedPedido?.valor_total / qtdParcelas)}
                         </span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label className="text-xs">Data de Vencimento *</Label>
+                        <div className="flex-1">
                           <Input
                             type="date"
                             value={parcela.dataVencimento}
@@ -1293,21 +1231,6 @@ export default function PedidosFornecedor() {
                             min={new Date().toISOString().split('T')[0]}
                           />
                         </div>
-                        {!boletoUnico && (
-                          <div>
-                            <Label className="text-xs">Boleto da Parcela *</Label>
-                            <Input
-                              type="file"
-                              accept=".pdf,.jpg,.jpeg,.png,.crm"
-                              onChange={(e) => handleParcelaBoletoChange(index, e.target.files[0])}
-                            />
-                            {parcela.boletoFile && (
-                              <p className="text-xs text-green-600 mt-1 truncate">
-                                {parcela.boletoFile.name}
-                              </p>
-                            )}
-                          </div>
-                        )}
                       </div>
                     </div>
                   ))}
@@ -1316,7 +1239,8 @@ export default function PedidosFornecedor() {
                 <Alert className="bg-yellow-50 border-yellow-200">
                   <AlertTriangle className="h-4 w-4 text-yellow-600" />
                   <AlertDescription className="text-yellow-800 text-sm">
-                    O cliente receberá um e-mail de cobrança automática no dia do vencimento de cada parcela.
+                    <strong>Importante:</strong> Após faturar, use o botão "Enviar Boleto" para anexar os boletos antes do vencimento.
+                    O cliente receberá lembretes automáticos por e-mail.
                   </AlertDescription>
                 </Alert>
               </div>
