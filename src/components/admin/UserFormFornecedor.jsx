@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { Fornecedor } from '@/api/entities';
@@ -40,18 +39,27 @@ export default function UserFormFornecedor({ onSubmit, onCancel, loading }) {
     permissoes: permissoesPadraoFornecedor,
     observacoes: ''
   });
-  const [fornecedores, setFornecedores] = useState([]);
+  const [fornecedorNome, setFornecedorNome] = useState('');
+  const [loadingFornecedor, setLoadingFornecedor] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    const loadFornecedores = async () => {
+    const loadFornecedor = async () => {
       try {
+        // Buscar o fornecedor Polo Wear (sempre será o primeiro/único)
         const fornecedoresList = await Fornecedor.list();
-        setFornecedores(fornecedoresList || []);
+        if (fornecedoresList && fornecedoresList.length > 0) {
+          const poloWear = fornecedoresList[0];
+          setFormData(prev => ({ ...prev, fornecedor_id: poloWear.id }));
+          setFornecedorNome(poloWear.nome_marca);
+        }
       } catch (_error) {
+        console.error('Erro ao carregar fornecedor:', _error);
+      } finally {
+        setLoadingFornecedor(false);
       }
     };
-    loadFornecedores();
+    loadFornecedor();
   }, []);
 
   const handleSubmit = (e) => {
@@ -69,7 +77,7 @@ export default function UserFormFornecedor({ onSubmit, onCancel, loading }) {
     }
 
     if (!formData.fornecedor_id) {
-      toast.error('Por favor, selecione um fornecedor.');
+      toast.error('Fornecedor não encontrado. Verifique se existe um fornecedor cadastrado.');
       return;
     }
 
@@ -187,26 +195,25 @@ export default function UserFormFornecedor({ onSubmit, onCancel, loading }) {
 
           <Separator />
 
-          {/* Fornecedor */}
+          {/* Fornecedor - Exibição automática */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold flex items-center gap-2">
               <Building className="w-4 h-4" />
               Fornecedor
             </h3>
-            <div className="space-y-2">
-              <Label htmlFor="fornecedor_id">Selecione o Fornecedor *</Label>
-              <Select value={formData.fornecedor_id} onValueChange={value => setFormData({...formData, fornecedor_id: value})} required>
-                <SelectTrigger>
-                  <SelectValue placeholder="Escolha um fornecedor" />
-                </SelectTrigger>
-                <SelectContent>
-                  {fornecedores.map(fornecedor => (
-                    <SelectItem key={fornecedor.id} value={fornecedor.id}>
-                      {fornecedor.nome_marca} - {fornecedor.razao_social}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              {loadingFornecedor ? (
+                <p className="text-blue-700">Carregando fornecedor...</p>
+              ) : fornecedorNome ? (
+                <div className="flex items-center gap-2">
+                  <Package className="w-5 h-5 text-blue-600" />
+                  <span className="text-blue-800 font-medium">
+                    Este usuário será vinculado automaticamente ao fornecedor: <strong>{fornecedorNome}</strong>
+                  </span>
+                </div>
+              ) : (
+                <p className="text-red-600">Nenhum fornecedor encontrado. Cadastre um fornecedor primeiro.</p>
+              )}
             </div>
           </div>
 

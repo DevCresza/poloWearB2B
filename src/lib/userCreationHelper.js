@@ -1,6 +1,7 @@
 // Helper para criação de usuários pelo admin
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { UserTable } from '@/api/supabaseEntities';
+import { Fornecedor } from '@/api/entities';
 import { SendEmail } from '@/api/integrations';
 
 /**
@@ -87,7 +88,9 @@ export async function createUserWithAccess(userData) {
       cep: userData.cep || null,
       ativo: true,
       permissoes: userData.permissoes || getDefaultPermissions(userData.tipo_negocio),
-      observacoes: userData.observacoes || null
+      observacoes: userData.observacoes || null,
+      // Adicionar fornecedor_id se for usuário do tipo fornecedor
+      fornecedor_id: userData.tipo_negocio === 'fornecedor' ? userData.fornecedor_id : null
       // created_at é gerado automaticamente pelo banco
     };
 
@@ -116,7 +119,19 @@ export async function createUserWithAccess(userData) {
       throw new Error(`Erro ao criar usuário no banco: ${dbError.message}`);
     }
 
-    // 6. Enviar email com credenciais
+    // 6. Se for fornecedor, atualizar o fornecedor com responsavel_user_id
+    if (userData.tipo_negocio === 'fornecedor' && userData.fornecedor_id && createdUser?.id) {
+      try {
+        await Fornecedor.update(userData.fornecedor_id, {
+          responsavel_user_id: createdUser.id
+        });
+      } catch (fornecedorError) {
+        console.error('Erro ao atualizar fornecedor com responsavel_user_id:', fornecedorError);
+        // Não falhar a criação do usuário por isso
+      }
+    }
+
+    // 7. Enviar email com credenciais
     try {
       await sendWelcomeEmail(createdUser, password);
     } catch (emailError) {
