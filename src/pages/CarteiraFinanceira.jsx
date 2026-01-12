@@ -65,14 +65,27 @@ export default function CarteiraFinanceira() {
           cliente_user_id: currentUser.id
         }, '-data_vencimento');
       } else if (currentUser.tipo_negocio === 'fornecedor') {
-        // Buscar fornecedor associado ao usuário (relação reversa via responsavel_user_id)
-        const fornecedoresListTemp = await Fornecedor.filter({ responsavel_user_id: currentUser.id });
-        const fornecedor = fornecedoresListTemp[0];
+        // Usar fornecedor_id do usuário diretamente (se disponível)
+        // ou buscar fornecedor pelo responsavel_user_id (fallback para usuários antigos)
+        let fornecedorId = currentUser.fornecedor_id;
+        let fornecedor = null;
+
+        if (fornecedorId) {
+          // Buscar dados do fornecedor pelo ID
+          fornecedor = await Fornecedor.get(fornecedorId);
+        } else {
+          // Fallback: buscar fornecedor pelo responsavel_user_id
+          const fornecedoresListTemp = await Fornecedor.filter({ responsavel_user_id: currentUser.id });
+          fornecedor = fornecedoresListTemp[0];
+          if (fornecedor) {
+            fornecedorId = fornecedor.id;
+          }
+        }
 
         if (fornecedor) {
           // Fornecedor vê títulos dos seus pedidos
           titulosList = await Carteira.filter({
-            fornecedor_id: fornecedor.id
+            fornecedor_id: fornecedorId
           }, '-data_vencimento');
         } else {
           titulosList = [];

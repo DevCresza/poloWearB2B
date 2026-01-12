@@ -85,13 +85,26 @@ export default function PedidosFornecedor() {
         pedidosList = await Pedido.list('-created_date');
         clientesList = await User.list(); // Load all users for admin
       } else if (currentUser.tipo_negocio === 'fornecedor') {
-        // Buscar fornecedor associado ao usuário (relação reversa via responsavel_user_id)
-        const fornecedoresList = await Fornecedor.filter({ responsavel_user_id: currentUser.id });
-        const fornecedor = fornecedoresList[0];
+        // Usar fornecedor_id do usuário diretamente (se disponível)
+        // ou buscar fornecedor pelo responsavel_user_id (fallback para usuários antigos)
+        let fornecedorId = currentUser.fornecedor_id;
+        let fornecedor = null;
+
+        if (fornecedorId) {
+          // Buscar dados do fornecedor pelo ID
+          fornecedor = await Fornecedor.get(fornecedorId);
+        } else {
+          // Fallback: buscar fornecedor pelo responsavel_user_id
+          const fornecedoresList = await Fornecedor.filter({ responsavel_user_id: currentUser.id });
+          fornecedor = fornecedoresList[0];
+          if (fornecedor) {
+            fornecedorId = fornecedor.id;
+          }
+        }
 
         if (fornecedor) {
           setFornecedorAtual(fornecedor);
-          pedidosList = await Pedido.filter({ fornecedor_id: fornecedor.id }, '-created_date');
+          pedidosList = await Pedido.filter({ fornecedor_id: fornecedorId }, '-created_date');
 
           // Buscar todos os clientes para evitar problemas de "não encontrado"
           const todosClientes = await User.list();

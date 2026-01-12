@@ -87,16 +87,30 @@ export default function PortalDashboard() {
 
       } else if (currentUser.tipo_negocio === 'fornecedor') {
         // Dashboard do Fornecedor
-        // Buscar fornecedor associado ao usuário (relação reversa via responsavel_user_id)
         const { Fornecedor } = await import('@/api/entities');
-        const fornecedoresList = await Fornecedor.filter({ responsavel_user_id: currentUser.id });
-        const fornecedor = fornecedoresList[0];
+
+        // Usar fornecedor_id do usuário diretamente (se disponível)
+        // ou buscar fornecedor pelo responsavel_user_id (fallback para usuários antigos)
+        let fornecedorId = currentUser.fornecedor_id;
+        let fornecedor = null;
+
+        if (fornecedorId) {
+          // Buscar dados do fornecedor pelo ID
+          fornecedor = await Fornecedor.get(fornecedorId);
+        } else {
+          // Fallback: buscar fornecedor pelo responsavel_user_id
+          const fornecedoresList = await Fornecedor.filter({ responsavel_user_id: currentUser.id });
+          fornecedor = fornecedoresList[0];
+          if (fornecedor) {
+            fornecedorId = fornecedor.id;
+          }
+        }
 
         if (fornecedor) {
-          pedidosList = await Pedido.filter({ fornecedor_id: fornecedor.id }, '-created_date', 10);
-          produtosList = await Produto.filter({ fornecedor_id: fornecedor.id });
+          pedidosList = await Pedido.filter({ fornecedor_id: fornecedorId }, '-created_date', 10);
+          produtosList = await Produto.filter({ fornecedor_id: fornecedorId });
 
-          const allPedidos = await Pedido.filter({ fornecedor_id: fornecedor.id });
+          const allPedidos = await Pedido.filter({ fornecedor_id: fornecedorId });
           const totalPedidos = allPedidos.length;
           const pedidosPendentes = allPedidos.filter(p =>
             ['novo_pedido', 'em_analise'].includes(p.status)
