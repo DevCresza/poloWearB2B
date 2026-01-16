@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Package, Edit, Star, Search, AlertTriangle, Eye, Trash2, Download } from 'lucide-react';
+import { Plus, Package, Edit, Star, Search, AlertTriangle, Eye, Trash2, Download, Copy } from 'lucide-react';
 import { exportToCSV, exportToPDF, formatCurrency } from '@/utils/exportUtils';
 import ProductForm from '../components/admin/ProductForm';
 import { Switch } from '@/components/ui/switch';
@@ -85,6 +85,21 @@ export default function GestaoProdutos() {
   const handleEdit = (produto) => {
     setEditingProduto(produto);
     setShowForm(true);
+  };
+
+  const handleDuplicate = (produto) => {
+    // Criar cópia do produto sem o ID e com nome modificado
+    const produtoDuplicado = {
+      ...produto,
+      id: null, // Remove o ID para criar um novo produto
+      nome: `${produto.nome} (Cópia)`,
+      codigo_referencia: produto.codigo_referencia ? `${produto.codigo_referencia}-COPIA` : null,
+      created_at: null,
+      updated_at: null
+    };
+    setEditingProduto(produtoDuplicado);
+    setShowForm(true);
+    toast.info('Produto duplicado! Ajuste os dados e salve.');
   };
 
   const handleSuccess = () => {
@@ -459,17 +474,26 @@ export default function GestaoProdutos() {
                           
                           <TableCell>
                             <div className="flex gap-2">
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
+                              <Button
+                                variant="outline"
+                                size="sm"
                                 onClick={() => handleEdit(produto)}
                               >
                                 <Edit className="w-4 h-4 mr-1" />
                                 Editar
                               </Button>
-                              <Button 
-                                variant="destructive" 
-                                size="sm" 
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDuplicate(produto)}
+                                className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                              >
+                                <Copy className="w-4 h-4 mr-1" />
+                                Duplicar
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
                                 onClick={() => handleDelete(produto)}
                               >
                                 <Trash2 className="w-4 h-4 mr-1" />
