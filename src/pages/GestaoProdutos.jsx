@@ -381,9 +381,9 @@ export default function GestaoProdutos() {
                         <TableRow key={produto.id}>
                           <TableCell>
                             <div className="flex items-center gap-3">
-                              {produto.referencia_polo && (
+                              {produto.referencia_fornecedor && (
                                 <span className="text-xs font-mono bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                                  {produto.referencia_polo}
+                                  {produto.referencia_fornecedor}
                                 </span>
                               )}
                               {getPrimeiraFoto(produto) ? (
