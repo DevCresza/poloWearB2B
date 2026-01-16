@@ -129,19 +129,27 @@ export default function UserManagement() {
     }
     if (window.confirm(`Tem certeza que deseja excluir o usuário "${userName}"? Esta ação não pode ser desfeita.`)) {
       try {
-        // 1. Deletar do Supabase Auth via Edge Function
+        // 1. Deletar do Supabase Auth via Edge Function (OBRIGATÓRIO)
         if (isSupabaseConfigured()) {
-          const { error: authError } = await supabase.functions.invoke('deleteAuthUser', {
+          const { data, error: authError } = await supabase.functions.invoke('deleteAuthUser', {
             body: { userId }
           });
 
           if (authError) {
             console.error('Erro ao deletar do Auth:', authError);
-            // Continuar mesmo se falhar no Auth (pode já ter sido deletado)
+            toast.error('Falha ao excluir usuário do sistema de autenticação.');
+            return; // NÃO continuar se falhar no Auth
+          }
+
+          // Verificar se a função retornou erro no body
+          if (data?.error) {
+            console.error('Erro retornado pela função:', data.error);
+            toast.error(`Falha ao excluir: ${data.error}`);
+            return;
           }
         }
 
-        // 2. Deletar da tabela users
+        // 2. Deletar da tabela users (só executa se Auth foi deletado com sucesso)
         await User.delete(userId);
         toast.success('Usuário excluído com sucesso.');
         loadData();
