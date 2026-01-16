@@ -665,21 +665,22 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                           </Button>
                         )}
                       </div>
-                      <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
+                      <div className="grid grid-cols-5 md:grid-cols-10 gap-3">
                         {tamanhos.map(tamanho => (
-                          <div key={tamanho} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`tam-${tamanho}`}
-                              checked={tamanhoSelecionado.includes(tamanho)}
-                              onCheckedChange={(checked) => handleTamanhoChange(tamanho, checked)}
-                            />
-                            <label
-                              htmlFor={`tam-${tamanho}`}
-                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                            >
-                              {tamanho}
-                            </label>
-                          </div>
+                          <button
+                            key={tamanho}
+                            type="button"
+                            onClick={() => handleTamanhoChange(tamanho, !tamanhoSelecionado.includes(tamanho))}
+                            className={`
+                              h-12 w-full rounded-lg font-semibold text-base transition-all duration-200
+                              ${tamanhoSelecionado.includes(tamanho)
+                                ? 'bg-blue-600 text-white shadow-md hover:bg-blue-700'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
+                              }
+                            `}
+                          >
+                            {tamanho}
+                          </button>
                         ))}
                       </div>
                     </div>
