@@ -88,15 +88,14 @@ export default function GestaoProdutos() {
   };
 
   const handleDuplicate = (produto) => {
-    // Criar cópia do produto sem o ID e com nome modificado
+    // Criar cópia do produto sem campos que não devem ser copiados
+    const { id, created_at, updated_at, ...produtoBase } = produto;
+
     const produtoDuplicado = {
-      ...produto,
-      id: null, // Remove o ID para criar um novo produto
+      ...produtoBase,
       nome: `${produto.nome} (Cópia)`,
-      referencia_fornecedor: produto.referencia_fornecedor ? `${produto.referencia_fornecedor}-COPIA` : null,
-      referencia_polo: produto.referencia_polo ? `${produto.referencia_polo}-COPIA` : null,
-      created_at: null,
-      updated_at: null
+      referencia_fornecedor: produto.referencia_fornecedor ? `${produto.referencia_fornecedor}-COPIA` : '',
+      referencia_polo: produto.referencia_polo ? `${produto.referencia_polo}-COPIA` : ''
     };
     setEditingProduto(produtoDuplicado);
     setShowForm(true);

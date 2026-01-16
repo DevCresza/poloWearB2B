@@ -374,10 +374,20 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
         data_lancamento: formData.data_lancamento || null
       };
 
-      // Remover campos que não devem ser enviados na criação
+      // Remover campos que não devem ser enviados na criação/atualização
       const { id, created_at, updated_at, ...cleanData } = dataToSave;
 
-      if (produto?.id) {
+      // Remover campos undefined ou null que causariam erro no banco
+      Object.keys(cleanData).forEach(key => {
+        if (cleanData[key] === undefined) {
+          delete cleanData[key];
+        }
+      });
+
+      // Verificar se é edição (produto existente com ID válido) ou criação
+      const isEditing = produto && produto.id && typeof produto.id === 'string' && produto.id.length > 0;
+
+      if (isEditing) {
         await Produto.update(produto.id, cleanData);
       } else {
         await Produto.create(cleanData);
