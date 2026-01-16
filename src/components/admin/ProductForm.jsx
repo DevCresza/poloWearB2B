@@ -374,6 +374,11 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
         data_lancamento: formData.data_lancamento || null
       };
 
+      // Remover campos que não devem ser enviados na criação
+      delete dataToSave.id;
+      delete dataToSave.created_at;
+      delete dataToSave.updated_at;
+
       if (produto?.id) {
         await Produto.update(produto.id, dataToSave);
       } else {
@@ -627,7 +632,31 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                     </Alert>
 
                     <div className="bg-white rounded-lg p-6 space-y-4">
-                      <h4 className="font-semibold">Selecione os Tamanhos Disponíveis:</h4>
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold">Selecione os Tamanhos Disponíveis:</h4>
+                        {tamanhoSelecionado.length > 0 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setTamanhoSelecionado([]);
+                              setFormData(prev => ({
+                                ...prev,
+                                grade_configuracao: {
+                                  ...prev.grade_configuracao,
+                                  tamanhos_disponiveis: [],
+                                  quantidades_por_tamanho: {}
+                                }
+                              }));
+                              setTotalPecas(0);
+                            }}
+                            className="text-red-600 border-red-300 hover:bg-red-50"
+                          >
+                            Desmarcar Todos
+                          </Button>
+                        )}
+                      </div>
                       <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
                         {tamanhos.map(tamanho => (
                           <div key={tamanho} className="flex items-center space-x-2">
