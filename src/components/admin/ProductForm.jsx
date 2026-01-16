@@ -74,7 +74,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
     'Vestidos', 'Blusas', 'Jaquetas', 'Acessórios'
   ];
 
-  const tamanhos = ['PP', 'P', 'M', 'G', 'GG', 'XG', '2G', '3G', 'EG'];
+  const tamanhos = ['PP', 'P', 'M', 'G', 'GG', 'G1', 'G2', 'G3', 'G4', 'G5'];
 
   // Função para ordenar tamanhos de acordo com a ordem padrão
   const ordenarTamanhos = (tamanhosParaOrdenar) => {
