@@ -93,7 +93,8 @@ export default function GestaoProdutos() {
       ...produto,
       id: null, // Remove o ID para criar um novo produto
       nome: `${produto.nome} (Cópia)`,
-      codigo_referencia: produto.codigo_referencia ? `${produto.codigo_referencia}-COPIA` : null,
+      referencia_fornecedor: produto.referencia_fornecedor ? `${produto.referencia_fornecedor}-COPIA` : null,
+      referencia_polo: produto.referencia_polo ? `${produto.referencia_polo}-COPIA` : null,
       created_at: null,
       updated_at: null
     };
