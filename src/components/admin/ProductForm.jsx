@@ -375,14 +375,12 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
       };
 
       // Remover campos que não devem ser enviados na criação
-      delete dataToSave.id;
-      delete dataToSave.created_at;
-      delete dataToSave.updated_at;
+      const { id, created_at, updated_at, ...cleanData } = dataToSave;
 
       if (produto?.id) {
-        await Produto.update(produto.id, dataToSave);
+        await Produto.update(produto.id, cleanData);
       } else {
-        await Produto.create(dataToSave);
+        await Produto.create(cleanData);
       }
       
       toast.success('Produto salvo com sucesso!');
