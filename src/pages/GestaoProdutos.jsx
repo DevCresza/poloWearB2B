@@ -381,6 +381,11 @@ export default function GestaoProdutos() {
                         <TableRow key={produto.id}>
                           <TableCell>
                             <div className="flex items-center gap-3">
+                              {produto.referencia_polo && (
+                                <span className="text-xs font-mono bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                                  {produto.referencia_polo}
+                                </span>
+                              )}
                               {getPrimeiraFoto(produto) ? (
                                 <img
                                   src={getPrimeiraFoto(produto)}
@@ -400,7 +405,7 @@ export default function GestaoProdutos() {
                                   {produto.nome}
                                   {produto.is_destaque && <Star className="w-4 h-4 text-yellow-500 fill-current" />}
                                 </div>
-                                <p className="text-xs text-gray-500">Polo Wear</p>
+                                <p className="text-xs text-gray-500">{produto.marca || 'Polo Wear'}</p>
                               </div>
                             </div>
                           </TableCell>
