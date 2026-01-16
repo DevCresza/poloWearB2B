@@ -405,21 +405,37 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <Card className="bg-slate-100 rounded-3xl shadow-neumorphic">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-2xl">
-            <Package className="w-6 h-6" />
-            {produto ? 'Editar Produto' : 'Novo Produto'}
-          </CardTitle>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={onCancel} disabled={submitting}>
-              <X className="w-4 h-4 mr-2" />
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={submitting} className="bg-blue-600 hover:bg-blue-700">
-              <Save className="w-4 h-4 mr-2" />
-              {submitting ? 'Salvando...' : 'Salvar Produto'}
-            </Button>
+        <CardHeader className="flex flex-col gap-4">
+          <div className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-2xl">
+              <Package className="w-6 h-6" />
+              {produto?.id ? 'Editar Produto' : 'Novo Produto'}
+            </CardTitle>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={onCancel} disabled={submitting}>
+                <X className="w-4 h-4 mr-2" />
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={submitting} className="bg-blue-600 hover:bg-blue-700">
+                <Save className="w-4 h-4 mr-2" />
+                {submitting ? 'Salvando...' : 'Salvar Produto'}
+              </Button>
+            </div>
           </div>
+          {produto?.id && (produto?.created_at || produto?.updated_at) && (
+            <div className="flex flex-wrap gap-4 text-sm text-gray-500 bg-gray-50 rounded-lg p-3">
+              {produto?.created_at && (
+                <span>
+                  📅 Criado em: <strong>{new Date(produto.created_at).toLocaleString('pt-BR')}</strong>
+                </span>
+              )}
+              {produto?.updated_at && (
+                <span>
+                  🔄 Última modificação: <strong>{new Date(produto.updated_at).toLocaleString('pt-BR')}</strong>
+                </span>
+              )}
+            </div>
+          )}
         </CardHeader>
 
         <CardContent>
