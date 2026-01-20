@@ -129,7 +129,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                   return existingUrl === fotoUrl;
                 });
 
-                if (!photoExists && fotos.length < 10) {
+                if (!photoExists && fotos.length < 20) {
                   // Adicionar como objeto com metadados da cor
                   fotos.push({
                     url: fotoUrl,
@@ -871,7 +871,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                   <ImageUploader
                     images={formData.fotos}
                     onImagesChange={(fotos) => setFormData({...formData, fotos})}
-                    maxImages={10}
+                    maxImages={20}
                   />
                 </div>
               </div>

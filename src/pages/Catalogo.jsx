@@ -1074,7 +1074,7 @@ export default function Catalogo() {
 
                         {/* Miniaturas - TODAS as fotos + vídeo */}
                         {totalMedias > 1 && (
-                          <div className="grid grid-cols-4 gap-2">
+                          <div className="grid grid-cols-6 gap-1.5">
                             {fotosParaMostrar.map((foto, index) => (
                               <button
                                 key={`foto-${index}`}
