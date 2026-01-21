@@ -30,7 +30,7 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
     email_fornecedor: '',
     senha_fornecedor: '',
     ativo_fornecedor: true,
-    clientes_boleto_faturado: [], // New field for clients with invoiced bank slip
+    clientes_boleto_faturado: [], // Lista de clientes SEM CRÉDITO (bloqueados para boleto)
     contato_comercial_nome: '',
     contato_comercial_email: '',
     contato_comercial_telefone: '',
@@ -562,15 +562,17 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
             <TabsContent value="pagamento" className="space-y-6">
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <CreditCard className="w-5 h-5 text-green-600" />
-                  Clientes com Boleto Faturado
+                  <CreditCard className="w-5 h-5 text-red-600" />
+                  Clientes sem Crédito
                 </h3>
 
-                <Alert className="bg-blue-50 border-blue-200">
-                  <AlertDescription className="text-blue-800">
-                    <strong>Selecione os clientes que poderão usar a opção "Boleto Faturado" ao fazer pedidos.</strong>
+                <Alert className="bg-yellow-50 border-yellow-200">
+                  <AlertDescription className="text-yellow-800">
+                    <strong>Selecione os clientes que NÃO poderão usar a opção de Boleto ao fazer pedidos.</strong>
                     <br />
-                    Clientes não selecionados verão apenas as opções PIX e Cartão de Crédito.
+                    Clientes marcados verão apenas as opções PIX e Cartão de Crédito.
+                    <br />
+                    <span className="text-green-700">Clientes NÃO marcados terão acesso a todas as formas de pagamento, incluindo Boleto Faturado.</span>
                   </AlertDescription>
                 </Alert>
 
@@ -606,9 +608,9 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
                         </div>
                         
                         {(formData.clientes_boleto_faturado || []).includes(cliente.id) && (
-                          <Badge className="bg-green-100 text-green-800">
+                          <Badge className="bg-red-100 text-red-800">
                             <CreditCard className="w-3 h-3 mr-1" />
-                            Boleto Faturado Liberado
+                            Sem Crédito (Boleto Bloqueado)
                           </Badge>
                         )}
                       </div>
@@ -618,7 +620,7 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
 
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-700">
-                    <strong>Total de clientes selecionados:</strong> {(formData.clientes_boleto_faturado || []).length}
+                    <strong>Total de clientes sem crédito (bloqueados):</strong> {(formData.clientes_boleto_faturado || []).length}
                   </p>
                 </div>
               </div>

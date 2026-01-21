@@ -193,19 +193,29 @@ export default function Carrinho() {
 
   const getMetodosPagamentoDisponiveis = (fornecedorId) => {
     const fornecedor = fornecedores.find(f => f.id === fornecedorId);
-    const metodos = [
+
+    // Verifica se o cliente está na lista de "sem crédito" (bloqueado para boleto)
+    const clienteBloqueado = fornecedor &&
+      fornecedor.clientes_boleto_faturado &&
+      user &&
+      fornecedor.clientes_boleto_faturado.includes(user.id);
+
+    if (clienteBloqueado) {
+      // Cliente sem crédito - apenas PIX e Cartão
+      return [
+        { value: 'pix', label: 'PIX' },
+        { value: 'cartao_credito', label: 'Cartão de Crédito' }
+      ];
+    }
+
+    // Cliente com crédito - todas as opções de pagamento
+    return [
       { value: 'pix', label: 'PIX' },
       { value: 'cartao_credito', label: 'Cartão de Crédito' },
       { value: 'boleto', label: 'Boleto' },
-      { value: 'transferencia', label: 'Transferência Bancária' }
+      { value: 'transferencia', label: 'Transferência Bancária' },
+      { value: 'boleto_faturado', label: 'Boleto Faturado (30 dias)' }
     ];
-
-    if (fornecedor && fornecedor.clientes_boleto_faturado &&
-        user && fornecedor.clientes_boleto_faturado.includes(user.id)) {
-      metodos.push({ value: 'boleto_faturado', label: 'Boleto Faturado (30 dias)' });
-    }
-
-    return metodos;
   };
 
   const finalizarCompraPorFornecedor = async (fornecedorId) => {
