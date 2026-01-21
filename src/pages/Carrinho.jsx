@@ -461,7 +461,7 @@ export default function Carrinho() {
                     <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <Building className="w-5 h-5" />
-                        <span className="text-lg sm:text-xl">{fornecedor?.nome_marca || 'Fornecedor'}</span>
+                        <span className="text-lg sm:text-xl">{fornecedor?.razao_social || fornecedor?.nome_fantasia || 'Fornecedor'}</span>
                       </div>
                       <Badge variant="outline" className="text-sm">
                         {grupo.itens.length} {grupo.itens.length === 1 ? 'item' : 'itens'}

@@ -236,74 +236,22 @@ export default function PedidosFornecedor() {
       return;
     }
 
-    // Validar se método é boleto e tem parcelas configuradas
     const metodoPagamentoFinal = metodoPagamento || selectedPedido.metodo_pagamento;
-    const isBoleto = metodoPagamentoFinal === 'boleto' || metodoPagamentoFinal === 'boleto_faturado';
-
-    if (isBoleto) {
-      // Validar datas de vencimento das parcelas
-      const datasInvalidas = parcelas.some(p => !p.dataVencimento);
-      if (datasInvalidas) {
-        toast.info('Informe a data de vencimento de todas as parcelas');
-        return;
-      }
-    }
 
     setUploading(true);
     try {
       // Upload NF
       const nfUpload = await UploadFile({ file: nfFile });
 
-      // Atualizar pedido (sem boleto - será enviado depois)
+      // Atualizar pedido
       await Pedido.update(selectedPedido.id, {
         status: 'faturado',
         nf_url: nfUpload.file_url,
         nf_numero: nfNumero,
         nf_data_upload: new Date().toISOString(),
         metodo_pagamento_original: selectedPedido.metodo_pagamento,
-        metodo_pagamento: metodoPagamentoFinal,
-        qtd_parcelas: isBoleto ? qtdParcelas : 1,
-        parcelas_info: isBoleto ? JSON.stringify(parcelas.map((p, i) => ({
-          numero: i + 1,
-          dataVencimento: p.dataVencimento,
-          boletoUrl: null
-        }))) : null
+        metodo_pagamento: metodoPagamentoFinal
       });
-
-      // Criar títulos na carteira financeira para cada parcela
-      const valorParcela = selectedPedido.valor_total / qtdParcelas;
-
-      for (let i = 0; i < qtdParcelas; i++) {
-        const dataVencimentoParcela = isBoleto ? parcelas[i].dataVencimento : (() => {
-          const d = new Date();
-          d.setDate(d.getDate() + 30);
-          return d.toISOString().split('T')[0];
-        })();
-
-        await Carteira.create({
-          pedido_id: selectedPedido.id,
-          cliente_user_id: selectedPedido.comprador_user_id,
-          fornecedor_id: selectedPedido.fornecedor_id,
-          tipo: 'a_receber',
-          valor: valorParcela,
-          data_vencimento: dataVencimentoParcela,
-          status: 'pendente',
-          parcela_numero: i + 1,
-          total_parcelas: qtdParcelas,
-          boleto_url: null,
-          descricao: qtdParcelas > 1 ? `Parcela ${i + 1}/${qtdParcelas} - NF #${nfNumero}` : `NF #${nfNumero}`
-        });
-      }
-
-      // Montar lista de parcelas para o email
-      const parcelasHtml = isBoleto ? parcelas.map((p, i) => `
-        <tr>
-          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${i + 1}/${qtdParcelas}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${formatCurrency(valorParcela)}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${new Date(p.dataVencimento + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">A enviar</td>
-        </tr>
-      `).join('') : '';
 
       // Notificar cliente
       const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
@@ -321,43 +269,18 @@ export default function PedidosFornecedor() {
               <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
                 <p><strong>Nota Fiscal:</strong> #${nfNumero}</p>
                 <p><strong>Valor Total:</strong> ${formatCurrency(selectedPedido.valor_total)}</p>
-                ${qtdParcelas > 1 ? `<p><strong>Parcelado em:</strong> ${qtdParcelas}x de ${formatCurrency(valorParcela)}</p>` : ''}
               </div>
-
-              ${isBoleto && qtdParcelas > 0 ? `
-                <h3 style="margin-top: 20px;">📅 Parcelas e Vencimentos</h3>
-                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-                  <thead>
-                    <tr style="background: #f3f4f6;">
-                      <th style="padding: 8px; text-align: left;">Parcela</th>
-                      <th style="padding: 8px; text-align: left;">Valor</th>
-                      <th style="padding: 8px; text-align: left;">Vencimento</th>
-                      <th style="padding: 8px; text-align: left;">Boleto</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${parcelasHtml}
-                  </tbody>
-                </table>
-                <p style="font-size: 14px; color: #6b7280; margin-top: 10px;">
-                  <em>Os boletos serão enviados pelo fornecedor antes do vencimento.</em>
-                </p>
-              ` : ''}
-
               <div style="text-align: center; margin-top: 30px;">
                 <a href="${nfUpload.file_url}" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px;">
                   Baixar Nota Fiscal
                 </a>
               </div>
-              <p style="margin-top: 30px; font-size: 14px; color: #6b7280;">
-                Você receberá um lembrete por e-mail no vencimento de cada parcela.
-              </p>
             </div>
           </div>
         `
       });
 
-      toast.success('Pedido faturado com sucesso! Não esqueça de enviar o boleto antes do vencimento.');
+      toast.success('Pedido faturado com sucesso!');
       setShowFaturarModal(false);
       resetFaturarForm();
       loadPedidos();
@@ -465,20 +388,112 @@ export default function PedidosFornecedor() {
       return;
     }
 
+    // Validar datas de vencimento das parcelas
+    const datasInvalidas = parcelas.some(p => !p.dataVencimento);
+    if (datasInvalidas) {
+      toast.info('Informe a data de vencimento de todas as parcelas');
+      return;
+    }
+
     setUploading(true);
     try {
       const boletoUpload = await UploadFile({ file: boletoFile });
 
+      // Atualizar pedido com boleto e info de parcelas
       await Pedido.update(selectedPedido.id, {
         boleto_url: boletoUpload.file_url,
-        boleto_data_upload: new Date().toISOString()
+        boleto_data_upload: new Date().toISOString(),
+        qtd_parcelas: qtdParcelas,
+        parcelas_info: JSON.stringify(parcelas.map((p, i) => ({
+          numero: i + 1,
+          dataVencimento: p.dataVencimento,
+          boletoUrl: boletoUpload.file_url
+        })))
+      });
+
+      // Criar títulos na carteira financeira para cada parcela
+      const valorParcela = selectedPedido.valor_total / qtdParcelas;
+
+      for (let i = 0; i < qtdParcelas; i++) {
+        await Carteira.create({
+          pedido_id: selectedPedido.id,
+          cliente_user_id: selectedPedido.comprador_user_id,
+          fornecedor_id: selectedPedido.fornecedor_id,
+          tipo: 'a_receber',
+          valor: valorParcela,
+          data_vencimento: parcelas[i].dataVencimento,
+          status: 'pendente',
+          parcela_numero: i + 1,
+          total_parcelas: qtdParcelas,
+          boleto_url: boletoUpload.file_url,
+          descricao: qtdParcelas > 1 ? `Parcela ${i + 1}/${qtdParcelas} - Pedido #${selectedPedido.id.slice(-8).toUpperCase()}` : `Pedido #${selectedPedido.id.slice(-8).toUpperCase()}`
+        });
+      }
+
+      // Montar lista de parcelas para o email
+      const parcelasHtml = parcelas.map((p, i) => `
+        <tr>
+          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${i + 1}/${qtdParcelas}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${formatCurrency(valorParcela)}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${new Date(p.dataVencimento + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
+        </tr>
+      `).join('');
+
+      // Notificar cliente
+      const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
+      await SendEmail({
+        from_name: 'POLO B2B',
+        to: cliente?.email,
+        subject: `📄 Boleto Disponível - Pedido #${selectedPedido.id.slice(-8).toUpperCase()}`,
+        body: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; text-align: center;">
+              <h1 style="color: white; margin: 0;">📄 Boleto Disponível</h1>
+            </div>
+            <div style="padding: 30px; background: white;">
+              <p>O boleto do seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> está disponível!</p>
+              <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <p><strong>Valor Total:</strong> ${formatCurrency(selectedPedido.valor_total)}</p>
+                ${qtdParcelas > 1 ? `<p><strong>Parcelado em:</strong> ${qtdParcelas}x de ${formatCurrency(valorParcela)}</p>` : ''}
+              </div>
+
+              ${qtdParcelas > 0 ? `
+                <h3 style="margin-top: 20px;">📅 Parcelas e Vencimentos</h3>
+                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                  <thead>
+                    <tr style="background: #f3f4f6;">
+                      <th style="padding: 8px; text-align: left;">Parcela</th>
+                      <th style="padding: 8px; text-align: left;">Valor</th>
+                      <th style="padding: 8px; text-align: left;">Vencimento</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${parcelasHtml}
+                  </tbody>
+                </table>
+              ` : ''}
+
+              <div style="text-align: center; margin-top: 30px;">
+                <a href="${boletoUpload.file_url}" style="display: inline-block; background: #10b981; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px;">
+                  Baixar Boleto
+                </a>
+              </div>
+              <p style="margin-top: 30px; font-size: 14px; color: #6b7280;">
+                Você receberá um lembrete por e-mail no vencimento de cada parcela.
+              </p>
+            </div>
+          </div>
+        `
       });
 
       toast.success('Boleto enviado com sucesso!');
       setShowBoletoModal(false);
       setBoletoFile(null);
+      setQtdParcelas(1);
+      setParcelas([{ dataVencimento: '', boletoFile: null }]);
       loadPedidos();
     } catch (error) {
+      console.error('Erro ao enviar boleto:', error);
       toast.error('Erro ao enviar boleto');
     } finally {
       setUploading(false);
@@ -1195,70 +1210,6 @@ export default function PedidosFornecedor() {
               </p>
             </div>
 
-            {/* Seção de Parcelas - aparece quando método é boleto */}
-            {(metodoPagamento === 'boleto' || metodoPagamento === 'boleto_faturado' ||
-              (!metodoPagamento && (selectedPedido?.metodo_pagamento === 'boleto' || selectedPedido?.metodo_pagamento === 'boleto_faturado'))) && (
-              <div className="border rounded-lg p-4 bg-blue-50 space-y-4">
-                <h4 className="font-semibold text-blue-900 flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  Configuração de Parcelas
-                </h4>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="qtdParcelas">Quantidade de Parcelas</Label>
-                    <Select value={String(qtdParcelas)} onValueChange={handleQtdParcelasChange}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
-                          <SelectItem key={n} value={String(n)}>{n}x</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-end">
-                    <p className="text-sm text-blue-800">
-                      <strong>Valor por parcela:</strong><br />
-                      {formatCurrency(selectedPedido?.valor_total / qtdParcelas)}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Parcelas - apenas datas de vencimento */}
-                <div className="space-y-3">
-                  <Label>Datas de Vencimento *</Label>
-                  {parcelas.map((parcela, index) => (
-                    <div key={index} className="bg-white p-3 rounded-lg border border-blue-200">
-                      <div className="flex items-center gap-4">
-                        <Badge className="bg-blue-600">Parcela {index + 1}/{qtdParcelas}</Badge>
-                        <span className="text-sm text-gray-600">
-                          {formatCurrency(selectedPedido?.valor_total / qtdParcelas)}
-                        </span>
-                        <div className="flex-1">
-                          <Input
-                            type="date"
-                            value={parcela.dataVencimento}
-                            onChange={(e) => handleParcelaDataChange(index, e.target.value)}
-                            min={new Date().toISOString().split('T')[0]}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <Alert className="bg-yellow-50 border-yellow-200">
-                  <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                  <AlertDescription className="text-yellow-800 text-sm">
-                    <strong>Importante:</strong> Após faturar, use o botão "Enviar Boleto" para anexar os boletos antes do vencimento.
-                    O cliente receberá lembretes automáticos por e-mail.
-                  </AlertDescription>
-                </Alert>
-              </div>
-            )}
-
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => setShowFaturarModal(false)}>
                 Cancelar
@@ -1358,7 +1309,7 @@ export default function PedidosFornecedor() {
 
       {/* Modal de Envio de Boleto */}
       <Dialog open={showBoletoModal} onOpenChange={setShowBoletoModal}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Enviar Boleto</DialogTitle>
           </DialogHeader>
@@ -1378,6 +1329,59 @@ export default function PedidosFornecedor() {
                 </AlertDescription>
               </Alert>
             )}
+
+            {/* Configuração de Parcelas */}
+            <div className="border rounded-lg p-4 bg-blue-50 space-y-4">
+              <h4 className="font-semibold text-blue-900 flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                Configuração de Parcelas
+              </h4>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="qtdParcelas">Quantidade de Parcelas</Label>
+                  <Select value={String(qtdParcelas)} onValueChange={handleQtdParcelasChange}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
+                        <SelectItem key={n} value={String(n)}>{n}x</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-end">
+                  <p className="text-sm text-blue-800">
+                    <strong>Valor por parcela:</strong><br />
+                    {formatCurrency(selectedPedido?.valor_total / qtdParcelas)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Parcelas - datas de vencimento */}
+              <div className="space-y-3">
+                <Label>Datas de Vencimento *</Label>
+                {parcelas.map((parcela, index) => (
+                  <div key={index} className="bg-white p-3 rounded-lg border border-blue-200">
+                    <div className="flex items-center gap-4">
+                      <Badge className="bg-blue-600">Parcela {index + 1}/{qtdParcelas}</Badge>
+                      <span className="text-sm text-gray-600">
+                        {formatCurrency(selectedPedido?.valor_total / qtdParcelas)}
+                      </span>
+                      <div className="flex-1">
+                        <Input
+                          type="date"
+                          value={parcela.dataVencimento}
+                          onChange={(e) => handleParcelaDataChange(index, e.target.value)}
+                          min={new Date().toISOString().split('T')[0]}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             <div>
               <Label htmlFor="boletoFileModal">Upload do Boleto *</Label>

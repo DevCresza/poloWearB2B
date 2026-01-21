@@ -985,7 +985,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                   return existingUrl === photoUrl;
                 });
 
-                if (!photoExists && currentPhotos.length < 10) {
+                if (!photoExists && currentPhotos.length < 20) {
                   setFormData({ ...formData, fotos: [...currentPhotos, photoData] });
                 }
               }}
