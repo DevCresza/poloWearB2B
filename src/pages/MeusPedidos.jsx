@@ -213,7 +213,7 @@ export default function MeusPedidos() {
 
   const getFornecedorNome = (fornecedorId) => {
     const fornecedor = fornecedores.find(f => f.id === fornecedorId);
-    return fornecedor ? fornecedor.nome_marca : 'N/A';
+    return fornecedor ? (fornecedor.razao_social || fornecedor.nome_fantasia || fornecedor.nome_marca) : 'N/A';
   };
 
   const handleExportCSV = () => {
