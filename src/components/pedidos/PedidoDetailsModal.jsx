@@ -213,11 +213,14 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
 
             {/* Tab: Itens do Pedido */}
             <TabsContent value="itens" className="space-y-4">
-              {itens.map((item, index) => (
+              {itens.map((item, index) => {
+                // Foto pode ser string URL ou objeto {url, cor_nome, cor_codigo_hex}
+                const fotoUrl = typeof item.foto === 'string' ? item.foto : item.foto?.url;
+                return (
                 <div key={index} className="flex gap-4 p-4 bg-gray-50 rounded-lg">
-                  {item.foto && (
+                  {fotoUrl && (
                     <img
-                      src={item.foto}
+                      src={fotoUrl}
                       alt={item.nome}
                       className="w-24 h-24 object-cover rounded-lg"
                     />
@@ -259,7 +262,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                     </p>
                   </div>
                 </div>
-              ))}
+              );})}
 
               <div className="bg-blue-50 p-4 rounded-lg">
                 <div className="flex justify-between items-center">

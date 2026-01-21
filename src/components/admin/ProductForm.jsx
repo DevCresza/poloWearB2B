@@ -94,16 +94,26 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
       let variantes = [];
       
       try {
-        grade = typeof produto.grade_configuracao === 'string' 
-          ? JSON.parse(produto.grade_configuracao) 
+        grade = typeof produto.grade_configuracao === 'string'
+          ? JSON.parse(produto.grade_configuracao)
           : produto.grade_configuracao || grade;
+
+        // Handle double-encoded JSON (string inside JSONB)
+        if (typeof grade === 'string') {
+          grade = JSON.parse(grade);
+        }
       } catch (e) {
       }
 
       try {
-        fotos = typeof produto.fotos === 'string' 
-          ? JSON.parse(produto.fotos) 
+        fotos = typeof produto.fotos === 'string'
+          ? JSON.parse(produto.fotos)
           : produto.fotos || fotos;
+
+        // Handle double-encoded JSON (string inside JSONB)
+        if (typeof fotos === 'string') {
+          fotos = JSON.parse(fotos);
+        }
       } catch (e) {
       }
 
@@ -111,6 +121,11 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
         variantes = typeof produto.variantes_cor === 'string'
           ? JSON.parse(produto.variantes_cor)
           : produto.variantes_cor || variantes;
+
+        // Handle double-encoded JSON (string inside JSONB)
+        if (typeof variantes === 'string') {
+          variantes = JSON.parse(variantes);
+        }
 
         // Converter cor_hex antigo para cor_codigo_hex (compatibilidade)
         if (variantes && Array.isArray(variantes)) {
