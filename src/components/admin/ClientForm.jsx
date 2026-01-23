@@ -8,6 +8,7 @@ import { User } from '@/api/entities';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Eye, EyeOff, Users, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
 
 export default function ClientForm({ user, onSuccess, onCancel }) {
   const [formData, setFormData] = useState({
@@ -102,11 +103,32 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
           role: formData.role
         };
 
+        await User.update(user.id, dataToSubmit);
+
+        // Se informou nova senha, atualizar via Edge Function
         if (formData.password && formData.password.trim() !== '') {
-          dataToSubmit.password = formData.password;
+          if (formData.password.length < 6) {
+            toast.error('A senha deve ter no mínimo 6 caracteres.');
+            return;
+          }
+
+          const { error } = await supabase.functions.invoke('update-user-password', {
+            body: {
+              user_id: user.id,
+              new_password: formData.password
+            }
+          });
+
+          if (error) {
+            console.error('Erro ao atualizar senha:', error);
+            toast.warning('Dados atualizados, mas erro ao alterar senha.');
+          } else {
+            toast.success('Cliente e senha atualizados com sucesso!');
+            onSuccess();
+            return;
+          }
         }
 
-        await User.update(user.id, dataToSubmit);
         toast.success('Cliente atualizado com sucesso!');
       }
 

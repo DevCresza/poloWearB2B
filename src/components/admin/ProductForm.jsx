@@ -128,11 +128,26 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
         }
 
         // Converter cor_hex antigo para cor_codigo_hex (compatibilidade)
+        // E garantir que fotos_urls seja um array válido (pode estar double-encoded)
         if (variantes && Array.isArray(variantes)) {
-          variantes = variantes.map(v => ({
-            ...v,
-            cor_codigo_hex: v.cor_codigo_hex || v.cor_hex || '#000000'
-          }));
+          variantes = variantes.map(v => {
+            let fotosUrls = v.fotos_urls || [];
+
+            // Handle double-encoded fotos_urls
+            if (typeof fotosUrls === 'string') {
+              try {
+                fotosUrls = JSON.parse(fotosUrls);
+              } catch (_e) {
+                fotosUrls = [];
+              }
+            }
+
+            return {
+              ...v,
+              cor_codigo_hex: v.cor_codigo_hex || v.cor_hex || '#000000',
+              fotos_urls: Array.isArray(fotosUrls) ? fotosUrls : []
+            };
+          });
 
           // Consolidar fotos das variantes no array principal de fotos
           variantes.forEach(variante => {
@@ -885,7 +900,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                   <h3 className="text-lg font-semibold">Fotos do Produto</h3>
                   <ImageUploader
                     images={formData.fotos}
-                    onImagesChange={(fotos) => setFormData({...formData, fotos})}
+                    onImagesChange={(fotos) => setFormData(prev => ({...prev, fotos}))}
                     maxImages={20}
                   />
                 </div>
@@ -987,22 +1002,25 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
           {formData.tem_variantes_cor && (
             <ProductVariantsManager
               variantes={formData.variantes_cor}
-              onChange={(variantes) => setFormData({ ...formData, variantes_cor: variantes })}
+              onChange={(variantes) => setFormData(prev => ({ ...prev, variantes_cor: variantes }))}
               gradeConfig={formData.grade_configuracao}
               disponibilidade={formData.disponibilidade}
               onPhotoAdded={(photoData) => {
                 // Adiciona a foto das variantes também ao array principal de fotos
-                const currentPhotos = formData.fotos || [];
-                // Verificar se já existe (comparando URL)
-                const photoUrl = typeof photoData === 'string' ? photoData : photoData.url;
-                const photoExists = currentPhotos.some(p => {
-                  const existingUrl = typeof p === 'string' ? p : p.url;
-                  return existingUrl === photoUrl;
-                });
+                // Usar forma funcional para evitar race condition com onChange
+                setFormData(prev => {
+                  const currentPhotos = prev.fotos || [];
+                  const photoUrl = typeof photoData === 'string' ? photoData : photoData.url;
+                  const photoExists = currentPhotos.some(p => {
+                    const existingUrl = typeof p === 'string' ? p : p.url;
+                    return existingUrl === photoUrl;
+                  });
 
-                if (!photoExists && currentPhotos.length < 20) {
-                  setFormData({ ...formData, fotos: [...currentPhotos, photoData] });
-                }
+                  if (!photoExists && currentPhotos.length < 20) {
+                    return { ...prev, fotos: [...currentPhotos, photoData] };
+                  }
+                  return prev;
+                });
               }}
             />
           )}

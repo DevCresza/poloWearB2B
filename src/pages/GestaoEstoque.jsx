@@ -155,9 +155,11 @@ export default function GestaoEstoque() {
 
   // Estatísticas
   const totalProdutos = produtos.length;
-  const produtosZerados = produtos.filter(p => p.estoque_atual_grades === 0).length;
-  const produtosBaixos = produtos.filter(p => 
-    p.estoque_atual_grades > 0 && 
+  // Apenas produtos de pronta entrega devem mostrar alertas de estoque
+  const produtosProntaEntrega = produtos.filter(p => p.disponibilidade === 'pronta_entrega');
+  const produtosZerados = produtosProntaEntrega.filter(p => p.estoque_atual_grades === 0).length;
+  const produtosBaixos = produtosProntaEntrega.filter(p =>
+    p.estoque_atual_grades > 0 &&
     p.estoque_atual_grades <= p.estoque_minimo_grades
   ).length;
   const estoqueTotal = produtos.reduce((sum, p) => sum + (p.estoque_atual_grades || 0), 0);
