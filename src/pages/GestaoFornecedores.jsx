@@ -282,7 +282,7 @@ export default function GestaoFornecedores() {
                           .filter(f => f.id !== fornecedorToDelete?.id)
                           .map(f => (
                             <SelectItem key={f.id} value={f.id}>
-                              {f.nome_marca || f.nome_fantasia || f.razao_social}
+                              {f.razao_social || f.nome_fantasia || f.nome_marca}
                             </SelectItem>
                           ))}
                       </SelectContent>
