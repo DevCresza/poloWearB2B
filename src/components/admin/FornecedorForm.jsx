@@ -53,30 +53,34 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
   });
 
   const [admins, setAdmins] = useState([]);
-  const [clientes, setClientes] = useState([]); // New state for clients
+  const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   useEffect(() => {
-    loadData(); // Changed from loadAdmins to loadData
-    if (fornecedor) {
-      setFormData({
-        ...fornecedor,
-        clientes_boleto_faturado: fornecedor.clientes_boleto_faturado || [] // Ensure array is initialized
-      });
-    }
-  }, [fornecedor]);
+    const initForm = async () => {
+      // Carregar admins e clientes primeiro
+      try {
+        const usersList = await User.list();
+        setAdmins(usersList.filter(u => u.role === 'admin'));
+        setClientes(usersList.filter(u => u.tipo_negocio === 'multimarca'));
+      } catch (_error) {
+        // silently fail
+      }
 
-  const loadData = async () => { // Modified function name and logic
-    try {
-      const usersList = await User.list();
-      const adminsList = usersList.filter(u => u.role === 'admin');
-      const clientesList = usersList.filter(u => u.tipo_negocio === 'multimarca'); // Filter for clients (multimarca)
-      
-      setAdmins(adminsList);
-      setClientes(clientesList); // Set clients state
-    } catch (error) {
-    }
-  };
+      // Depois popular o formulário com os dados do fornecedor
+      if (fornecedor) {
+        setFormData({
+          ...formData,
+          ...fornecedor,
+          clientes_boleto_faturado: fornecedor.clientes_boleto_faturado || []
+        });
+      }
+      setDataLoaded(true);
+    };
+
+    initForm();
+  }, [fornecedor]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
