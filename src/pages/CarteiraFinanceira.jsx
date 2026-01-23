@@ -31,6 +31,12 @@ export default function CarteiraFinanceira() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadingComprovante, setUploadingComprovante] = useState(false);
   const [comprovanteFile, setComprovanteFile] = useState(null);
+  const [dataPagamentoInformada, setDataPagamentoInformada] = useState('');
+
+  // Estados para modal de aprovação
+  const [showAprovacaoModal, setShowAprovacaoModal] = useState(false);
+  const [tituloParaAprovar, setTituloParaAprovar] = useState(null);
+  const [dataPagamentoConfirmada, setDataPagamentoConfirmada] = useState('');
 
   // Estados para modal de recusa
   const [showRecusaModal, setShowRecusaModal] = useState(false);
@@ -160,19 +166,21 @@ export default function CarteiraFinanceira() {
       return;
     }
 
+    if (!dataPagamentoInformada) {
+      toast.info('Informe a data em que o pagamento foi realizado');
+      return;
+    }
+
     setUploadingComprovante(true);
     try {
-      // Upload do arquivo
-      const formData = new FormData();
-      formData.append('file', comprovanteFile);
-      
       const uploadResult = await UploadFile({ file: comprovanteFile });
-      
-      // Atualizar título com comprovante
+
+      // Atualizar título com comprovante e data informada
       await Carteira.update(selectedTitulo.id, {
         comprovante_url: uploadResult.file_url,
         comprovante_data_upload: new Date().toISOString(),
-        comprovante_analisado: false
+        comprovante_analisado: false,
+        data_pagamento_informada: dataPagamentoInformada
       });
 
       // Enviar notificação ao fornecedor
@@ -182,12 +190,13 @@ export default function CarteiraFinanceira() {
         subject: `Comprovante de Pagamento - Pedido #${pedido.id.slice(-8).toUpperCase()}`,
         body: `
           Um novo comprovante de pagamento foi enviado pelo cliente.
-          
+
           Cliente: ${user.empresa || user.full_name}
           Pedido: #${pedido.id.slice(-8).toUpperCase()}
           Valor: ${formatCurrency(selectedTitulo.valor)}
           Vencimento: ${new Date(selectedTitulo.data_vencimento).toLocaleDateString('pt-BR')}
-          
+          Data do Pagamento Informada: ${new Date(dataPagamentoInformada + 'T12:00:00').toLocaleDateString('pt-BR')}
+
           Comprovante: ${uploadResult.file_url}
         `
       });
@@ -195,6 +204,7 @@ export default function CarteiraFinanceira() {
       toast.success('Comprovante enviado com sucesso! Aguarde a análise.');
       setShowUploadModal(false);
       setComprovanteFile(null);
+      setDataPagamentoInformada('');
       setSelectedTitulo(null);
       loadData();
     } catch (_error) {
@@ -204,40 +214,56 @@ export default function CarteiraFinanceira() {
     }
   };
 
-  // Função para aprovar comprovante
-  const handleAprovarComprovante = async (titulo) => {
+  // Função para abrir modal de aprovação
+  const handleIniciarAprovacao = (titulo) => {
+    setTituloParaAprovar(titulo);
+    // Usar data informada pelo cliente como sugestão, ou hoje
+    setDataPagamentoConfirmada(titulo.data_pagamento_informada || new Date().toISOString().split('T')[0]);
+    setShowAprovacaoModal(true);
+  };
+
+  // Função para confirmar aprovação do comprovante
+  const handleConfirmarAprovacao = async () => {
+    if (!dataPagamentoConfirmada) {
+      toast.error('Informe a data de pagamento confirmada');
+      return;
+    }
+
     try {
       const updateData = {
         comprovante_analisado: true,
         comprovante_aprovado: true,
         status: 'pago',
-        data_pagamento: new Date().toISOString()
+        data_pagamento: dataPagamentoConfirmada
       };
 
-      await Carteira.update(titulo.id, updateData);
+      await Carteira.update(tituloParaAprovar.id, updateData);
 
       // Atualizar totais do cliente
-      const cliente = await User.get(titulo.cliente_user_id);
-      const novoTotalAberto = (cliente.total_em_aberto || 0) - titulo.valor;
-      const novoTotalVencido = titulo.status === 'vencido'
-        ? (cliente.total_vencido || 0) - titulo.valor
+      const cliente = await User.get(tituloParaAprovar.cliente_user_id);
+      const novoTotalAberto = (cliente.total_em_aberto || 0) - tituloParaAprovar.valor;
+      const novoTotalVencido = tituloParaAprovar.status === 'vencido'
+        ? (cliente.total_vencido || 0) - tituloParaAprovar.valor
         : cliente.total_vencido;
 
-      await User.update(titulo.cliente_user_id, {
+      await User.update(tituloParaAprovar.cliente_user_id, {
         total_em_aberto: Math.max(0, novoTotalAberto),
         total_vencido: Math.max(0, novoTotalVencido)
       });
 
       // Notificar cliente
-      const pedido = await Pedido.get(titulo.pedido_id);
+      const pedido = await Pedido.get(tituloParaAprovar.pedido_id);
 
       await SendEmail({
         to: cliente.email,
         subject: `Comprovante Aprovado - Pedido #${pedido.id.slice(-8).toUpperCase()}`,
-        body: `Seu comprovante de pagamento foi aprovado!\n\nPedido: #${pedido.id.slice(-8).toUpperCase()}\nValor: ${formatCurrency(titulo.valor)}`
+        body: `Seu comprovante de pagamento foi aprovado!\n\nPedido: #${pedido.id.slice(-8).toUpperCase()}\nValor: ${formatCurrency(tituloParaAprovar.valor)}\nData do Pagamento: ${new Date(dataPagamentoConfirmada + 'T12:00:00').toLocaleDateString('pt-BR')}`
       });
 
       toast.success('Comprovante aprovado!');
+      setShowAprovacaoModal(false);
+      setTituloParaAprovar(null);
+      setDataPagamentoConfirmada('');
       loadData();
     } catch (_error) {
       toast.error('Erro ao aprovar comprovante');
@@ -654,7 +680,7 @@ export default function CarteiraFinanceira() {
                       {user?.role === 'admin' && titulo.comprovante_url && !titulo.comprovante_analisado && (
                         <>
                           <Button
-                            onClick={() => handleAprovarComprovante(titulo)}
+                            onClick={() => handleIniciarAprovacao(titulo)}
                             size="sm"
                             className="bg-green-600"
                           >
@@ -703,7 +729,21 @@ export default function CarteiraFinanceira() {
             )}
 
             <div>
-              <Label>Selecione o comprovante</Label>
+              <Label>Data do Pagamento *</Label>
+              <Input
+                type="date"
+                value={dataPagamentoInformada}
+                onChange={(e) => setDataPagamentoInformada(e.target.value)}
+                className="mt-2"
+                max={new Date().toISOString().split('T')[0]}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Informe a data em que o pagamento foi realizado
+              </p>
+            </div>
+
+            <div>
+              <Label>Selecione o comprovante *</Label>
               <Input
                 type="file"
                 accept=".pdf,.jpg,.jpeg,.png"
@@ -717,7 +757,7 @@ export default function CarteiraFinanceira() {
 
             <Alert>
               <AlertDescription>
-                Após enviar o comprovante, ele será analisado pelo departamento financeiro. 
+                Após enviar o comprovante, ele será analisado pelo departamento financeiro.
                 Você receberá uma notificação quando for aprovado ou recusado.
               </AlertDescription>
             </Alert>
@@ -728,6 +768,7 @@ export default function CarteiraFinanceira() {
                 onClick={() => {
                   setShowUploadModal(false);
                   setComprovanteFile(null);
+                  setDataPagamentoInformada('');
                   setSelectedTitulo(null);
                 }}
               >
@@ -735,10 +776,88 @@ export default function CarteiraFinanceira() {
               </Button>
               <Button
                 onClick={handleUploadComprovante}
-                disabled={!comprovanteFile || uploadingComprovante}
+                disabled={!comprovanteFile || !dataPagamentoInformada || uploadingComprovante}
                 className="bg-blue-600"
               >
                 {uploadingComprovante ? 'Enviando...' : 'Enviar Comprovante'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Aprovação de Comprovante */}
+      <Dialog open={showAprovacaoModal} onOpenChange={setShowAprovacaoModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-600">
+              <CheckCircle className="w-5 h-5" />
+              Aprovar Comprovante
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {tituloParaAprovar && (
+              <div className="p-4 bg-gray-50 rounded-lg border">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Valor:</span>
+                  <span className="font-bold">{formatCurrency(tituloParaAprovar.valor)}</span>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-sm text-gray-600">Vencimento:</span>
+                  <span>{new Date(tituloParaAprovar.data_vencimento).toLocaleDateString('pt-BR')}</span>
+                </div>
+                {tituloParaAprovar.data_pagamento_informada && (
+                  <div className="flex justify-between items-center mt-2 text-blue-600">
+                    <span className="text-sm">Data informada pelo cliente:</span>
+                    <span className="font-medium">{new Date(tituloParaAprovar.data_pagamento_informada + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
+                  </div>
+                )}
+                {tituloParaAprovar.comprovante_url && (
+                  <div className="mt-3 pt-3 border-t">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => window.open(tituloParaAprovar.comprovante_url, '_blank')}
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      Visualizar Comprovante
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div>
+              <Label>Data do Pagamento Confirmada *</Label>
+              <Input
+                type="date"
+                value={dataPagamentoConfirmada}
+                onChange={(e) => setDataPagamentoConfirmada(e.target.value)}
+                className="mt-2"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Confirme ou ajuste a data de pagamento após verificar o comprovante
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowAprovacaoModal(false);
+                  setTituloParaAprovar(null);
+                  setDataPagamentoConfirmada('');
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleConfirmarAprovacao}
+                disabled={!dataPagamentoConfirmada}
+                className="bg-green-600"
+              >
+                Confirmar Aprovação
               </Button>
             </div>
           </div>

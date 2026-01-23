@@ -71,7 +71,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
 
   const categorias = [
     'Camisetas', 'Polos', 'Shorts', 'Calças',
-    'Vestidos', 'Blusas', 'Jaquetas', 'Acessórios'
+    'Vestidos', 'Blusas', 'Jaquetas', 'Acessórios', 'Calçados'
   ];
 
   const tamanhos = ['PP', 'P', 'M', 'G', 'GG', 'G1', 'G2', 'G3', 'G4', 'G5'];
@@ -382,12 +382,12 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
         return;
       }
 
-      // Preparar dados para envio (stringificar objetos JSON)
+      // Preparar dados para envio (JSONB aceita objetos diretamente, não precisa stringify)
       const dataToSave = {
         ...formData,
-        grade_configuracao: JSON.stringify(formData.grade_configuracao),
-        fotos: JSON.stringify(formData.fotos),
-        variantes_cor: formData.tem_variantes_cor ? JSON.stringify(formData.variantes_cor) : null,
+        grade_configuracao: formData.grade_configuracao,
+        fotos: formData.fotos,
+        variantes_cor: formData.tem_variantes_cor ? formData.variantes_cor : null,
         // Se tem variantes e disponibilidade é pronta_entrega, calcular estoque
         // Caso contrário, usar 0 ou o estoque informado
         estoque_atual_grades: formData.tem_variantes_cor && formData.disponibilidade === 'pronta_entrega'

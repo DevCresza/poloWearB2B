@@ -27,8 +27,8 @@ export default function GestaoProdutos() {
   const [filterCategoria, setFilterCategoria] = useState('all');
 
   const categorias = [
-    'Camisetas', 'Polos', 'Shorts', 'Calças', 
-    'Vestidos', 'Blusas', 'Jaquetas', 'Acessórios'
+    'Camisetas', 'Polos', 'Shorts', 'Calças',
+    'Vestidos', 'Blusas', 'Jaquetas', 'Acessórios', 'Calçados'
   ];
 
   useEffect(() => {

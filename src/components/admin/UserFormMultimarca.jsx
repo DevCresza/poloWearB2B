@@ -29,9 +29,17 @@ const permissoesPadraoMultimarca = {
 };
 
 const estados = [
-  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 
-  'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 
+  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
+  'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN',
   'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+];
+
+const tiposCliente = [
+  { value: 'franqueado', label: 'Franqueado' },
+  { value: 'multimarca', label: 'Multimarca' },
+  { value: 'revendedor', label: 'Revendedor' },
+  { value: 'atacado', label: 'Atacado' },
+  { value: 'varejo', label: 'Varejo' }
 ];
 
 export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
@@ -39,6 +47,7 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
     full_name: '',
     email: '',
     password: '',
+    categoria_cliente: '',
     nome_empresa: '',
     cnpj: '',
     telefone: '',
@@ -53,10 +62,13 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (!formData.categoria_cliente) {
+      alert('Selecione o tipo de cliente');
+      return;
+    }
     const userData = {
       ...formData,
       tipo_negocio: 'multimarca',
-      categoria_cliente: 'multimarca' // Categoria padrão para clientes/franqueados
       // role será definido automaticamente como tipo_negocio no helper
     };
     onSubmit(userData);
@@ -177,7 +189,23 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
               <Store className="w-4 h-4" />
               Dados da Empresa
             </h3>
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className="grid md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="categoria_cliente">Tipo de Cliente *</Label>
+                <Select
+                  value={formData.categoria_cliente}
+                  onValueChange={value => setFormData({...formData, categoria_cliente: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tiposCliente.map(tipo => (
+                      <SelectItem key={tipo.value} value={tipo.value}>{tipo.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="nome_empresa">Nome da Empresa *</Label>
                 <Input

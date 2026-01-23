@@ -616,7 +616,7 @@ export default function Catalogo() {
     setShowDetailsModal(true);
   };
 
-  const categorias = ['Camisetas', 'Polos', 'Shorts', 'Calças', 'Vestidos', 'Blusas', 'Jaquetas', 'Acessórios'];
+  const categorias = ['Camisetas', 'Polos', 'Shorts', 'Calças', 'Vestidos', 'Blusas', 'Jaquetas', 'Acessórios', 'Calçados'];
 
   const ProductCard = ({ produto }) => {
     let variantes = [];
