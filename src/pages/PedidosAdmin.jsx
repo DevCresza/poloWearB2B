@@ -30,11 +30,10 @@ export default function PedidosAdmin() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [updatingPedidoId, setUpdatingPedidoId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filters, setFilters] = useState({
-    fornecedor: 'all',
-    status_pagamento: 'all',
-    periodo: 'all'
-  });
+  const [filtrosStatus, setFiltrosStatus] = useState([]); // Array para múltipla seleção de status do pedido
+  const [filtrosPagamento, setFiltrosPagamento] = useState([]); // Array para múltipla seleção de status de pagamento
+  const [filtrosFornecedor, setFiltrosFornecedor] = useState([]); // Array para múltipla seleção de fornecedor
+  const [filtroPeriodo, setFiltroPeriodo] = useState('all');
 
   useEffect(() => {
     loadData();
@@ -57,24 +56,47 @@ export default function PedidosAdmin() {
     }
   };
 
-  const handleExport = async (format) => {
+  const handleExport = (format) => {
     try {
+      if (!filteredPedidos || filteredPedidos.length === 0) {
+        toast.info('Não há pedidos para exportar');
+        return;
+      }
+
       // Preparar dados para exportação
-      const exportData = filteredPedidos.map(pedido => ({
-        id: pedido.id.substring(0, 8),
-        data: formatDateTime(pedido.created_date),
-        cliente: userMap.get(pedido.comprador_user_id) || 'Desconhecido',
-        fornecedor: fornecedorMap.get(pedido.fornecedor_id) || 'Desconhecido',
-        status: pedido.status,
-        status_pagamento: pedido.status_pagamento,
-        valor_total: pedido.valor_total,
-        valor_final: pedido.valor_final,
-        metodo_pagamento: pedido.metodo_pagamento || 'Não informado'
-      }));
+      const exportData = filteredPedidos.map(pedido => {
+        const statusLabels = {
+          novo_pedido: 'Novo Pedido',
+          em_producao: 'Em Produção',
+          faturado: 'Faturado',
+          em_transporte: 'Em Transporte',
+          finalizado: 'Finalizado',
+          cancelado: 'Cancelado'
+        };
+        const paymentLabels = {
+          pendente: 'Pendente',
+          pago: 'Pago',
+          atrasado: 'Atrasado',
+          cancelado: 'Cancelado',
+          em_analise: 'Em Análise'
+        };
+
+        return {
+          id: `#${pedido.id.slice(-8).toUpperCase()}`,
+          data: formatDateTime(pedido.created_date),
+          cliente: userMap.get(pedido.comprador_user_id) || 'N/A',
+          fornecedor: fornecedorMap.get(pedido.fornecedor_id) || 'N/A',
+          status: statusLabels[pedido.status] || pedido.status,
+          status_pagamento: paymentLabels[pedido.status_pagamento] || pedido.status_pagamento,
+          valor_total: pedido.valor_total || 0,
+          valor_final: pedido.valor_final || pedido.valor_total || 0,
+          metodo_pagamento: pedido.metodo_pagamento || 'Não informado'
+        };
+      });
 
       // Definir colunas
       const columns = [
-        { key: 'id', label: 'ID' },
+        { key: 'id', label: 'Pedido' },
         { key: 'data', label: 'Data' },
         { key: 'cliente', label: 'Cliente' },
         { key: 'fornecedor', label: 'Fornecedor' },
@@ -86,7 +108,7 @@ export default function PedidosAdmin() {
       ];
 
       if (format === 'pdf') {
-        await exportToPDF(
+        exportToPDF(
           exportData,
           columns,
           'Relatório de Pedidos - Polo Wear',
@@ -99,7 +121,8 @@ export default function PedidosAdmin() {
           `pedidos_${new Date().toISOString().split('T')[0]}.csv`
         );
       }
-    } catch (_error) {
+    } catch (error) {
+      console.error('Erro ao exportar:', error);
       toast.error('Erro ao exportar dados.');
     }
   };
@@ -164,10 +187,45 @@ export default function PedidosAdmin() {
     return statusMap[status] || statusMap.pendente;
   };
 
+  // Funções de toggle para filtros
+  const toggleFiltroStatus = (status) => {
+    setFiltrosStatus(prev =>
+      prev.includes(status)
+        ? prev.filter(s => s !== status)
+        : [...prev, status]
+    );
+  };
+
+  const toggleFiltroPagamento = (status) => {
+    setFiltrosPagamento(prev =>
+      prev.includes(status)
+        ? prev.filter(s => s !== status)
+        : [...prev, status]
+    );
+  };
+
+  const toggleFiltroFornecedor = (fornecedorId) => {
+    setFiltrosFornecedor(prev =>
+      prev.includes(fornecedorId)
+        ? prev.filter(f => f !== fornecedorId)
+        : [...prev, fornecedorId]
+    );
+  };
+
+  const limparFiltros = () => {
+    setFiltrosStatus([]);
+    setFiltrosPagamento([]);
+    setFiltrosFornecedor([]);
+    setFiltroPeriodo('all');
+    setSearchTerm('');
+  };
+
+  const temFiltrosAtivos = filtrosStatus.length > 0 || filtrosPagamento.length > 0 || filtrosFornecedor.length > 0 || filtroPeriodo !== 'all' || searchTerm;
+
   // Filtrar pedidos
   const filteredPedidos = useMemo(() => {
     let filtered = pedidos || [];
-    
+
     if (searchTerm) {
       filtered = filtered.filter(pedido =>
         pedido.id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -175,20 +233,28 @@ export default function PedidosAdmin() {
         fornecedores.find(f => f.id === pedido.fornecedor_id)?.nome_marca?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-    
-    if (filters.fornecedor !== 'all') {
-      filtered = filtered.filter(pedido => pedido.fornecedor_id === filters.fornecedor);
+
+    // Filtro por status do pedido (múltipla seleção)
+    if (filtrosStatus.length > 0) {
+      filtered = filtered.filter(pedido => filtrosStatus.includes(pedido.status));
     }
-    
-    if (filters.status_pagamento !== 'all') {
-      filtered = filtered.filter(pedido => pedido.status_pagamento === filters.status_pagamento);
+
+    // Filtro por fornecedor (múltipla seleção)
+    if (filtrosFornecedor.length > 0) {
+      filtered = filtered.filter(pedido => filtrosFornecedor.includes(pedido.fornecedor_id));
     }
-    
-    if (filters.periodo !== 'all') {
+
+    // Filtro por status de pagamento (múltipla seleção)
+    if (filtrosPagamento.length > 0) {
+      filtered = filtered.filter(pedido => filtrosPagamento.includes(pedido.status_pagamento));
+    }
+
+    // Filtro por período
+    if (filtroPeriodo !== 'all') {
       const hoje = new Date();
       let dataLimite;
-      
-      switch (filters.periodo) {
+
+      switch (filtroPeriodo) {
         case '7_dias':
           dataLimite = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
           break;
@@ -201,14 +267,14 @@ export default function PedidosAdmin() {
         default:
           dataLimite = null;
       }
-      
+
       if (dataLimite) {
         filtered = filtered.filter(pedido => new Date(pedido.created_date) >= dataLimite);
       }
     }
-    
+
     return filtered;
-  }, [pedidos, searchTerm, filters, users, fornecedores]);
+  }, [pedidos, searchTerm, filtrosStatus, filtrosPagamento, filtrosFornecedor, filtroPeriodo, users, fornecedores]);
 
   // Calcular totais por status
   const calcularTotaisPorStatus = () => {
@@ -321,7 +387,8 @@ export default function PedidosAdmin() {
 
       {/* Filters and Search */}
       <Card className="bg-slate-100 rounded-2xl shadow-neumorphic">
-        <CardContent className="p-4">
+        <CardContent className="p-4 space-y-4">
+          {/* Search e ações */}
           <div className="flex flex-col lg:flex-row gap-4 items-center">
             {/* Search */}
             <div className="relative flex-1">
@@ -333,46 +400,31 @@ export default function PedidosAdmin() {
                 className="pl-10"
               />
             </div>
-            
-            {/* Filters */}
-            <div className="flex gap-2">
-              <Select value={filters.fornecedor} onValueChange={(value) => setFilters({...filters, fornecedor: value})}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Fornecedor" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos Fornecedores</SelectItem>
-                  {fornecedores.map(f => (
-                    <SelectItem key={f.id} value={f.id}>{f.razao_social || f.nome_fantasia || f.nome_marca}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              <Select value={filters.status_pagamento} onValueChange={(value) => setFilters({...filters, status_pagamento: value})}>
-                <SelectTrigger className="w-32">
-                  <SelectValue placeholder="Pagamento" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="pendente">Pendente</SelectItem>
-                  <SelectItem value="pago">Pago</SelectItem>
-                  <SelectItem value="atrasado">Atrasado</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              <Select value={filters.periodo} onValueChange={(value) => setFilters({...filters, periodo: value})}>
-                <SelectTrigger className="w-32">
-                  <SelectValue placeholder="Período" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="7_dias">7 dias</SelectItem>
-                  <SelectItem value="30_dias">30 dias</SelectItem>
-                  <SelectItem value="90_dias">90 dias</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
+
+            {/* Período (mantém como select simples) */}
+            <Select value={filtroPeriodo} onValueChange={setFiltroPeriodo}>
+              <SelectTrigger className="w-32">
+                <SelectValue placeholder="Período" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todo período</SelectItem>
+                <SelectItem value="7_dias">7 dias</SelectItem>
+                <SelectItem value="30_dias">30 dias</SelectItem>
+                <SelectItem value="90_dias">90 dias</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {temFiltrosAtivos && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={limparFiltros}
+                className="text-gray-600"
+              >
+                Limpar Filtros
+              </Button>
+            )}
+
             {/* View Mode Toggle */}
             <div className="flex gap-1 bg-gray-200 rounded-lg p-1">
               <Button
@@ -391,6 +443,100 @@ export default function PedidosAdmin() {
               </Button>
             </div>
           </div>
+
+          {/* Filtros de Status do Pedido */}
+          <div>
+            <p className="text-sm text-gray-600 mb-2">Status do Pedido (clique para selecionar/desmarcar)</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'novo_pedido', label: 'Novos', color: 'bg-blue-100 text-blue-800 border-blue-300' },
+                { value: 'em_producao', label: 'Em Produção', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
+                { value: 'faturado', label: 'Faturados', color: 'bg-purple-100 text-purple-800 border-purple-300' },
+                { value: 'em_transporte', label: 'Em Transporte', color: 'bg-orange-100 text-orange-800 border-orange-300' },
+                { value: 'finalizado', label: 'Finalizados', color: 'bg-green-100 text-green-800 border-green-300' },
+                { value: 'cancelado', label: 'Cancelados', color: 'bg-red-100 text-red-800 border-red-300' }
+              ].map(status => (
+                <Badge
+                  key={status.value}
+                  variant="outline"
+                  className={`cursor-pointer px-3 py-1.5 text-sm transition-all ${
+                    filtrosStatus.includes(status.value)
+                      ? `${status.color} border-2`
+                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}
+                  onClick={() => toggleFiltroStatus(status.value)}
+                >
+                  {filtrosStatus.includes(status.value) && (
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                  )}
+                  {status.label}
+                </Badge>
+              ))}
+            </div>
+          </div>
+
+          {/* Filtros de Status de Pagamento */}
+          <div>
+            <p className="text-sm text-gray-600 mb-2">Status de Pagamento</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'pendente', label: 'Pendente', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
+                { value: 'pago', label: 'Pago', color: 'bg-green-100 text-green-800 border-green-300' },
+                { value: 'em_analise', label: 'Em Análise', color: 'bg-blue-100 text-blue-800 border-blue-300' },
+                { value: 'atrasado', label: 'Atrasado', color: 'bg-red-100 text-red-800 border-red-300' }
+              ].map(status => (
+                <Badge
+                  key={status.value}
+                  variant="outline"
+                  className={`cursor-pointer px-3 py-1.5 text-sm transition-all ${
+                    filtrosPagamento.includes(status.value)
+                      ? `${status.color} border-2`
+                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}
+                  onClick={() => toggleFiltroPagamento(status.value)}
+                >
+                  {filtrosPagamento.includes(status.value) && (
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                  )}
+                  {status.label}
+                </Badge>
+              ))}
+            </div>
+          </div>
+
+          {/* Filtros de Fornecedor */}
+          {fornecedores.length > 0 && (
+            <div>
+              <p className="text-sm text-gray-600 mb-2">Fornecedor</p>
+              <div className="flex flex-wrap gap-2">
+                {fornecedores.map(f => (
+                  <Badge
+                    key={f.id}
+                    variant="outline"
+                    className={`cursor-pointer px-3 py-1.5 text-sm transition-all ${
+                      filtrosFornecedor.includes(f.id)
+                        ? 'bg-indigo-100 text-indigo-800 border-indigo-300 border-2'
+                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                    }`}
+                    onClick={() => toggleFiltroFornecedor(f.id)}
+                  >
+                    {filtrosFornecedor.includes(f.id) && (
+                      <CheckCircle className="w-3 h-3 mr-1" />
+                    )}
+                    {f.razao_social || f.nome_fantasia || f.nome_marca}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Indicador de filtros ativos */}
+          {temFiltrosAtivos && (
+            <div className="text-sm text-gray-500 pt-2 border-t">
+              Filtros ativos: {filtrosStatus.length + filtrosPagamento.length + filtrosFornecedor.length + (filtroPeriodo !== 'all' ? 1 : 0)} |
+              Mostrando {filteredPedidos.length} de {pedidos.length} pedidos
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -464,7 +610,7 @@ export default function PedidosAdmin() {
                         <tr key={pedido.id} className="border-b hover:bg-gray-50">
                           <td className="p-4">
                             <div>
-                              <div className="font-medium">#{pedido.id.slice(-6).toUpperCase()}</div>
+                              <div className="font-medium">#{pedido.id.slice(-8).toUpperCase()}</div>
                               <div className="text-sm text-gray-500">{new Date(pedido.created_date).toLocaleDateString()}</div>
                             </div>
                           </td>

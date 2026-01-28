@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import AlertaBloqueio from '../components/AlertaBloqueio';
 import Avatar from '@/components/Avatar';
+import NotificacoesDropdown from '@/components/NotificacoesDropdown';
 
 export default function Layout({ children, currentPageName }) {
   const [currentUser, setCurrentUser] = useState(null);
@@ -229,14 +230,22 @@ export default function Layout({ children, currentPageName }) {
       <div className="lg:hidden bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="flex items-center justify-between p-4">
           <div className="font-bold text-xl text-blue-600">POLO B2B</div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="lg:hidden"
-          >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Notificações Mobile */}
+            <NotificacoesDropdown
+              userId={currentUser.id}
+              userRole={currentUser.role}
+              userTipoNegocio={currentUser.tipo_negocio}
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden"
+            >
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </Button>
+          </div>
         </div>
 
         {/* Mobile Menu */}
@@ -286,6 +295,13 @@ export default function Layout({ children, currentPageName }) {
               {currentPageName.replace(/([A-Z])/g, ' $1').trim()}
             </h1>
             <div className="flex items-center gap-2 lg:gap-4">
+              {/* Sino de Notificações */}
+              <NotificacoesDropdown
+                userId={currentUser.id}
+                userRole={currentUser.role}
+                userTipoNegocio={currentUser.tipo_negocio}
+              />
+
               <span className="hidden sm:inline text-sm font-semibold text-gray-600">
                 {currentUser.full_name}
               </span>

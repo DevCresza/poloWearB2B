@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { User } from '@/api/entities';
 import { Pedido } from '@/api/entities';
+import { Fornecedor } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,7 @@ import { formatCurrency } from '@/utils/exportUtils';
 
 export default function MeuPerfil() {
   const [user, setUser] = useState(null);
+  const [fornecedor, setFornecedor] = useState(null);
   const [pedidos, setPedidos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editando, setEditando] = useState(false);
@@ -58,6 +60,31 @@ export default function MeuPerfil() {
       if (currentUser.tipo_negocio === 'multimarca') {
         const pedidosList = await Pedido.filter({ comprador_user_id: currentUser.id });
         setPedidos(pedidosList || []);
+      } else if (currentUser.tipo_negocio === 'fornecedor') {
+        // Carregar dados do fornecedor
+        let fornecedorData = null;
+        if (currentUser.fornecedor_id) {
+          fornecedorData = await Fornecedor.get(currentUser.fornecedor_id);
+        } else {
+          // Fallback: buscar fornecedor pelo responsavel_user_id
+          const fornecedoresList = await Fornecedor.filter({ responsavel_user_id: currentUser.id });
+          fornecedorData = fornecedoresList[0];
+        }
+        if (fornecedorData) {
+          setFornecedor(fornecedorData);
+          // Preencher formData com dados do fornecedor quando disponíveis
+          setFormData(prev => ({
+            ...prev,
+            empresa: fornecedorData.razao_social || fornecedorData.nome_fantasia || prev.empresa,
+            cnpj: fornecedorData.cnpj || prev.cnpj,
+            telefone: fornecedorData.telefone || prev.telefone,
+            whatsapp: fornecedorData.contato_comercial_whatsapp || prev.whatsapp,
+            endereco_completo: fornecedorData.endereco_completo || prev.endereco_completo,
+            cidade: fornecedorData.cidade || prev.cidade,
+            estado: fornecedorData.estado || prev.estado,
+            cep: fornecedorData.cep || prev.cep
+          }));
+        }
       }
     } catch (error) {
     } finally {
@@ -332,6 +359,93 @@ export default function MeuPerfil() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Informações do Fornecedor */}
+      {user.tipo_negocio === 'fornecedor' && fornecedor && (
+        <Card className="bg-slate-100 rounded-2xl shadow-neumorphic">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building className="w-5 h-5 text-purple-600" />
+              Dados do Fornecedor
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {fornecedor.razao_social && (
+                <div>
+                  <p className="text-sm text-gray-600">Razão Social</p>
+                  <p className="font-semibold text-gray-900">{fornecedor.razao_social}</p>
+                </div>
+              )}
+              {fornecedor.nome_fantasia && (
+                <div>
+                  <p className="text-sm text-gray-600">Nome Fantasia</p>
+                  <p className="font-semibold text-gray-900">{fornecedor.nome_fantasia}</p>
+                </div>
+              )}
+              {fornecedor.nome_marca && (
+                <div>
+                  <p className="text-sm text-gray-600">Marca</p>
+                  <p className="font-semibold text-gray-900">{fornecedor.nome_marca}</p>
+                </div>
+              )}
+              {fornecedor.cnpj && (
+                <div>
+                  <p className="text-sm text-gray-600">CNPJ</p>
+                  <p className="font-semibold text-gray-900">{fornecedor.cnpj}</p>
+                </div>
+              )}
+              {fornecedor.inscricao_estadual && (
+                <div>
+                  <p className="text-sm text-gray-600">Inscrição Estadual</p>
+                  <p className="font-semibold text-gray-900">{fornecedor.inscricao_estadual}</p>
+                </div>
+              )}
+              {fornecedor.telefone && (
+                <div>
+                  <p className="text-sm text-gray-600">Telefone</p>
+                  <p className="font-semibold text-gray-900">{fornecedor.telefone}</p>
+                </div>
+              )}
+              {fornecedor.email && (
+                <div>
+                  <p className="text-sm text-gray-600">Email do Fornecedor</p>
+                  <p className="font-semibold text-gray-900">{fornecedor.email}</p>
+                </div>
+              )}
+              {fornecedor.contato_comercial_whatsapp && (
+                <div>
+                  <p className="text-sm text-gray-600">WhatsApp Comercial</p>
+                  <p className="font-semibold text-gray-900">{fornecedor.contato_comercial_whatsapp}</p>
+                </div>
+              )}
+            </div>
+            {(fornecedor.endereco_completo || fornecedor.cidade || fornecedor.estado) && (
+              <>
+                <Separator />
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">Endereço</p>
+                  <p className="font-semibold text-gray-900">
+                    {fornecedor.endereco_completo && `${fornecedor.endereco_completo}`}
+                    {fornecedor.cidade && ` - ${fornecedor.cidade}`}
+                    {fornecedor.estado && `/${fornecedor.estado}`}
+                    {fornecedor.cep && ` - CEP: ${fornecedor.cep}`}
+                  </p>
+                </div>
+              </>
+            )}
+            {fornecedor.observacoes && (
+              <>
+                <Separator />
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">Observações</p>
+                  <p className="text-gray-900">{fornecedor.observacoes}</p>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Tabs com Informações */}

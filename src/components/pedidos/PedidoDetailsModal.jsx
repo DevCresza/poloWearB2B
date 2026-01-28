@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,11 +12,12 @@ import { toast } from 'sonner';
 import {
   Package, MapPin, DollarSign, Calendar, FileText,
   Download, CheckCircle, Clock, Truck, User, Building,
-  Phone, Mail, CreditCard, Upload
+  Phone, Mail, CreditCard, Upload, AlertTriangle
 } from 'lucide-react';
 import { Pedido } from '@/api/entities';
+import { Carteira } from '@/api/entities';
 import { User as UserEntity } from '@/api/entities';
-import { UploadFile } from '@/api/integrations';
+import { UploadFile, SendEmail } from '@/api/integrations';
 import { formatDateTime } from '@/utils/exportUtils';
 
 export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentUser, userMap, fornecedorMap }) {
@@ -26,8 +27,38 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   const [nfFile, setNfFile] = useState(null);
   const [nfNumero, setNfNumero] = useState(pedido.nf_numero || '');
 
+  // Estados para parcelas/títulos
+  const [parcelas, setParcelas] = useState([]);
+  const [loadingParcelas, setLoadingParcelas] = useState(false);
+  const [parcelaSelecionada, setParcelaSelecionada] = useState(null);
+  const [showUploadParcelaModal, setShowUploadParcelaModal] = useState(false);
+  const [comprovanteParcelaFile, setComprovanteParcelaFile] = useState(null);
+  const [dataPagamentoParcela, setDataPagamentoParcela] = useState('');
+  const [uploadingParcela, setUploadingParcela] = useState(false);
+
   // Verificar se usuário pode fazer upload (fornecedor ou admin)
   const canUpload = currentUser?.role === 'admin' || currentUser?.tipo_negocio === 'fornecedor';
+
+  // Carregar parcelas do pedido
+  useEffect(() => {
+    const loadParcelas = async () => {
+      if (!pedido?.id) return;
+      setLoadingParcelas(true);
+      try {
+        const titulosList = await Carteira.filter({ pedido_id: pedido.id });
+        // Ordenar por data de vencimento
+        const sorted = (titulosList || []).sort((a, b) =>
+          new Date(a.data_vencimento) - new Date(b.data_vencimento)
+        );
+        setParcelas(sorted);
+      } catch (error) {
+        console.error('Erro ao carregar parcelas:', error);
+      } finally {
+        setLoadingParcelas(false);
+      }
+    };
+    loadParcelas();
+  }, [pedido?.id]);
 
   // Upload de Boleto
   const handleUploadBoleto = async () => {
@@ -139,6 +170,103 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       toast.error('Erro ao registrar confirmação');
     } finally {
       setConfirmando(false);
+    }
+  };
+
+  // Função para obter info de status da parcela
+  const getParcelaStatusInfo = (parcela) => {
+    // Se já está pago, retornar status pago
+    if (parcela.status === 'pago') {
+      return { label: 'Pago', color: 'bg-green-100 text-green-800', icon: CheckCircle };
+    }
+
+    // Se está em análise
+    if (parcela.status === 'em_analise') {
+      return { label: 'Em Análise', color: 'bg-blue-100 text-blue-800', icon: Clock };
+    }
+
+    // Verificar se está vencido
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const vencimento = new Date(parcela.data_vencimento + 'T00:00:00');
+    const diffDias = Math.ceil((vencimento - hoje) / (1000 * 60 * 60 * 24));
+
+    if (diffDias < 0) {
+      return { label: `Vencido há ${Math.abs(diffDias)} dias`, color: 'bg-red-100 text-red-800', icon: AlertTriangle };
+    }
+
+    if (diffDias === 0) {
+      return { label: 'Vence hoje', color: 'bg-orange-100 text-orange-800', icon: AlertTriangle };
+    }
+
+    if (diffDias <= 7) {
+      return { label: `Vence em ${diffDias} dia(s)`, color: 'bg-yellow-100 text-yellow-800', icon: Clock };
+    }
+
+    return { label: 'Pendente', color: 'bg-gray-100 text-gray-800', icon: Clock };
+  };
+
+  // Função para enviar comprovante de parcela
+  const handleUploadComprovanteParcela = async () => {
+    if (!comprovanteParcelaFile || !parcelaSelecionada) {
+      toast.info('Selecione um arquivo');
+      return;
+    }
+
+    if (!dataPagamentoParcela) {
+      toast.info('Informe a data em que o pagamento foi realizado');
+      return;
+    }
+
+    setUploadingParcela(true);
+    try {
+      const uploadResult = await UploadFile({ file: comprovanteParcelaFile });
+
+      // Atualizar título com comprovante e data informada
+      await Carteira.update(parcelaSelecionada.id, {
+        comprovante_url: uploadResult.file_url,
+        comprovante_data_upload: new Date().toISOString(),
+        comprovante_analisado: false,
+        data_pagamento_informada: dataPagamentoParcela,
+        status: 'em_analise'
+      });
+
+      // Enviar notificação ao fornecedor
+      await SendEmail({
+        to: 'financeiro@polomultimarca.com.br',
+        subject: `Comprovante de Pagamento - Pedido #${pedido.id.slice(-8).toUpperCase()} - Parcela ${parcelas.findIndex(p => p.id === parcelaSelecionada.id) + 1}`,
+        body: `
+          Um novo comprovante de pagamento foi enviado pelo cliente.
+
+          Cliente: ${currentUser?.empresa || currentUser?.full_name}
+          Pedido: #${pedido.id.slice(-8).toUpperCase()}
+          Parcela: ${parcelas.findIndex(p => p.id === parcelaSelecionada.id) + 1} de ${parcelas.length}
+          Valor: R$ ${parcelaSelecionada.valor?.toFixed(2)}
+          Vencimento: ${new Date(parcelaSelecionada.data_vencimento).toLocaleDateString('pt-BR')}
+          Data do Pagamento Informada: ${new Date(dataPagamentoParcela + 'T12:00:00').toLocaleDateString('pt-BR')}
+
+          Comprovante: ${uploadResult.file_url}
+        `
+      });
+
+      toast.success('Comprovante enviado com sucesso! Aguarde a análise.');
+
+      // Recarregar parcelas
+      const titulosList = await Carteira.filter({ pedido_id: pedido.id });
+      const sorted = (titulosList || []).sort((a, b) =>
+        new Date(a.data_vencimento) - new Date(b.data_vencimento)
+      );
+      setParcelas(sorted);
+
+      // Fechar modal e limpar estados
+      setShowUploadParcelaModal(false);
+      setComprovanteParcelaFile(null);
+      setDataPagamentoParcela('');
+      setParcelaSelecionada(null);
+    } catch (_error) {
+      toast.error('Erro ao enviar comprovante. Tente novamente.');
+    } finally {
+      setUploadingParcela(false);
     }
   };
 
@@ -332,20 +460,18 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                   {pedido.codigo_rastreio && (
                     <div className="mt-2">
                       <p className="text-gray-700">Código de Rastreio: <strong>{pedido.codigo_rastreio}</strong></p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-2"
-                        onClick={() => {
-                          if (pedido.link_rastreio) {
-                            window.open(pedido.link_rastreio, '_blank');
-                          } else {
-                            window.open(`https://www.google.com/search?q=${encodeURIComponent(pedido.codigo_rastreio)}`, '_blank');
-                          }
-                        }}
-                      >
-                        Rastrear Pedido
-                      </Button>
+                      {pedido.link_rastreio ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                          onClick={() => window.open(pedido.link_rastreio, '_blank')}
+                        >
+                          Rastrear Pedido
+                        </Button>
+                      ) : (
+                        <p className="text-sm text-gray-500 mt-2">Link de rastreio não disponível</p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -450,14 +576,181 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                 </div>
               )}
 
-              {/* Comprovante de Pagamento do Cliente */}
-              {pedido.comprovante_pagamento_url ? (
+              {/* Parcelas/Títulos do Pedido */}
+              <div className="border-t pt-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <DollarSign className="w-5 h-5 text-blue-600" />
+                  <h4 className="font-semibold text-lg">Parcelas do Pedido</h4>
+                  {parcelas.length > 0 && (
+                    <Badge variant="outline">{parcelas.length} parcela(s)</Badge>
+                  )}
+                </div>
+
+                {loadingParcelas ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  </div>
+                ) : parcelas.length > 0 ? (
+                  <div className="space-y-3">
+                    {parcelas.map((parcela, index) => {
+                      const statusInfo = getParcelaStatusInfo(parcela);
+                      const StatusIconParcela = statusInfo.icon;
+                      return (
+                        <div key={parcela.id} className="p-4 bg-gray-50 rounded-lg border">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="font-semibold text-gray-700">
+                                  Parcela {index + 1} de {parcelas.length}
+                                </span>
+                                <Badge className={statusInfo.color}>
+                                  <StatusIconParcela className="w-3 h-3 mr-1" />
+                                  {statusInfo.label}
+                                </Badge>
+                              </div>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                                <div>
+                                  <span className="text-gray-500">Valor:</span>
+                                  <span className="font-bold ml-2">R$ {parcela.valor?.toFixed(2)}</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500">Vencimento:</span>
+                                  <span className="ml-2">{new Date(parcela.data_vencimento).toLocaleDateString('pt-BR')}</span>
+                                </div>
+                                {parcela.data_pagamento && (
+                                  <div>
+                                    <span className="text-gray-500">Pago em:</span>
+                                    <span className="ml-2 text-green-600 font-medium">{new Date(parcela.data_pagamento).toLocaleDateString('pt-BR')}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Status do comprovante */}
+                              {parcela.comprovante_url && (
+                                <div className="mt-2 flex items-center gap-2">
+                                  {parcela.comprovante_analisado ? (
+                                    parcela.comprovante_aprovado ? (
+                                      <Badge className="bg-green-100 text-green-800">
+                                        <CheckCircle className="w-3 h-3 mr-1" />
+                                        Comprovante Aprovado
+                                      </Badge>
+                                    ) : (
+                                      <Badge className="bg-red-100 text-red-800">
+                                        <AlertTriangle className="w-3 h-3 mr-1" />
+                                        Comprovante Recusado
+                                      </Badge>
+                                    )
+                                  ) : (
+                                    <Badge className="bg-yellow-100 text-yellow-800">
+                                      <Clock className="w-3 h-3 mr-1" />
+                                      Aguardando Análise
+                                    </Badge>
+                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => window.open(parcela.comprovante_url, '_blank')}
+                                  >
+                                    <FileText className="w-4 h-4 mr-1" />
+                                    Ver Comprovante
+                                  </Button>
+                                </div>
+                              )}
+
+                              {/* Motivo da recusa */}
+                              {parcela.motivo_recusa_comprovante && (
+                                <Alert className="mt-2 border-red-200 bg-red-50">
+                                  <AlertDescription className="text-red-800 text-sm">
+                                    <strong>Motivo da recusa:</strong> {parcela.motivo_recusa_comprovante}
+                                  </AlertDescription>
+                                </Alert>
+                              )}
+                            </div>
+
+                            {/* Botão de ação */}
+                            <div className="flex gap-2">
+                              {currentUser?.tipo_negocio === 'multimarca' && parcela.status === 'pendente' && (
+                                <Button
+                                  onClick={() => {
+                                    setParcelaSelecionada(parcela);
+                                    setShowUploadParcelaModal(true);
+                                  }}
+                                  size="sm"
+                                  className="bg-blue-600"
+                                >
+                                  <Upload className="w-4 h-4 mr-1" />
+                                  Enviar Comprovante
+                                </Button>
+                              )}
+
+                              {/* Botão para reenviar comprovante se foi recusado */}
+                              {currentUser?.tipo_negocio === 'multimarca' &&
+                               parcela.comprovante_analisado &&
+                               !parcela.comprovante_aprovado && (
+                                <Button
+                                  onClick={() => {
+                                    setParcelaSelecionada(parcela);
+                                    setShowUploadParcelaModal(true);
+                                  }}
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-orange-500 text-orange-600"
+                                >
+                                  <Upload className="w-4 h-4 mr-1" />
+                                  Reenviar Comprovante
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Resumo das parcelas */}
+                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 mt-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <span className="text-gray-600">Total:</span>
+                          <span className="font-bold ml-2">R$ {parcelas.reduce((sum, p) => sum + (p.valor || 0), 0).toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Pagas:</span>
+                          <span className="font-bold ml-2 text-green-600">
+                            {parcelas.filter(p => p.status === 'pago').length} de {parcelas.length}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Em Análise:</span>
+                          <span className="font-bold ml-2 text-blue-600">
+                            {parcelas.filter(p => p.status === 'em_analise').length}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Pendentes:</span>
+                          <span className="font-bold ml-2 text-orange-600">
+                            {parcelas.filter(p => p.status === 'pendente').length}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-6 bg-gray-50 rounded-lg border border-dashed border-gray-300 text-center">
+                    <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-500">Nenhuma parcela cadastrada para este pedido</p>
+                    <p className="text-sm text-gray-400">As parcelas serão geradas quando o pedido for faturado</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Comprovante de Pagamento do Cliente (legado - do pedido) */}
+              {pedido.comprovante_pagamento_url && (
                 <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
                         <FileText className="w-5 h-5 text-purple-600" />
-                        <h4 className="font-semibold text-purple-900">Comprovante de Pagamento</h4>
+                        <h4 className="font-semibold text-purple-900">Comprovante de Pagamento (Geral)</h4>
                         <Badge className="bg-purple-100 text-purple-800">Enviado pelo cliente</Badge>
                       </div>
                       {pedido.comprovante_pagamento_data && (
@@ -481,13 +774,6 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       </p>
                     </div>
                   )}
-                </div>
-              ) : (
-                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex items-center gap-2 text-gray-500">
-                    <FileText className="w-5 h-5" />
-                    <span>Nenhum comprovante de pagamento enviado pelo cliente</span>
-                  </div>
                 </div>
               )}
             </TabsContent>
@@ -733,6 +1019,92 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
           </Tabs>
         </div>
       </DialogContent>
+
+      {/* Modal de Upload de Comprovante de Parcela */}
+      {showUploadParcelaModal && (
+        <Dialog open={showUploadParcelaModal} onOpenChange={setShowUploadParcelaModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Upload className="w-5 h-5 text-blue-600" />
+                Enviar Comprovante de Pagamento
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {parcelaSelecionada && (
+                <div className="p-4 bg-gray-50 rounded-lg border">
+                  <div className="text-sm text-gray-600 mb-1">
+                    Parcela {parcelas.findIndex(p => p.id === parcelaSelecionada.id) + 1} de {parcelas.length}
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="text-2xl font-bold">R$ {parcelaSelecionada.valor?.toFixed(2)}</p>
+                      <p className="text-sm text-gray-500">
+                        Vencimento: {new Date(parcelaSelecionada.data_vencimento).toLocaleDateString('pt-BR')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <Label>Data do Pagamento *</Label>
+                <Input
+                  type="date"
+                  value={dataPagamentoParcela}
+                  onChange={(e) => setDataPagamentoParcela(e.target.value)}
+                  className="mt-2"
+                  max={new Date().toISOString().split('T')[0]}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Informe a data em que o pagamento foi realizado
+                </p>
+              </div>
+
+              <div>
+                <Label>Selecione o comprovante *</Label>
+                <Input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={(e) => setComprovanteParcelaFile(e.target.files[0])}
+                  className="mt-2"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  <strong>Formatos aceitos:</strong> PDF, JPG, JPEG, PNG
+                </p>
+              </div>
+
+              <Alert>
+                <AlertDescription>
+                  Após enviar o comprovante, ele será analisado pelo departamento financeiro.
+                  Você receberá uma notificação quando for aprovado ou recusado.
+                </AlertDescription>
+              </Alert>
+
+              <div className="flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowUploadParcelaModal(false);
+                    setComprovanteParcelaFile(null);
+                    setDataPagamentoParcela('');
+                    setParcelaSelecionada(null);
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleUploadComprovanteParcela}
+                  disabled={!comprovanteParcelaFile || !dataPagamentoParcela || uploadingParcela}
+                  className="bg-blue-600"
+                >
+                  {uploadingParcela ? 'Enviando...' : 'Enviar Comprovante'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </Dialog>
   );
 }

@@ -19,6 +19,7 @@ import {
   AlertTriangle, ArrowUpCircle, DollarSign
 } from 'lucide-react';
 import { formatCurrency, exportToCSV, formatDate } from '@/utils/exportUtils';
+import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
 
 export default function MeusPedidos() {
   const [pedidos, setPedidos] = useState([]);
@@ -33,8 +34,9 @@ export default function MeusPedidos() {
   const [selectedTitulo, setSelectedTitulo] = useState(null);
   const [uploadingComprovante, setUploadingComprovante] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [filtrosStatus, setFiltrosStatus] = useState([]); // Array para múltipla seleção
   const [comprovanteFile, setComprovanteFile] = useState(null);
+  const [dataPagamentoComprovante, setDataPagamentoComprovante] = useState('');
 
   useEffect(() => {
     loadData();
@@ -49,9 +51,30 @@ export default function MeusPedidos() {
         Fornecedor.list(),
         Carteira.filter({ cliente_user_id: currentUser.id })
       ]);
-      
+
+      // Filtrar pedidos para mostrar:
+      // - Pedidos em andamento (antes de faturar ou ainda não entregues)
+      // - Pedidos já faturados mas com parcelas pendentes (para acompanhamento)
+      // - NÃO mostra cancelados (vão para histórico)
+      // - NÃO mostra finalizados com todas parcelas pagas (vão para histórico)
+      const pedidosFiltrados = (pedidosList || []).filter(pedido => {
+        // Pedidos cancelados vão para histórico
+        if (pedido.status === 'cancelado') return false;
+
+        // Pedidos finalizados só aparecem se ainda há parcelas pendentes
+        if (pedido.status === 'finalizado') {
+          const parcelasPendentes = (carteiraList || []).filter(
+            t => t.pedido_id === pedido.id && (t.status === 'pendente' || t.status === 'em_analise')
+          );
+          return parcelasPendentes.length > 0;
+        }
+
+        // Pedidos em andamento sempre aparecem
+        return true;
+      });
+
       setUser(currentUser);
-      setPedidos(pedidosList || []);
+      setPedidos(pedidosFiltrados);
       setFornecedores(fornecedoresList || []);
       setCarteira(carteiraList || []);
     } catch (_error) {
@@ -187,6 +210,11 @@ export default function MeusPedidos() {
       return;
     }
 
+    if (!dataPagamentoComprovante) {
+      toast.info('Informe a data em que o pagamento foi realizado');
+      return;
+    }
+
     setUploadingComprovante(true);
     try {
       // Upload do arquivo
@@ -199,9 +227,21 @@ export default function MeusPedidos() {
         status_pagamento: 'em_analise'
       });
 
-      toast.success('Comprovante enviado com sucesso! O fornecedor irá analisar e confirmar o pagamento.');
+      // Também atualizar os títulos da carteira relacionados a este pedido
+      const titulosPedido = carteira.filter(t => t.pedido_id === selectedPedido.id && t.status === 'pendente');
+      for (const titulo of titulosPedido) {
+        await Carteira.update(titulo.id, {
+          comprovante_url: file_url,
+          comprovante_data_upload: new Date().toISOString(),
+          comprovante_analisado: false,
+          data_pagamento_informada: dataPagamentoComprovante
+        });
+      }
+
+      toast.success('Comprovante enviado com sucesso! Aguarde a análise do financeiro.');
       setShowComprovanteModal(false);
       setComprovanteFile(null);
+      setDataPagamentoComprovante('');
       setSelectedPedido(null);
       loadData();
     } catch (_error) {
@@ -259,10 +299,24 @@ export default function MeusPedidos() {
     );
   };
 
+  // Função para toggle de filtro (adiciona ou remove do array)
+  const toggleFiltroStatus = (status) => {
+    setFiltrosStatus(prev =>
+      prev.includes(status)
+        ? prev.filter(s => s !== status)
+        : [...prev, status]
+    );
+  };
+
+  const limparFiltros = () => {
+    setFiltrosStatus([]);
+    setSearchTerm('');
+  };
+
   const filteredPedidos = pedidos.filter(pedido => {
     const matchesSearch = pedido.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          getFornecedorNome(pedido.fornecedor_id).toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || pedido.status === filterStatus;
+    const matchesStatus = filtrosStatus.length === 0 || filtrosStatus.includes(pedido.status);
     return matchesSearch && matchesStatus;
   });
 
@@ -352,7 +406,8 @@ export default function MeusPedidos() {
 
       {/* Filtros */}
       <Card className="bg-slate-100 rounded-2xl shadow-neumorphic">
-        <CardContent className="p-4">
+        <CardContent className="p-4 space-y-4">
+          {/* Linha de pesquisa e ações */}
           <div className="flex flex-col md:flex-row gap-4">
             <Input
               placeholder="Buscar por ID do pedido ou fornecedor..."
@@ -360,21 +415,17 @@ export default function MeusPedidos() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="flex-1 rounded-xl shadow-neumorphic-inset"
             />
-            
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-4 py-2 rounded-xl border bg-white shadow-neumorphic-inset"
-            >
-              <option value="all">Todos os Status</option>
-              <option value="novo_pedido">Novos</option>
-              <option value="em_analise">Em Análise</option>
-              <option value="aprovado">Aprovados</option>
-              <option value="em_producao">Em Produção</option>
-              <option value="faturado">Faturados</option>
-              <option value="em_transporte">Em Transporte</option>
-              <option value="finalizado">Finalizados</option>
-            </select>
+
+            {(filtrosStatus.length > 0 || searchTerm) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={limparFiltros}
+                className="text-gray-600 rounded-xl"
+              >
+                Limpar Filtros
+              </Button>
+            )}
 
             <Button
               onClick={() => setShowFinanceiroModal(true)}
@@ -393,6 +444,46 @@ export default function MeusPedidos() {
               Exportar CSV
             </Button>
           </div>
+
+          {/* Filtros de Status com múltipla seleção */}
+          <div>
+            <p className="text-sm text-gray-600 mb-2">Status (clique para selecionar/desmarcar)</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'novo_pedido', label: 'Novos', color: 'bg-blue-100 text-blue-800 border-blue-300' },
+                { value: 'em_analise', label: 'Em Análise', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
+                { value: 'aprovado', label: 'Aprovados', color: 'bg-green-100 text-green-800 border-green-300' },
+                { value: 'em_producao', label: 'Em Produção', color: 'bg-purple-100 text-purple-800 border-purple-300' },
+                { value: 'faturado', label: 'Faturados', color: 'bg-indigo-100 text-indigo-800 border-indigo-300' },
+                { value: 'em_transporte', label: 'Em Transporte', color: 'bg-orange-100 text-orange-800 border-orange-300' },
+                { value: 'finalizado', label: 'Finalizados', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' }
+              ].map(status => (
+                <Badge
+                  key={status.value}
+                  variant="outline"
+                  className={`cursor-pointer px-3 py-1.5 text-sm transition-all ${
+                    filtrosStatus.includes(status.value)
+                      ? `${status.color} border-2`
+                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}
+                  onClick={() => toggleFiltroStatus(status.value)}
+                >
+                  {filtrosStatus.includes(status.value) && (
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                  )}
+                  {status.label}
+                </Badge>
+              ))}
+            </div>
+          </div>
+
+          {/* Indicador de filtros ativos */}
+          {filtrosStatus.length > 0 && (
+            <div className="text-sm text-gray-500">
+              Filtros ativos: {filtrosStatus.length} |
+              Mostrando {filteredPedidos.length} de {pedidos.length} pedidos
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -406,8 +497,8 @@ export default function MeusPedidos() {
                 Nenhum pedido encontrado
               </h3>
               <p className="text-gray-600">
-                {searchTerm || filterStatus !== 'all' 
-                  ? 'Tente ajustar os filtros de busca.' 
+                {searchTerm || filtrosStatus.length > 0
+                  ? 'Tente ajustar os filtros de busca.'
                   : 'Você ainda não realizou nenhum pedido.'}
               </p>
             </CardContent>
@@ -478,21 +569,19 @@ export default function MeusPedidos() {
                           <Truck className="w-4 h-4 text-orange-600" />
                           <span className="text-gray-600">Rastreio:</span>
                           <code className="bg-gray-200 px-2 py-1 rounded">{pedido.codigo_rastreio}</code>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs rounded-lg"
-                            onClick={() => {
-                              if (pedido.link_rastreio) {
-                                window.open(pedido.link_rastreio, '_blank');
-                              } else {
-                                window.open(`https://www.google.com/search?q=${encodeURIComponent(pedido.codigo_rastreio)}`, '_blank');
-                              }
-                            }}
-                          >
-                            <Truck className="w-3 h-3 mr-1" />
-                            Rastrear Pedido
-                          </Button>
+                          {pedido.link_rastreio ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs rounded-lg"
+                              onClick={() => window.open(pedido.link_rastreio, '_blank')}
+                            >
+                              <Truck className="w-3 h-3 mr-1" />
+                              Rastrear Pedido
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-gray-500">(Link não disponível)</span>
+                          )}
                         </div>
                       )}
 
@@ -608,173 +697,22 @@ export default function MeusPedidos() {
 
       {/* Modal de Detalhes do Pedido */}
       {showDetailsModal && selectedPedido && (
-        <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl">
-            <DialogHeader>
-              <DialogTitle className="text-2xl">
-                Detalhes do Pedido #{selectedPedido.id.slice(-8).toUpperCase()}
-              </DialogTitle>
-            </DialogHeader>
-            
-            <div className="space-y-6 py-4">
-              {/* Status Atual */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Status Atual</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {(() => {
-                    const statusInfo = getStatusInfo(selectedPedido.status);
-                    return (
-                      <div className="flex items-start gap-4">
-                        <div className={`p-3 rounded-full ${statusInfo.color}`}>
-                          <statusInfo.icon className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-lg">{statusInfo.label}</h4>
-                          <p className="text-gray-600">{statusInfo.description}</p>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </CardContent>
-              </Card>
-
-              {/* Itens do Pedido */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Itens do Pedido</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {(Array.isArray(selectedPedido.itens) ? selectedPedido.itens : JSON.parse(selectedPedido.itens || '[]')).map((item, index) => (
-                      <div key={index} className={`flex justify-between items-center p-3 rounded-lg ${item.tipo === 'capsula' ? 'bg-purple-50 border-2 border-purple-200' : 'bg-gray-50'}`}>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            {item.tipo === 'capsula' && (
-                              <Badge className="bg-purple-600 text-white text-xs">CÁPSULA</Badge>
-                            )}
-                            <p className="font-medium">{item.nome}</p>
-                          </div>
-                          <p className="text-sm text-gray-600">
-                            {item.tipo === 'capsula'
-                              ? `${item.quantidade} cápsula(s)`
-                              : item.tipo_venda === 'grade'
-                                ? `${item.quantidade} grade(s)`
-                                : `${item.quantidade} unidade(s)`
-                            }
-                          </p>
-                        </div>
-                        <p className="font-semibold text-blue-600">
-                          {formatCurrency(item.preco * item.quantidade)}
-                        </p>
-                      </div>
-                    ))}
-                    
-                    <Separator />
-                    
-                    <div className="flex justify-between items-center text-lg font-bold">
-                      <span>Total:</span>
-                      <span className="text-blue-600">{formatCurrency(selectedPedido.valor_total)}</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Informações de Transporte */}
-              {(selectedPedido.transportadora || selectedPedido.codigo_rastreio) && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Truck className="w-5 h-5 text-orange-600" />
-                      Informações de Transporte
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {selectedPedido.transportadora && (
-                      <p className="text-gray-700">
-                        <strong>Transportadora:</strong> {selectedPedido.transportadora}
-                      </p>
-                    )}
-                    {selectedPedido.codigo_rastreio && (
-                      <div className="space-y-2">
-                        <p className="text-gray-700">
-                          <strong>Código de Rastreio:</strong>{' '}
-                          <code className="bg-gray-200 px-2 py-1 rounded">{selectedPedido.codigo_rastreio}</code>
-                        </p>
-                        <Button
-                          variant="outline"
-                          className="rounded-xl"
-                          onClick={() => {
-                            if (selectedPedido.link_rastreio) {
-                              window.open(selectedPedido.link_rastreio, '_blank');
-                            } else {
-                              window.open(`https://www.google.com/search?q=${encodeURIComponent(selectedPedido.codigo_rastreio)}`, '_blank');
-                            }
-                          }}
-                        >
-                          <Truck className="w-4 h-4 mr-2" />
-                          Rastrear Pedido
-                        </Button>
-                      </div>
-                    )}
-                    {selectedPedido.data_prevista_entrega && (
-                      <p className="text-gray-700">
-                        <strong>Previsão de Entrega:</strong>{' '}
-                        {new Date(selectedPedido.data_prevista_entrega).toLocaleDateString('pt-BR')}
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Endereço de Entrega */}
-              {selectedPedido.endereco_entrega && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <MapPin className="w-5 h-5" />
-                      Endereço de Entrega
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-gray-700 space-y-1">
-                      <p>{selectedPedido.endereco_entrega.rua}, {selectedPedido.endereco_entrega.numero}</p>
-                      {selectedPedido.endereco_entrega.complemento && (
-                        <p>{selectedPedido.endereco_entrega.complemento}</p>
-                      )}
-                      <p>{selectedPedido.endereco_entrega.bairro}</p>
-                      <p>{selectedPedido.endereco_entrega.cidade} - {selectedPedido.endereco_entrega.estado}</p>
-                      <p>CEP: {selectedPedido.endereco_entrega.cep}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Observações */}
-              {selectedPedido.observacoes_comprador && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Suas Observações</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-gray-700">{selectedPedido.observacoes_comprador}</p>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Motivo de Recusa */}
-              {selectedPedido.status === 'recusado' && selectedPedido.motivo_recusa && (
-                <Alert className="border-red-200 bg-red-50">
-                  <AlertTriangle className="h-4 w-4 text-red-600" />
-                  <AlertDescription className="text-red-800">
-                    <strong>Motivo da Recusa:</strong> {selectedPedido.motivo_recusa}
-                  </AlertDescription>
-                </Alert>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
+        <PedidoDetailsModal
+          pedido={selectedPedido}
+          onClose={() => {
+            setShowDetailsModal(false);
+            setSelectedPedido(null);
+          }}
+          onUpdate={() => {
+            loadData();
+            // Recarregar o pedido selecionado para atualizar o modal
+            Pedido.get(selectedPedido.id).then(pedidoAtualizado => {
+              setSelectedPedido(pedidoAtualizado);
+            });
+          }}
+          currentUser={user}
+          fornecedorMap={new Map(fornecedores.map(f => [f.id, f.razao_social || f.nome_fantasia || f.nome_marca]))}
+        />
       )}
 
       {/* Modal de Carteira Financeira */}
@@ -817,8 +755,10 @@ export default function MeusPedidos() {
                   carteira
                     .filter(t => t.tipo === 'a_receber')
                     .map((titulo) => {
-                      const vencimento = new Date(titulo.data_vencimento);
+                      // Normalizar datas para comparação (ignorar horário)
+                      const vencimento = new Date(titulo.data_vencimento + 'T00:00:00');
                       const hoje = new Date();
+                      hoje.setHours(0, 0, 0, 0);
                       const vencido = vencimento < hoje && titulo.status === 'pendente';
                       
                       return (
@@ -828,7 +768,7 @@ export default function MeusPedidos() {
                               <div className="space-y-2">
                                 <div>
                                   <p className="font-semibold">
-                                    Pedido #{titulo.pedido_id.slice(-8).toUpperCase()}
+                                    Pedido #{titulo.pedido_id ? titulo.pedido_id.slice(-8).toUpperCase() : 'N/A'}
                                   </p>
                                   <p className="text-sm text-gray-600">
                                     Vencimento: {vencimento.toLocaleDateString('pt-BR')}
@@ -944,6 +884,22 @@ export default function MeusPedidos() {
 
             <div>
               <label className="block text-sm font-medium mb-2">
+                Data do Pagamento *
+              </label>
+              <Input
+                type="date"
+                value={dataPagamentoComprovante}
+                onChange={(e) => setDataPagamentoComprovante(e.target.value)}
+                className="rounded-xl"
+                max={new Date().toISOString().split('T')[0]}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Informe a data em que o pagamento foi realizado
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
                 Arquivo do Comprovante *
               </label>
               <Input
@@ -957,7 +913,7 @@ export default function MeusPedidos() {
               </p>
               <p className="text-xs text-gray-500">
                 Envie o comprovante de pagamento (PIX, transferência, depósito).
-                O fornecedor irá analisar e confirmar o pagamento.
+                O financeiro irá analisar e confirmar o pagamento.
               </p>
             </div>
 
@@ -967,6 +923,7 @@ export default function MeusPedidos() {
                 onClick={() => {
                   setShowComprovanteModal(false);
                   setComprovanteFile(null);
+                  setDataPagamentoComprovante('');
                   setSelectedPedido(null);
                 }}
                 className="rounded-xl"
@@ -975,7 +932,7 @@ export default function MeusPedidos() {
               </Button>
               <Button
                 onClick={handleEnviarComprovantePedido}
-                disabled={uploadingComprovante || !comprovanteFile}
+                disabled={uploadingComprovante || !comprovanteFile || !dataPagamentoComprovante}
                 className="bg-green-600 hover:bg-green-700 rounded-xl"
               >
                 {uploadingComprovante ? 'Enviando...' : 'Enviar Comprovante'}

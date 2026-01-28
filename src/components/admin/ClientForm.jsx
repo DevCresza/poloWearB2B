@@ -15,7 +15,15 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
     full_name: '',
     email: '',
     password: '',
-    role: 'multimarca'
+    role: 'multimarca',
+    empresa: '',
+    telefone: '',
+    whatsapp: '',
+    cnpj: '',
+    endereco_completo: '',
+    cidade: '',
+    estado: '',
+    cep: ''
   });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -26,7 +34,15 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
         full_name: user.full_name || '',
         email: user.email || '',
         password: '',
-        role: user.role || 'user'
+        role: user.tipo_negocio || user.role || 'multimarca',
+        empresa: user.empresa || '',
+        telefone: user.telefone || '',
+        whatsapp: user.whatsapp || '',
+        cnpj: user.cnpj || '',
+        endereco_completo: user.endereco_completo || '',
+        cidade: user.cidade || '',
+        estado: user.estado || '',
+        cep: user.cep || ''
       });
     }
   }, [user]);
@@ -100,7 +116,17 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
         const dataToSubmit = {
           full_name: formData.full_name,
           email: formData.email,
-          role: formData.role
+          role: formData.role,
+          tipo_negocio: formData.role, // Manter sincronizado com role
+          categoria_cliente: formData.role === 'admin' ? 'admin' : formData.role,
+          empresa: formData.empresa || null,
+          telefone: formData.telefone || null,
+          whatsapp: formData.whatsapp || null,
+          cnpj: formData.cnpj || null,
+          endereco_completo: formData.endereco_completo || null,
+          cidade: formData.cidade || null,
+          estado: formData.estado || null,
+          cep: formData.cep || null
         };
 
         await User.update(user.id, dataToSubmit);
@@ -284,7 +310,94 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
               </button>
             </div>
           </div>
-          
+
+          {/* Informações da Loja/Empresa */}
+          <div className="border-t pt-6 mt-6">
+            <h3 className="font-semibold text-gray-900 mb-4">Informações da Loja/Empresa</h3>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="empresa">Nome da Empresa/Loja</Label>
+                <Input
+                  id="empresa"
+                  value={formData.empresa}
+                  onChange={e => setFormData({...formData, empresa: e.target.value})}
+                  placeholder="Nome comercial"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cnpj">CNPJ</Label>
+                <Input
+                  id="cnpj"
+                  value={formData.cnpj}
+                  onChange={e => setFormData({...formData, cnpj: e.target.value})}
+                  placeholder="00.000.000/0000-00"
+                />
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4 mt-4">
+              <div className="space-y-2">
+                <Label htmlFor="telefone">Telefone</Label>
+                <Input
+                  id="telefone"
+                  value={formData.telefone}
+                  onChange={e => setFormData({...formData, telefone: e.target.value})}
+                  placeholder="(00) 0000-0000"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="whatsapp">WhatsApp</Label>
+                <Input
+                  id="whatsapp"
+                  value={formData.whatsapp}
+                  onChange={e => setFormData({...formData, whatsapp: e.target.value})}
+                  placeholder="(00) 00000-0000"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2 mt-4">
+              <Label htmlFor="endereco_completo">Endereço Completo</Label>
+              <Input
+                id="endereco_completo"
+                value={formData.endereco_completo}
+                onChange={e => setFormData({...formData, endereco_completo: e.target.value})}
+                placeholder="Rua, número, complemento, bairro"
+              />
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-4 mt-4">
+              <div className="space-y-2">
+                <Label htmlFor="cidade">Cidade</Label>
+                <Input
+                  id="cidade"
+                  value={formData.cidade}
+                  onChange={e => setFormData({...formData, cidade: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="estado">Estado</Label>
+                <Input
+                  id="estado"
+                  value={formData.estado}
+                  onChange={e => setFormData({...formData, estado: e.target.value})}
+                  placeholder="UF"
+                  maxLength={2}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cep">CEP</Label>
+                <Input
+                  id="cep"
+                  value={formData.cep}
+                  onChange={e => setFormData({...formData, cep: e.target.value})}
+                  placeholder="00000-000"
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="flex justify-end gap-4 pt-6">
             <Button type="button" variant="outline" onClick={onCancel}>
               Cancelar

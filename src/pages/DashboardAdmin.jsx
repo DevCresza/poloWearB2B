@@ -158,17 +158,19 @@ export default function DashboardAdmin() {
     const mesAnterior = new Date(anoSelecionado, mesSelecionado - 2, 1);
     const fimMesAnterior = new Date(anoSelecionado, mesSelecionado - 1, 0);
 
-    // Faturamento
-    const pedidosFinalizados = pedidosList.filter(p => p.status === 'finalizado');
-    const faturamentoTotal = pedidosFinalizados.reduce((sum, p) => sum + (p.valor_total || 0), 0);
+    // Faturamento - considerar pedidos finalizados OU faturados OU em transporte para ter mais dados
+    const pedidosParaFaturamento = pedidosList.filter(p =>
+      ['finalizado', 'faturado', 'em_transporte'].includes(p.status)
+    );
+    const faturamentoTotal = pedidosParaFaturamento.reduce((sum, p) => sum + (p.valor_total || 0), 0);
 
-    const pedidosMes = pedidosFinalizados.filter(p => {
+    const pedidosMes = pedidosParaFaturamento.filter(p => {
       const data = new Date(p.created_date);
       return data >= inicioMes && data <= fimMes;
     });
     const faturamentoMes = pedidosMes.reduce((sum, p) => sum + (p.valor_total || 0), 0);
 
-    const pedidosMesAnterior = pedidosFinalizados.filter(p => {
+    const pedidosMesAnterior = pedidosParaFaturamento.filter(p => {
       const data = new Date(p.created_date);
       return data >= mesAnterior && data <= fimMesAnterior;
     });
@@ -235,6 +237,9 @@ export default function DashboardAdmin() {
   };
 
   const generateChartData = (pedidosList, fornecedoresList, clientesList) => {
+    // Status considerados para faturamento
+    const statusFaturamento = ['finalizado', 'faturado', 'em_transporte'];
+
     // Faturamento Mensal (últimos 12 meses)
     const faturamentoMensal = [];
     for (let i = 11; i >= 0; i--) {
@@ -244,7 +249,7 @@ export default function DashboardAdmin() {
       const fimMes = new Date(mes.getFullYear(), mes.getMonth() + 1, 0);
 
       const pedidosMes = pedidosList.filter(p => {
-        if (p.status !== 'finalizado') return false;
+        if (!statusFaturamento.includes(p.status)) return false;
         const data = new Date(p.created_date);
         return data >= inicioMes && data <= fimMes;
       });
@@ -277,12 +282,12 @@ export default function DashboardAdmin() {
     // Faturamento por Fornecedor
     const faturamentoPorFornecedor = fornecedoresList.map(fornecedor => {
       const pedidosFornecedor = pedidosList.filter(p =>
-        p.fornecedor_id === fornecedor.id && p.status === 'finalizado'
+        p.fornecedor_id === fornecedor.id && statusFaturamento.includes(p.status)
       );
       const valor = pedidosFornecedor.reduce((sum, p) => sum + (p.valor_total || 0), 0);
 
       return {
-        nome: fornecedor.nome_marca,
+        nome: fornecedor.nome_marca || fornecedor.razao_social || fornecedor.nome_fantasia,
         valor: valor,
         pedidos: pedidosFornecedor.length
       };
@@ -291,7 +296,7 @@ export default function DashboardAdmin() {
     // Top Clientes
     const clientesComFaturamento = clientesList.map(cliente => {
       const pedidosCliente = pedidosList.filter(p =>
-        p.comprador_user_id === cliente.id && p.status === 'finalizado'
+        p.comprador_user_id === cliente.id && statusFaturamento.includes(p.status)
       );
       const valor = pedidosCliente.reduce((sum, p) => sum + (p.valor_total || 0), 0);
 
@@ -304,7 +309,7 @@ export default function DashboardAdmin() {
 
     // Produtos Mais Vendidos
     const produtosVendidos = {};
-    pedidosList.filter(p => p.status === 'finalizado').forEach(pedido => {
+    pedidosList.filter(p => statusFaturamento.includes(p.status)).forEach(pedido => {
       try {
         const itens = Array.isArray(pedido.itens) ? pedido.itens : JSON.parse(pedido.itens);
         itens.forEach(item => {
@@ -596,7 +601,7 @@ export default function DashboardAdmin() {
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="font-semibold text-gray-900">
-                            Pedido #{pedido.id.slice(0, 8)}
+                            Pedido #{pedido.id.slice(-8).toUpperCase()}
                           </p>
                           <p className="text-sm text-gray-600">
                             Cliente: {pedido.cliente_nome} • Fornecedor: {pedido.fornecedor_nome}

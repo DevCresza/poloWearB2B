@@ -3,6 +3,7 @@ import { User } from '@/api/entities';
 import { Pedido } from '@/api/entities';
 import { Produto } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
+import { Carteira } from '@/api/entities';
 import { InvokeLLM } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -55,20 +56,46 @@ export default function HistoricoCompras() {
       const currentUser = await User.me();
       setUser(currentUser);
 
-      const [pedidosList, produtosList, fornecedoresList] = await Promise.all([
-        Pedido.filter({ 
+      const [pedidosList, produtosList, fornecedoresList, carteiraList] = await Promise.all([
+        Pedido.filter({
           comprador_user_id: currentUser.id,
           status: 'finalizado'
         }, '-created_date'),
         Produto.list(),
-        Fornecedor.list()
+        Fornecedor.list(),
+        Carteira.filter({ cliente_user_id: currentUser.id })
       ]);
 
-      setPedidos(pedidosList || []);
+      // Filtrar apenas pedidos finalizados que:
+      // - Não têm parcelas na carteira OU
+      // - Todas as parcelas estão pagas
+      const pedidosFiltrados = (pedidosList || []).filter(pedido => {
+        const parcelasDoPedido = (carteiraList || []).filter(t => t.pedido_id === pedido.id);
+
+        // Se não tem parcelas na carteira, considera como histórico
+        if (parcelasDoPedido.length === 0) return true;
+
+        // Se tem parcelas, todas devem estar pagas
+        const todasPagas = parcelasDoPedido.every(t => t.status === 'pago');
+        return todasPagas;
+      });
+
+      // Incluir também pedidos cancelados no histórico
+      const pedidosCancelados = await Pedido.filter({
+        comprador_user_id: currentUser.id,
+        status: 'cancelado'
+      }, '-created_date');
+
+      const todosHistorico = [...pedidosFiltrados, ...(pedidosCancelados || [])];
+      // Ordenar por data mais recente
+      todosHistorico.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+
+      setPedidos(todosHistorico);
       setProdutos(produtosList || []);
       setFornecedores(fornecedoresList || []);
 
-      calculateStats(pedidosList, produtosList);
+      // Calcular stats apenas com pedidos finalizados e pagos
+      calculateStats(pedidosFiltrados, produtosList);
     } catch (_error) {
     } finally {
       setLoading(false);

@@ -1,0 +1,423 @@
+import { useState, useEffect, useRef } from 'react';
+import { Notificacao, Carteira, Pedido, Produto } from '@/api/entities';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Bell,
+  Package,
+  DollarSign,
+  AlertTriangle,
+  CheckCircle,
+  Info,
+  ShoppingCart,
+  Archive,
+  Clock,
+  X,
+  Check,
+  Trash2
+} from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+
+export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio }) {
+  const [notificacoes, setNotificacoes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Carregar notificações
+  useEffect(() => {
+    if (userId) {
+      loadNotificacoes();
+      // Atualizar a cada 60 segundos
+      const interval = setInterval(loadNotificacoes, 60000);
+      return () => clearInterval(interval);
+    }
+  }, [userId]);
+
+  const loadNotificacoes = async () => {
+    try {
+      setLoading(true);
+
+      // Buscar notificações do usuário
+      let notificacoesUsuario = [];
+      try {
+        notificacoesUsuario = await Notificacao.filter({ usuario_id: userId }, '-created_at', 50);
+      } catch (e) {
+        // Se a tabela não existir, continua com array vazio
+        console.log('Tabela notificacoes ainda não existe ou está vazia');
+      }
+
+      // Gerar notificações automáticas baseadas em eventos do sistema
+      const notificacoesAutomaticas = await gerarNotificacoesAutomaticas();
+
+      // Combinar e ordenar por data
+      const todasNotificacoes = [...notificacoesUsuario, ...notificacoesAutomaticas]
+        .sort((a, b) => new Date(b.created_at || b.data) - new Date(a.created_at || a.data));
+
+      setNotificacoes(todasNotificacoes);
+    } catch (error) {
+      console.error('Erro ao carregar notificações:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Gerar notificações automáticas baseadas em dados do sistema
+  const gerarNotificacoesAutomaticas = async () => {
+    const notificacoesAuto = [];
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    try {
+      // Para clientes (multimarca): verificar boletos vencendo
+      if (userTipoNegocio === 'multimarca') {
+        const titulos = await Carteira.filter({ cliente_user_id: userId, status: 'pendente' });
+
+        titulos.forEach(titulo => {
+          const vencimento = new Date(titulo.data_vencimento + 'T00:00:00');
+          const diffDias = Math.ceil((vencimento - hoje) / (1000 * 60 * 60 * 24));
+
+          if (diffDias < 0) {
+            notificacoesAuto.push({
+              id: `vencido-${titulo.id}`,
+              tipo: 'alerta',
+              titulo: 'Boleto Vencido',
+              mensagem: `Você tem um boleto vencido há ${Math.abs(diffDias)} dia(s) no valor de R$ ${titulo.valor?.toFixed(2)}`,
+              icone: 'alerta',
+              lida: false,
+              data: titulo.data_vencimento,
+              link: '/CarteiraFinanceira',
+              autogerada: true
+            });
+          } else if (diffDias <= 3 && diffDias >= 0) {
+            notificacoesAuto.push({
+              id: `vencendo-${titulo.id}`,
+              tipo: 'aviso',
+              titulo: diffDias === 0 ? 'Boleto Vence Hoje!' : `Boleto Vence em ${diffDias} dia(s)`,
+              mensagem: `Boleto no valor de R$ ${titulo.valor?.toFixed(2)} vence ${diffDias === 0 ? 'hoje' : `em ${diffDias} dia(s)`}`,
+              icone: 'dinheiro',
+              lida: false,
+              data: new Date().toISOString(),
+              link: '/CarteiraFinanceira',
+              autogerada: true
+            });
+          }
+        });
+
+        // Verificar pedidos finalizados recentemente
+        const pedidosRecentes = await Pedido.filter({ comprador_user_id: userId, status: 'finalizado' }, '-updated_at', 5);
+        const seteDiasAtras = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+        pedidosRecentes.forEach(pedido => {
+          const dataAtualizacao = new Date(pedido.updated_at || pedido.created_date);
+          if (dataAtualizacao >= seteDiasAtras) {
+            notificacoesAuto.push({
+              id: `pedido-finalizado-${pedido.id}`,
+              tipo: 'sucesso',
+              titulo: 'Pedido Finalizado',
+              mensagem: `Seu pedido #${pedido.id.slice(-8).toUpperCase()} foi finalizado!`,
+              icone: 'pedido',
+              lida: false,
+              data: pedido.updated_at || pedido.created_date,
+              link: '/MeusPedidos',
+              autogerada: true
+            });
+          }
+        });
+      }
+
+      // Para fornecedores: verificar novos pedidos
+      if (userTipoNegocio === 'fornecedor' || userRole === 'admin') {
+        // Buscar pedidos novos das últimas 24h
+        const pedidosNovos = await Pedido.filter({ status: 'novo_pedido' }, '-created_date', 10);
+        const umDiaAtras = new Date(hoje.getTime() - 24 * 60 * 60 * 1000);
+
+        pedidosNovos.forEach(pedido => {
+          const dataCriacao = new Date(pedido.created_date);
+          if (dataCriacao >= umDiaAtras) {
+            notificacoesAuto.push({
+              id: `novo-pedido-${pedido.id}`,
+              tipo: 'info',
+              titulo: 'Novo Pedido Recebido',
+              mensagem: `Pedido #${pedido.id.slice(-8).toUpperCase()} aguardando análise`,
+              icone: 'carrinho',
+              lida: false,
+              data: pedido.created_date,
+              link: '/PedidosFornecedor',
+              autogerada: true
+            });
+          }
+        });
+
+        // Verificar produtos com estoque baixo
+        try {
+          const produtos = await Produto.list();
+          const produtosBaixoEstoque = produtos.filter(p => {
+            const estoqueAtual = p.estoque_atual || 0;
+            const estoqueMinimo = p.estoque_minimo || 5;
+            return estoqueAtual <= estoqueMinimo && estoqueAtual > 0;
+          }).slice(0, 5);
+
+          produtosBaixoEstoque.forEach(produto => {
+            notificacoesAuto.push({
+              id: `estoque-baixo-${produto.id}`,
+              tipo: 'aviso',
+              titulo: 'Estoque Baixo',
+              mensagem: `${produto.nome} está com estoque baixo (${produto.estoque_atual || 0} un.)`,
+              icone: 'estoque',
+              lida: false,
+              data: new Date().toISOString(),
+              link: '/GestaoEstoque',
+              autogerada: true
+            });
+          });
+
+          // Produtos sem estoque
+          const produtosSemEstoque = produtos.filter(p => (p.estoque_atual || 0) === 0 && p.ativo).slice(0, 3);
+          produtosSemEstoque.forEach(produto => {
+            notificacoesAuto.push({
+              id: `sem-estoque-${produto.id}`,
+              tipo: 'alerta',
+              titulo: 'Produto Sem Estoque',
+              mensagem: `${produto.nome} está sem estoque`,
+              icone: 'estoque',
+              lida: false,
+              data: new Date().toISOString(),
+              link: '/GestaoEstoque',
+              autogerada: true
+            });
+          });
+        } catch (e) {
+          // Ignora erro de produtos
+        }
+      }
+
+      // Para admin: verificar comprovantes pendentes
+      if (userRole === 'admin') {
+        try {
+          const comprovantesPendentes = await Carteira.filter({ status: 'em_analise' }, '-created_at', 5);
+          if (comprovantesPendentes.length > 0) {
+            notificacoesAuto.push({
+              id: `comprovantes-pendentes`,
+              tipo: 'info',
+              titulo: 'Comprovantes Pendentes',
+              mensagem: `${comprovantesPendentes.length} comprovante(s) aguardando análise`,
+              icone: 'dinheiro',
+              lida: false,
+              data: new Date().toISOString(),
+              link: '/CarteiraFinanceira',
+              autogerada: true
+            });
+          }
+        } catch (e) {
+          // Ignora erro
+        }
+      }
+
+    } catch (error) {
+      console.error('Erro ao gerar notificações automáticas:', error);
+    }
+
+    return notificacoesAuto;
+  };
+
+  // Marcar notificação como lida
+  const marcarComoLida = async (notificacao) => {
+    if (notificacao.autogerada) {
+      // Para notificações auto-geradas, apenas remove da lista localmente
+      setNotificacoes(prev => prev.filter(n => n.id !== notificacao.id));
+      return;
+    }
+
+    try {
+      await Notificacao.update(notificacao.id, { lida: true });
+      setNotificacoes(prev =>
+        prev.map(n => n.id === notificacao.id ? { ...n, lida: true } : n)
+      );
+    } catch (error) {
+      console.error('Erro ao marcar como lida:', error);
+    }
+  };
+
+  // Marcar todas como lidas
+  const marcarTodasComoLidas = async () => {
+    try {
+      // Atualiza notificações do banco
+      const notificacoesBanco = notificacoes.filter(n => !n.autogerada && !n.lida);
+      for (const notif of notificacoesBanco) {
+        await Notificacao.update(notif.id, { lida: true });
+      }
+
+      // Remove auto-geradas e marca banco como lidas
+      setNotificacoes(prev =>
+        prev.filter(n => !n.autogerada).map(n => ({ ...n, lida: true }))
+      );
+    } catch (error) {
+      console.error('Erro ao marcar todas como lidas:', error);
+    }
+  };
+
+  // Obter ícone baseado no tipo
+  const getIcone = (icone, tipo) => {
+    const iconMap = {
+      pedido: Package,
+      dinheiro: DollarSign,
+      alerta: AlertTriangle,
+      sucesso: CheckCircle,
+      info: Info,
+      carrinho: ShoppingCart,
+      estoque: Archive,
+      sistema: Bell
+    };
+
+    const Icon = iconMap[icone] || Bell;
+
+    const colorMap = {
+      alerta: 'text-red-500',
+      aviso: 'text-orange-500',
+      sucesso: 'text-green-500',
+      info: 'text-blue-500'
+    };
+
+    return <Icon className={`w-5 h-5 ${colorMap[tipo] || 'text-gray-500'}`} />;
+  };
+
+  // Contar não lidas
+  const naoLidas = notificacoes.filter(n => !n.lida).length;
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      {/* Botão do Sino */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="relative"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <Bell className="w-5 h-5 text-gray-600" />
+        {naoLidas > 0 && (
+          <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 bg-red-500 text-white text-xs">
+            {naoLidas > 9 ? '9+' : naoLidas}
+          </Badge>
+        )}
+      </Button>
+
+      {/* Dropdown */}
+      {isOpen && (
+        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
+            <div className="flex items-center gap-2">
+              <Bell className="w-5 h-5 text-blue-600" />
+              <h3 className="font-semibold text-gray-800">Notificações</h3>
+              {naoLidas > 0 && (
+                <Badge className="bg-red-500 text-white">{naoLidas} nova(s)</Badge>
+              )}
+            </div>
+            {naoLidas > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-blue-600 hover:text-blue-700"
+                onClick={marcarTodasComoLidas}
+              >
+                <Check className="w-3 h-3 mr-1" />
+                Marcar todas
+              </Button>
+            )}
+          </div>
+
+          {/* Lista de Notificações */}
+          <ScrollArea className="max-h-96">
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+              </div>
+            ) : notificacoes.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-gray-500">
+                <Bell className="w-12 h-12 text-gray-300 mb-2" />
+                <p className="text-sm">Nenhuma notificação</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {notificacoes.map((notificacao) => (
+                  <div
+                    key={notificacao.id}
+                    className={`px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${
+                      !notificacao.lida ? 'bg-blue-50' : ''
+                    }`}
+                    onClick={() => {
+                      marcarComoLida(notificacao);
+                      if (notificacao.link) {
+                        window.location.href = notificacao.link;
+                      }
+                    }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`p-2 rounded-full ${
+                        notificacao.tipo === 'alerta' ? 'bg-red-100' :
+                        notificacao.tipo === 'aviso' ? 'bg-orange-100' :
+                        notificacao.tipo === 'sucesso' ? 'bg-green-100' :
+                        'bg-blue-100'
+                      }`}>
+                        {getIcone(notificacao.icone, notificacao.tipo)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className={`text-sm font-medium ${!notificacao.lida ? 'text-gray-900' : 'text-gray-600'}`}>
+                            {notificacao.titulo}
+                          </p>
+                          {!notificacao.lida && (
+                            <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-500 line-clamp-2 mt-0.5">
+                          {notificacao.mensagem}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {formatDistanceToNow(new Date(notificacao.data || notificacao.created_at), {
+                            addSuffix: true,
+                            locale: ptBR
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+
+          {/* Footer */}
+          {notificacoes.length > 0 && (
+            <div className="px-4 py-2 border-t bg-gray-50 text-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-gray-500"
+                onClick={() => loadNotificacoes()}
+              >
+                Atualizar
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

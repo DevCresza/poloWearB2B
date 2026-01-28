@@ -16,7 +16,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import {
   DollarSign, Calendar, AlertTriangle, CheckCircle, Clock,
-  Upload, Download, Filter, TrendingUp, TrendingDown, FileText
+  Upload, Download, Filter, TrendingUp, TrendingDown, FileText,
+  Search, Eye
 } from 'lucide-react';
 import { exportToCSV, exportToPDF, formatCurrency, formatDate } from '@/utils/exportUtils';
 
@@ -25,8 +26,8 @@ export default function CarteiraFinanceira() {
   const [titulos, setTitulos] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filtroStatus, setFiltroStatus] = useState('todos');
-  const [filtroFornecedor, setFiltroFornecedor] = useState('todos');
+  const [filtrosStatus, setFiltrosStatus] = useState([]); // Array para múltipla seleção
+  const [filtrosFornecedor, setFiltrosFornecedor] = useState([]); // Array para múltipla seleção
   const [selectedTitulo, setSelectedTitulo] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadingComprovante, setUploadingComprovante] = useState(false);
@@ -52,9 +53,55 @@ export default function CarteiraFinanceira() {
   });
   const [pedidosMap, setPedidosMap] = useState({});
 
+  // Estado para pesquisa por número de pedido
+  const [pesquisaPedido, setPesquisaPedido] = useState('');
+
+  // Estado para modal de detalhes do pedido
+  const [showDetalhesModal, setShowDetalhesModal] = useState(false);
+  const [pedidoSelecionado, setPedidoSelecionado] = useState(null);
+
   useEffect(() => {
     loadData();
   }, []);
+
+  // Função para sincronizar totais do cliente com base nos títulos reais da carteira
+  const sincronizarTotaisCliente = async (clienteId, titulosList) => {
+    try {
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+
+      // Calcular total em aberto (pendente ou em_analise)
+      const totalEmAberto = titulosList
+        .filter(t => t.status === 'pendente' || t.status === 'em_analise')
+        .reduce((sum, t) => sum + (t.valor || 0), 0);
+
+      // Calcular total vencido (pendente E data vencimento < hoje)
+      const totalVencido = titulosList
+        .filter(t => {
+          if (t.status !== 'pendente') return false;
+          const dataVencimento = new Date(t.data_vencimento + 'T00:00:00');
+          return dataVencimento < hoje;
+        })
+        .reduce((sum, t) => sum + (t.valor || 0), 0);
+
+      // Buscar dados atuais do cliente
+      const cliente = await User.get(clienteId);
+
+      // Só atualizar se houver diferença (evita requisições desnecessárias)
+      const totalEmAbertoAtual = cliente.total_em_aberto || 0;
+      const totalVencidoAtual = cliente.total_vencido || 0;
+
+      if (Math.abs(totalEmAberto - totalEmAbertoAtual) > 0.01 ||
+          Math.abs(totalVencido - totalVencidoAtual) > 0.01) {
+        await User.update(clienteId, {
+          total_em_aberto: totalEmAberto,
+          total_vencido: totalVencido
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao sincronizar totais:', error);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -66,10 +113,26 @@ export default function CarteiraFinanceira() {
       let fornecedoresList = [];
 
       if (currentUser.tipo_negocio === 'multimarca') {
-        // Cliente vê apenas seus títulos
-        titulosList = await Carteira.filter({
+        // Cliente vê títulos de pedidos que já foram faturados/enviados/entregues
+        const todosOsTitulos = await Carteira.filter({
           cliente_user_id: currentUser.id
         }, '-data_vencimento');
+
+        // Carregar pedidos para filtrar apenas os que já passaram pela fase de faturamento
+        const pedidoIds = [...new Set((todosOsTitulos || []).map(t => t.pedido_id).filter(Boolean))];
+        const pedidosPromises = pedidoIds.map(id => Pedido.get(id).catch(() => null));
+        const pedidosResults = await Promise.all(pedidosPromises);
+
+        // Pedidos que já foram faturados, enviados ou finalizados aparecem na carteira
+        const statusPermitidos = ['faturado', 'em_transporte', 'finalizado'];
+        const pedidosComBoleto = new Set(
+          pedidosResults.filter(p => p && statusPermitidos.includes(p.status)).map(p => p.id)
+        );
+
+        // Filtrar títulos de pedidos faturados/enviados/finalizados
+        titulosList = (todosOsTitulos || []).filter(t =>
+          t.pedido_id && pedidosComBoleto.has(t.pedido_id)
+        );
       } else if (currentUser.tipo_negocio === 'fornecedor') {
         // Usar fornecedor_id do usuário diretamente (se disponível)
         // ou buscar fornecedor pelo responsavel_user_id (fallback para usuários antigos)
@@ -105,6 +168,11 @@ export default function CarteiraFinanceira() {
 
       setTitulos(titulosList || []);
       setFornecedores(fornecedoresList || []);
+
+      // Recalcular e sincronizar totais do cliente (apenas títulos de pedidos finalizados)
+      if (currentUser.tipo_negocio === 'multimarca' && titulosList) {
+        await sincronizarTotaisCliente(currentUser.id, titulosList);
+      }
 
       // Carregar pedidos relacionados para mostrar comprovantes
       if (titulosList && titulosList.length > 0) {
@@ -242,17 +310,35 @@ export default function CarteiraFinanceira() {
       // Atualizar totais do cliente
       const cliente = await User.get(tituloParaAprovar.cliente_user_id);
       const novoTotalAberto = (cliente.total_em_aberto || 0) - tituloParaAprovar.valor;
-      const novoTotalVencido = tituloParaAprovar.status === 'vencido'
+
+      // Verificar se o título estava vencido (status pendente E data de vencimento anterior a hoje)
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      const dataVencimento = new Date(tituloParaAprovar.data_vencimento + 'T00:00:00');
+      const estaVencido = tituloParaAprovar.status === 'pendente' && dataVencimento < hoje;
+
+      const novoTotalVencido = estaVencido
         ? (cliente.total_vencido || 0) - tituloParaAprovar.valor
-        : cliente.total_vencido;
+        : (cliente.total_vencido || 0);
 
       await User.update(tituloParaAprovar.cliente_user_id, {
         total_em_aberto: Math.max(0, novoTotalAberto),
         total_vencido: Math.max(0, novoTotalVencido)
       });
 
-      // Notificar cliente
+      // Verificar se todos os títulos do pedido foram pagos e atualizar status_pagamento do pedido
       const pedido = await Pedido.get(tituloParaAprovar.pedido_id);
+      const titulosDoPedido = await Carteira.filter({ pedido_id: tituloParaAprovar.pedido_id });
+      const todosPagos = titulosDoPedido.every(t => t.status === 'pago' || t.id === tituloParaAprovar.id);
+
+      if (todosPagos && pedido.status_pagamento !== 'pago') {
+        await Pedido.update(pedido.id, {
+          status_pagamento: 'pago',
+          data_pagamento: dataPagamentoConfirmada
+        });
+      }
+
+      // Notificar cliente
 
       await SendEmail({
         to: cliente.email,
@@ -317,16 +403,28 @@ export default function CarteiraFinanceira() {
   };
 
   const getStatusInfo = (titulo) => {
-    const hoje = new Date();
-    const vencimento = new Date(titulo.data_vencimento);
-    const diffDias = Math.ceil((vencimento - hoje) / (1000 * 60 * 60 * 24));
-
+    // Se já está pago, retornar status pago independente da data
     if (titulo.status === 'pago') {
       return { label: 'Pago', color: 'bg-green-100 text-green-800', icon: CheckCircle };
     }
 
+    // Se está em análise, mostrar esse status
+    if (titulo.status === 'em_analise') {
+      return { label: 'Em Análise', color: 'bg-blue-100 text-blue-800', icon: Clock };
+    }
+
+    // Normalizar datas para comparação (ignorar horário)
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const vencimento = new Date(titulo.data_vencimento + 'T00:00:00');
+    const diffDias = Math.ceil((vencimento - hoje) / (1000 * 60 * 60 * 24));
+
     if (diffDias < 0) {
       return { label: `Vencido há ${Math.abs(diffDias)} dias`, color: 'bg-red-100 text-red-800', icon: AlertTriangle };
+    }
+
+    if (diffDias === 0) {
+      return { label: 'Vence hoje', color: 'bg-red-100 text-red-800', icon: AlertTriangle };
     }
 
     if (diffDias <= 2) {
@@ -340,29 +438,83 @@ export default function CarteiraFinanceira() {
     return { label: 'Pendente', color: 'bg-blue-100 text-blue-800', icon: Clock };
   };
 
-  const getFornecedorNome = (fornecedorId) => {
-    const fornecedor = fornecedores.find(f => f.id === fornecedorId);
-    return fornecedor?.razao_social || fornecedor?.nome_fantasia || fornecedor?.nome_marca || 'N/A';
+  // Função para calcular número da parcela (X de Y)
+  const getParcelaInfo = (titulo) => {
+    if (!titulo.pedido_id) return null;
+
+    // Buscar todos os títulos do mesmo pedido
+    const titulosDoPedido = titulos
+      .filter(t => t.pedido_id === titulo.pedido_id)
+      .sort((a, b) => new Date(a.data_vencimento) - new Date(b.data_vencimento));
+
+    const totalParcelas = titulosDoPedido.length;
+    const numeroParcela = titulosDoPedido.findIndex(t => t.id === titulo.id) + 1;
+
+    return { numeroParcela, totalParcelas };
+  };
+
+  // Função para abrir modal de detalhes do pedido
+  const handleVerDetalhesPedido = (titulo) => {
+    const pedido = pedidosMap[titulo.pedido_id];
+    if (pedido) {
+      setPedidoSelecionado(pedido);
+      setShowDetalhesModal(true);
+    } else {
+      toast.error('Pedido não encontrado');
+    }
+  };
+
+  const getFornecedorNome = (titulo) => {
+    // Primeiro tenta pelo fornecedor_id do título
+    if (titulo.fornecedor_id) {
+      const fornecedor = fornecedores.find(f => f.id === titulo.fornecedor_id);
+      if (fornecedor) {
+        return fornecedor.razao_social || fornecedor.nome_fantasia || fornecedor.nome_marca;
+      }
+    }
+    // Se não encontrou, tenta pelo pedido associado
+    if (titulo.pedido_id && pedidosMap[titulo.pedido_id]?.fornecedor_id) {
+      const fornecedor = fornecedores.find(f => f.id === pedidosMap[titulo.pedido_id].fornecedor_id);
+      if (fornecedor) {
+        return fornecedor.razao_social || fornecedor.nome_fantasia || fornecedor.nome_marca;
+      }
+    }
+    return 'Polo Wear';
   };
 
   const handleExport = (format) => {
     try {
       const filteredData = filteredTitulos;
 
+      if (!filteredData || filteredData.length === 0) {
+        toast.info('Não há dados para exportar');
+        return;
+      }
+
       // Preparar dados para exportação
-      const exportData = filteredData.map(titulo => ({
-        descricao: titulo.descricao || '',
-        tipo: titulo.tipo,
-        valor: titulo.valor,
-        vencimento: formatDate(titulo.data_vencimento),
-        pagamento: titulo.data_pagamento ? formatDate(titulo.data_pagamento) : '',
-        status: titulo.status,
-        categoria: titulo.categoria || '',
-        observacoes: titulo.observacoes || ''
-      }));
+      const exportData = filteredData.map(titulo => {
+        // Calcular status de exibição
+        const vencimento = new Date(titulo.data_vencimento);
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        const isVencido = vencimento < hoje && titulo.status === 'pendente';
+
+        return {
+          fornecedor: getFornecedorNome(titulo),
+          descricao: titulo.descricao || '-',
+          tipo: titulo.tipo || 'a_receber',
+          valor: titulo.valor || 0,
+          vencimento: formatDate(titulo.data_vencimento),
+          pagamento: titulo.data_pagamento ? formatDate(titulo.data_pagamento) : '-',
+          status: titulo.status === 'pago' ? 'Pago' : isVencido ? 'Vencido' : titulo.status === 'em_analise' ? 'Em Análise' : 'Pendente',
+          categoria: titulo.categoria || '-',
+          observacoes: titulo.observacoes || '-'
+        };
+      });
 
       // Definir colunas
       const columns = [
+        { key: 'fornecedor', label: 'Fornecedor' },
         { key: 'descricao', label: 'Descrição' },
         { key: 'tipo', label: 'Tipo' },
         { key: 'valor', label: 'Valor (R$)' },
@@ -392,17 +544,66 @@ export default function CarteiraFinanceira() {
     }
   };
 
+  // Função para toggle de filtro (adiciona ou remove do array)
+  const toggleFiltroStatus = (status) => {
+    setFiltrosStatus(prev =>
+      prev.includes(status)
+        ? prev.filter(s => s !== status)
+        : [...prev, status]
+    );
+  };
+
+  const toggleFiltroFornecedor = (fornecedorId) => {
+    setFiltrosFornecedor(prev =>
+      prev.includes(fornecedorId)
+        ? prev.filter(f => f !== fornecedorId)
+        : [...prev, fornecedorId]
+    );
+  };
+
+  const limparFiltros = () => {
+    setFiltrosStatus([]);
+    setFiltrosFornecedor([]);
+    setPesquisaPedido('');
+  };
+
   const filteredTitulos = titulos.filter(titulo => {
-    const matchesStatus = filtroStatus === 'todos' || titulo.status === filtroStatus;
-    const matchesFornecedor = filtroFornecedor === 'todos' || titulo.fornecedor_id === filtroFornecedor;
-    
-    let matchesVencimento = true;
-    if (filtroStatus === 'vencidos') {
-      const vencimento = new Date(titulo.data_vencimento);
-      matchesVencimento = vencimento < new Date() && titulo.status === 'pendente';
+    // Filtro por fornecedor (múltipla seleção)
+    const matchesFornecedor = filtrosFornecedor.length === 0 || filtrosFornecedor.includes(titulo.fornecedor_id);
+
+    // Filtro por número de pedido (cliente pode pesquisar pelo código)
+    const numeroPedido = titulo.pedido_id ? titulo.pedido_id.slice(-8).toUpperCase() : '';
+    const matchesPesquisa = !pesquisaPedido ||
+      numeroPedido.includes(pesquisaPedido.toUpperCase()) ||
+      titulo.pedido_id?.toLowerCase().includes(pesquisaPedido.toLowerCase());
+
+    // Filtro por status (múltipla seleção)
+    if (filtrosStatus.length === 0) {
+      // Sem filtro de status = mostrar todos
+      return matchesFornecedor && matchesPesquisa;
     }
-    
-    return matchesStatus && matchesFornecedor && matchesVencimento;
+
+    // Verificar se algum dos filtros de status selecionados corresponde
+    let matchesStatus = false;
+
+    for (const filtro of filtrosStatus) {
+      if (filtro === 'vencidos') {
+        // Tratamento especial para "vencidos" - não é um status real, é calculado
+        const vencimento = new Date(titulo.data_vencimento);
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        const isVencido = vencimento < hoje && titulo.status === 'pendente';
+        if (isVencido) {
+          matchesStatus = true;
+          break;
+        }
+      } else if (titulo.status === filtro) {
+        matchesStatus = true;
+        break;
+      }
+    }
+
+    return matchesStatus && matchesFornecedor && matchesPesquisa;
   });
 
   if (loading) {
@@ -515,37 +716,96 @@ export default function CarteiraFinanceira() {
 
       {/* Filtros */}
       <Card className="bg-slate-100 rounded-2xl shadow-neumorphic">
-        <CardContent className="p-6">
-          <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]">
-              <Label>Status</Label>
-              <select
-                value={filtroStatus}
-                onChange={(e) => setFiltroStatus(e.target.value)}
-                className="w-full p-2 rounded-lg border bg-white"
-              >
-                <option value="todos">Todos</option>
-                <option value="pendente">Pendentes</option>
-                <option value="vencidos">Vencidos</option>
-                <option value="pago">Pagos</option>
-                <option value="em_analise">Em Análise</option>
-              </select>
+        <CardContent className="p-6 space-y-4">
+          {/* Pesquisa por pedido */}
+          <div className="flex gap-4 items-end">
+            <div className="flex-1 max-w-md">
+              <Label>Pesquisar por Pedido</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Input
+                  type="text"
+                  placeholder="Ex: A1B2C3D4"
+                  value={pesquisaPedido}
+                  onChange={(e) => setPesquisaPedido(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
             </div>
-
-            <div className="flex-1 min-w-[200px]">
-              <Label>Fornecedor</Label>
-              <select
-                value={filtroFornecedor}
-                onChange={(e) => setFiltroFornecedor(e.target.value)}
-                className="w-full p-2 rounded-lg border bg-white"
+            {(filtrosStatus.length > 0 || filtrosFornecedor.length > 0 || pesquisaPedido) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={limparFiltros}
+                className="text-gray-600"
               >
-                <option value="todos">Todos</option>
-                {fornecedores.map(f => (
-                  <option key={f.id} value={f.id}>{f.razao_social || f.nome_fantasia || f.nome_marca}</option>
-                ))}
-              </select>
+                Limpar Filtros
+              </Button>
+            )}
+          </div>
+
+          {/* Filtros de Status */}
+          <div>
+            <Label className="mb-2 block">Status (clique para selecionar/desmarcar)</Label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'pendente', label: 'Pendentes', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
+                { value: 'vencidos', label: 'Vencidos', color: 'bg-red-100 text-red-800 border-red-300' },
+                { value: 'pago', label: 'Pagos', color: 'bg-green-100 text-green-800 border-green-300' },
+                { value: 'em_analise', label: 'Em Análise', color: 'bg-blue-100 text-blue-800 border-blue-300' }
+              ].map(status => (
+                <Badge
+                  key={status.value}
+                  variant="outline"
+                  className={`cursor-pointer px-3 py-1.5 text-sm transition-all ${
+                    filtrosStatus.includes(status.value)
+                      ? `${status.color} border-2`
+                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}
+                  onClick={() => toggleFiltroStatus(status.value)}
+                >
+                  {filtrosStatus.includes(status.value) && (
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                  )}
+                  {status.label}
+                </Badge>
+              ))}
             </div>
           </div>
+
+          {/* Filtros de Fornecedor */}
+          {fornecedores.length > 0 && (
+            <div>
+              <Label className="mb-2 block">Fornecedor (clique para selecionar/desmarcar)</Label>
+              <div className="flex flex-wrap gap-2">
+                {fornecedores.map(f => (
+                  <Badge
+                    key={f.id}
+                    variant="outline"
+                    className={`cursor-pointer px-3 py-1.5 text-sm transition-all ${
+                      filtrosFornecedor.includes(f.id)
+                        ? 'bg-purple-100 text-purple-800 border-purple-300 border-2'
+                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                    }`}
+                    onClick={() => toggleFiltroFornecedor(f.id)}
+                  >
+                    {filtrosFornecedor.includes(f.id) && (
+                      <CheckCircle className="w-3 h-3 mr-1" />
+                    )}
+                    {f.razao_social || f.nome_fantasia || f.nome_marca}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Indicador de filtros ativos */}
+          {(filtrosStatus.length > 0 || filtrosFornecedor.length > 0) && (
+            <div className="text-sm text-gray-500">
+              Filtros ativos: {filtrosStatus.length + filtrosFornecedor.length} |
+              Mostrando {filteredTitulos.length} de {titulos.length} títulos
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -559,21 +819,37 @@ export default function CarteiraFinanceira() {
             {filteredTitulos.map(titulo => {
               const statusInfo = getStatusInfo(titulo);
               const StatusIcon = statusInfo.icon;
+              const parcelaInfo = getParcelaInfo(titulo);
+              const numeroPedido = titulo.pedido_id ? titulo.pedido_id.slice(-8).toUpperCase() : null;
 
               return (
                 <div key={titulo.id} className="p-4 bg-white rounded-lg shadow">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex-1">
+                      {/* Linha com número do pedido e parcela */}
+                      <div className="flex flex-wrap items-center gap-2 mb-2 text-sm">
+                        {numeroPedido && (
+                          <span className="font-medium text-gray-700">
+                            Pedido #{numeroPedido}
+                          </span>
+                        )}
+                        {parcelaInfo && (
+                          <Badge variant="secondary" className="text-xs">
+                            Parcela {parcelaInfo.numeroParcela} de {parcelaInfo.totalParcelas}
+                          </Badge>
+                        )}
+                      </div>
+
                       <div className="flex items-center gap-3 mb-2">
                         <Badge className={statusInfo.color}>
                           <StatusIcon className="w-4 h-4 mr-1" />
                           {statusInfo.label}
                         </Badge>
                         <Badge variant="outline">
-                          {getFornecedorNome(titulo.fornecedor_id)}
+                          {getFornecedorNome(titulo)}
                         </Badge>
                       </div>
-                      
+
                       <div className="grid md:grid-cols-3 gap-2 text-sm">
                         <div>
                           <span className="text-gray-600">Valor:</span>
@@ -662,7 +938,20 @@ export default function CarteiraFinanceira() {
                       )}
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      {/* Botão Ver Detalhes do Pedido */}
+                      {titulo.pedido_id && pedidosMap[titulo.pedido_id] && (
+                        <Button
+                          onClick={() => handleVerDetalhesPedido(titulo)}
+                          size="sm"
+                          variant="outline"
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          Ver Pedido
+                        </Button>
+                      )}
+
+                      {/* Botão Enviar Comprovante (clientes, título pendente) */}
                       {user?.tipo_negocio === 'multimarca' && titulo.status === 'pendente' && (
                         <Button
                           onClick={() => {
@@ -677,6 +966,7 @@ export default function CarteiraFinanceira() {
                         </Button>
                       )}
 
+                      {/* Botões de aprovação/recusa para admin */}
                       {user?.role === 'admin' && titulo.comprovante_url && !titulo.comprovante_analisado && (
                         <>
                           <Button
@@ -944,6 +1234,141 @@ export default function CarteiraFinanceira() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Detalhes do Pedido */}
+      <Dialog open={showDetalhesModal} onOpenChange={setShowDetalhesModal}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Detalhes do Pedido #{pedidoSelecionado?.id?.slice(-8).toUpperCase()}
+            </DialogTitle>
+          </DialogHeader>
+          {pedidoSelecionado && (
+            <div className="space-y-4 py-4">
+              {/* Informações básicas do pedido */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-xs text-gray-500">Status do Pedido</p>
+                  <p className="font-medium capitalize">
+                    {pedidoSelecionado.status?.replace(/_/g, ' ')}
+                  </p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-xs text-gray-500">Data do Pedido</p>
+                  <p className="font-medium">
+                    {pedidoSelecionado.created_date
+                      ? new Date(pedidoSelecionado.created_date).toLocaleDateString('pt-BR')
+                      : '-'}
+                  </p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-xs text-gray-500">Valor Total</p>
+                  <p className="font-bold text-lg text-blue-600">
+                    {formatCurrency(pedidoSelecionado.total || 0)}
+                  </p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-xs text-gray-500">Forma de Pagamento</p>
+                  <p className="font-medium capitalize">
+                    {pedidoSelecionado.forma_pagamento?.replace(/_/g, ' ') || '-'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Parcelas do pedido */}
+              <div className="border-t pt-4">
+                <h4 className="font-medium mb-3">Parcelas deste Pedido</h4>
+                <div className="space-y-2">
+                  {titulos
+                    .filter(t => t.pedido_id === pedidoSelecionado.id)
+                    .sort((a, b) => new Date(a.data_vencimento) - new Date(b.data_vencimento))
+                    .map((titulo, index, arr) => {
+                      const statusParcela = getStatusInfo(titulo);
+                      const StatusIconParcela = statusParcela.icon;
+                      return (
+                        <div key={titulo.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-medium">
+                              Parcela {index + 1}/{arr.length}
+                            </span>
+                            <Badge className={statusParcela.color} variant="secondary">
+                              <StatusIconParcela className="w-3 h-3 mr-1" />
+                              {statusParcela.label}
+                            </Badge>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold">{formatCurrency(titulo.valor)}</p>
+                            <p className="text-xs text-gray-500">
+                              Venc: {new Date(titulo.data_vencimento).toLocaleDateString('pt-BR')}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+
+              {/* Itens do pedido */}
+              {pedidoSelecionado.itens && pedidoSelecionado.itens.length > 0 && (
+                <div className="border-t pt-4">
+                  <h4 className="font-medium mb-3">Itens do Pedido</h4>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {pedidoSelecionado.itens.map((item, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg text-sm">
+                        <div className="flex items-center gap-2">
+                          {item.imagem && (
+                            <img src={item.imagem} alt={item.nome} className="w-10 h-10 object-cover rounded" />
+                          )}
+                          <div>
+                            <p className="font-medium">{item.nome || item.produto_nome}</p>
+                            {item.variante && (
+                              <p className="text-xs text-gray-500">
+                                {item.variante.cor && `Cor: ${item.variante.cor}`}
+                                {item.variante.tamanho && ` | Tam: ${item.variante.tamanho}`}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p>{item.quantidade}x {formatCurrency(item.preco_unitario || item.preco)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Rastreamento */}
+              {pedidoSelecionado.link_rastreio && (
+                <div className="border-t pt-4">
+                  <h4 className="font-medium mb-2">Rastreamento</h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(pedidoSelecionado.link_rastreio, '_blank')}
+                    className="w-full"
+                  >
+                    Rastrear Pedido
+                  </Button>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowDetalhesModal(false);
+                    setPedidoSelecionado(null);
+                  }}
+                >
+                  Fechar
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

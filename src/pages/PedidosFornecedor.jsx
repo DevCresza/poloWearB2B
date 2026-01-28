@@ -61,6 +61,7 @@ export default function PedidosFornecedor() {
   const [uploading, setUploading] = useState(false);
   const [novoStatusPagamento, setNovoStatusPagamento] = useState('');
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
+  const [valorFreteFOB, setValorFreteFOB] = useState('');
 
   // Estados para parcelas do boleto
   const [qtdParcelas, setQtdParcelas] = useState(1);
@@ -237,20 +238,26 @@ export default function PedidosFornecedor() {
     }
 
     const metodoPagamentoFinal = metodoPagamento || selectedPedido.metodo_pagamento;
+    const freteFOB = parseFloat(valorFreteFOB) || 0;
+
+    // Calcular valor final (valor total + frete FOB)
+    const valorFinal = (selectedPedido.valor_total || 0) + freteFOB;
 
     setUploading(true);
     try {
       // Upload NF
       const nfUpload = await UploadFile({ file: nfFile });
 
-      // Atualizar pedido
+      // Atualizar pedido com frete FOB
       await Pedido.update(selectedPedido.id, {
         status: 'faturado',
         nf_url: nfUpload.file_url,
         nf_numero: nfNumero,
         nf_data_upload: new Date().toISOString(),
         metodo_pagamento_original: selectedPedido.metodo_pagamento,
-        metodo_pagamento: metodoPagamentoFinal
+        metodo_pagamento: metodoPagamentoFinal,
+        valor_frete_fob: freteFOB,
+        valor_final: valorFinal
       });
 
       // Notificar cliente
@@ -268,7 +275,9 @@ export default function PedidosFornecedor() {
               <p>Seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi faturado!</p>
               <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
                 <p><strong>Nota Fiscal:</strong> #${nfNumero}</p>
-                <p><strong>Valor Total:</strong> ${formatCurrency(selectedPedido.valor_total)}</p>
+                <p><strong>Valor dos Produtos:</strong> ${formatCurrency(selectedPedido.valor_total)}</p>
+                ${freteFOB > 0 ? `<p><strong>Frete FOB:</strong> ${formatCurrency(freteFOB)}</p>` : ''}
+                <p style="font-size: 18px; margin-top: 10px;"><strong>Valor Total:</strong> ${formatCurrency(valorFinal)}</p>
               </div>
               <div style="text-align: center; margin-top: 30px;">
                 <a href="${nfUpload.file_url}" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px;">
@@ -412,7 +421,9 @@ export default function PedidosFornecedor() {
       });
 
       // Criar títulos na carteira financeira para cada parcela
-      const valorParcela = selectedPedido.valor_total / qtdParcelas;
+      // Usar valor_final se disponível (inclui frete FOB), caso contrário usar valor_total
+      const valorBase = selectedPedido.valor_final || selectedPedido.valor_total;
+      const valorParcela = valorBase / qtdParcelas;
 
       for (let i = 0; i < qtdParcelas; i++) {
         await Carteira.create({
@@ -441,6 +452,7 @@ export default function PedidosFornecedor() {
 
       // Notificar cliente
       const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
+      const temFrete = selectedPedido.valor_frete_fob && selectedPedido.valor_frete_fob > 0;
       await SendEmail({
         from_name: 'POLO B2B',
         to: cliente?.email,
@@ -453,7 +465,11 @@ export default function PedidosFornecedor() {
             <div style="padding: 30px; background: white;">
               <p>O boleto do seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> está disponível!</p>
               <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <p><strong>Valor Total:</strong> ${formatCurrency(selectedPedido.valor_total)}</p>
+                ${temFrete ? `
+                  <p><strong>Valor dos Produtos:</strong> ${formatCurrency(selectedPedido.valor_total)}</p>
+                  <p><strong>Frete FOB:</strong> ${formatCurrency(selectedPedido.valor_frete_fob)}</p>
+                ` : ''}
+                <p><strong>Valor Total:</strong> ${formatCurrency(valorBase)}</p>
                 ${qtdParcelas > 1 ? `<p><strong>Parcelado em:</strong> ${qtdParcelas}x de ${formatCurrency(valorParcela)}</p>` : ''}
               </div>
 
@@ -581,8 +597,8 @@ export default function PedidosFornecedor() {
     }
 
     // Aplicar filtros atuais
-    if (statusFilter !== 'todos') {
-      pedidosParaExportar = pedidosParaExportar.filter(p => p.status === statusFilter);
+    if (filtroStatus !== 'todos') {
+      pedidosParaExportar = pedidosParaExportar.filter(p => p.status === filtroStatus);
     }
 
     // Definir colunas para o PDF
@@ -615,6 +631,7 @@ export default function PedidosFornecedor() {
     setParcelas([{ dataVencimento: '', boletoFile: null }]);
     setBoletoUnico(false);
     setBoletoUnicoFile(null);
+    setValorFreteFOB('');
   };
 
   // Função para atualizar quantidade de parcelas
@@ -873,7 +890,7 @@ export default function PedidosFornecedor() {
                         <p className="text-sm text-gray-500">{cliente.full_name}</p>
                       )}
                       <p className="text-sm text-gray-600 mt-1">
-                        Pedido #{pedido.id.slice(0, 8)} • {new Date(pedido.created_date).toLocaleDateString('pt-BR')}
+                        Pedido #{pedido.id.slice(-8).toUpperCase()} • {new Date(pedido.created_date).toLocaleDateString('pt-BR')}
                       </p>
                       <p className="text-sm text-gray-600">
                         Fornecedor: {fornecedor?.nome_marca || 'Não identificado'}
@@ -1210,6 +1227,53 @@ export default function PedidosFornecedor() {
               </p>
             </div>
 
+            {/* Campo de Frete FOB */}
+            <div className="border rounded-lg p-4 bg-orange-50 space-y-3">
+              <h4 className="font-semibold text-orange-900 flex items-center gap-2">
+                <Truck className="w-4 h-4" />
+                Frete FOB (opcional)
+              </h4>
+              <div>
+                <Label htmlFor="valorFreteFOB">Valor do Frete FOB</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">R$</span>
+                  <Input
+                    id="valorFreteFOB"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={valorFreteFOB}
+                    onChange={(e) => setValorFreteFOB(e.target.value)}
+                    placeholder="0,00"
+                    className="pl-10"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Informe o valor do frete a ser cobrado do cliente (frete por conta do comprador)
+                </p>
+              </div>
+
+              {/* Resumo de valores */}
+              {selectedPedido && (
+                <div className="bg-white p-3 rounded-lg border border-orange-200">
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-gray-600">Valor dos Produtos:</span>
+                    <span>{formatCurrency(selectedPedido.valor_total || 0)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-gray-600">Frete FOB:</span>
+                    <span>{formatCurrency(parseFloat(valorFreteFOB) || 0)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-lg pt-2 border-t">
+                    <span>Valor Total:</span>
+                    <span className="text-green-600">
+                      {formatCurrency((selectedPedido.valor_total || 0) + (parseFloat(valorFreteFOB) || 0))}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => setShowFaturarModal(false)}>
                 Cancelar
@@ -1352,10 +1416,19 @@ export default function PedidosFornecedor() {
                   </Select>
                 </div>
                 <div className="flex items-end">
-                  <p className="text-sm text-blue-800">
-                    <strong>Valor por parcela:</strong><br />
-                    {formatCurrency(selectedPedido?.valor_total / qtdParcelas)}
-                  </p>
+                  <div className="text-sm text-blue-800">
+                    {selectedPedido?.valor_frete_fob > 0 && (
+                      <p className="text-xs text-gray-600">
+                        Produtos: {formatCurrency(selectedPedido?.valor_total)} + Frete: {formatCurrency(selectedPedido?.valor_frete_fob)}
+                      </p>
+                    )}
+                    <p>
+                      <strong>Valor total:</strong> {formatCurrency(selectedPedido?.valor_final || selectedPedido?.valor_total)}
+                    </p>
+                    <p>
+                      <strong>Valor por parcela:</strong> {formatCurrency((selectedPedido?.valor_final || selectedPedido?.valor_total) / qtdParcelas)}
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -1367,7 +1440,7 @@ export default function PedidosFornecedor() {
                     <div className="flex items-center gap-4">
                       <Badge className="bg-blue-600">Parcela {index + 1}/{qtdParcelas}</Badge>
                       <span className="text-sm text-gray-600">
-                        {formatCurrency(selectedPedido?.valor_total / qtdParcelas)}
+                        {formatCurrency((selectedPedido?.valor_final || selectedPedido?.valor_total) / qtdParcelas)}
                       </span>
                       <div className="flex-1">
                         <Input

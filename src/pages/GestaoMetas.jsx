@@ -71,7 +71,14 @@ export default function GestaoMetas() {
       const dataInicio = new Date(meta.ano, meta.mes - 1, 1);
       const dataFim = new Date(meta.ano, meta.mes, 0);
 
-      let pedidos = await Pedido.filter({ status: 'finalizado' });
+      // Buscar pedidos com status que indicam venda confirmada (não cancelados)
+      let pedidos = await Pedido.list();
+
+      // Filtrar pedidos com status de venda confirmada (não apenas finalizados)
+      pedidos = pedidos.filter(p =>
+        ['finalizado', 'faturado', 'em_transporte', 'em_producao'].includes(p.status) &&
+        p.status !== 'cancelado'
+      );
 
       // Filtrar pedidos do período
       pedidos = pedidos.filter(p => {
