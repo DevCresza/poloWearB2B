@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { User } from '@/api/entities';
 import { Produto } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
@@ -47,6 +47,15 @@ export default function Catalogo() {
   const [fotoAtualIndex, setFotoAtualIndex] = useState(0);
   const [capsulaFotoIndex, setCapsulaFotoIndex] = useState(0); // Índice da foto atual na galeria da cápsula
   const [capsulaFotos, setCapsulaFotos] = useState([]); // Array de fotos para a galeria da cápsula
+
+  // Mapa de fornecedor_id → nome do fornecedor para exibição
+  const fornecedorMap = useMemo(() => {
+    const map = {};
+    fornecedores.forEach(f => {
+      map[f.id] = f.razao_social || f.nome_fantasia || f.nome_marca || 'Fornecedor';
+    });
+    return map;
+  }, [fornecedores]);
 
   useEffect(() => {
     checkUserAndLoadData();
@@ -693,8 +702,8 @@ export default function Catalogo() {
             </h3>
             
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] sm:text-xs">
-                Polo Wear
+              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] sm:text-xs truncate max-w-[120px]" title={fornecedorMap[produto.fornecedor_id] || 'Polo Wear'}>
+                {fornecedorMap[produto.fornecedor_id] || 'Polo Wear'}
               </Badge>
               <div className="text-right">
                 <p className="text-lg sm:text-xl lg:text-2xl font-bold text-blue-600">
@@ -1128,7 +1137,9 @@ export default function Catalogo() {
               <div className="space-y-6">
                 <div>
                   <div className="flex items-center gap-2 mb-3 flex-wrap">
-                    <Badge className="bg-blue-100 text-blue-800">Polo Wear</Badge>
+                    <Badge className="bg-blue-100 text-blue-800">
+                      {fornecedorMap[selectedProduto.fornecedor_id] || 'Polo Wear'}
+                    </Badge>
                     {selectedProduto.categoria && (
                       <Badge variant="outline">{selectedProduto.categoria}</Badge>
                     )}

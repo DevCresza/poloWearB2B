@@ -238,9 +238,9 @@ export default function PedidosFornecedor() {
     }
 
     const metodoPagamentoFinal = metodoPagamento || selectedPedido.metodo_pagamento;
-    const freteFOB = parseFloat(valorFreteFOB) || 0;
+    const freteFOB = parseFloat(selectedPedido.valor_frete_fob) || 0;
 
-    // Calcular valor final (valor total + frete FOB)
+    // Calcular valor final (valor total + frete FOB já registrado)
     const valorFinal = (selectedPedido.valor_total || 0) + freteFOB;
 
     setUploading(true);
@@ -248,7 +248,7 @@ export default function PedidosFornecedor() {
       // Upload NF
       const nfUpload = await UploadFile({ file: nfFile });
 
-      // Atualizar pedido com frete FOB
+      // Atualizar pedido
       await Pedido.update(selectedPedido.id, {
         status: 'faturado',
         nf_url: nfUpload.file_url,
@@ -256,38 +256,43 @@ export default function PedidosFornecedor() {
         nf_data_upload: new Date().toISOString(),
         metodo_pagamento_original: selectedPedido.metodo_pagamento,
         metodo_pagamento: metodoPagamentoFinal,
-        valor_frete_fob: freteFOB,
         valor_final: valorFinal
       });
 
-      // Notificar cliente
-      const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
-      await SendEmail({
-        from_name: 'POLO B2B',
-        to: cliente?.email,
-        subject: `📄 Pedido Faturado - NF #${nfNumero}`,
-        body: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); padding: 30px; text-align: center;">
-              <h1 style="color: white; margin: 0;">📄 Pedido Faturado</h1>
-            </div>
-            <div style="padding: 30px; background: white;">
-              <p>Seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi faturado!</p>
-              <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <p><strong>Nota Fiscal:</strong> #${nfNumero}</p>
-                <p><strong>Valor dos Produtos:</strong> ${formatCurrency(selectedPedido.valor_total)}</p>
-                ${freteFOB > 0 ? `<p><strong>Frete FOB:</strong> ${formatCurrency(freteFOB)}</p>` : ''}
-                <p style="font-size: 18px; margin-top: 10px;"><strong>Valor Total:</strong> ${formatCurrency(valorFinal)}</p>
+      // Notificar cliente (separado para não bloquear faturamento)
+      try {
+        const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
+        if (cliente?.email) {
+          await SendEmail({
+            from_name: 'POLO B2B',
+            to: cliente.email,
+            subject: `Pedido Faturado - NF #${nfNumero}`,
+            body: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); padding: 30px; text-align: center;">
+                  <h1 style="color: white; margin: 0;">Pedido Faturado</h1>
+                </div>
+                <div style="padding: 30px; background: white;">
+                  <p>Seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi faturado!</p>
+                  <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                    <p><strong>Nota Fiscal:</strong> #${nfNumero}</p>
+                    <p><strong>Valor dos Produtos:</strong> ${formatCurrency(selectedPedido.valor_total)}</p>
+                    ${freteFOB > 0 ? `<p><strong>Frete FOB:</strong> ${formatCurrency(freteFOB)}</p>` : ''}
+                    <p style="font-size: 18px; margin-top: 10px;"><strong>Valor Total:</strong> ${formatCurrency(valorFinal)}</p>
+                  </div>
+                  <div style="text-align: center; margin-top: 30px;">
+                    <a href="${nfUpload.file_url}" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px;">
+                      Baixar Nota Fiscal
+                    </a>
+                  </div>
+                </div>
               </div>
-              <div style="text-align: center; margin-top: 30px;">
-                <a href="${nfUpload.file_url}" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px;">
-                  Baixar Nota Fiscal
-                </a>
-              </div>
-            </div>
-          </div>
-        `
-      });
+            `
+          });
+        }
+      } catch (emailError) {
+        console.warn('Erro ao enviar email de faturamento:', emailError);
+      }
 
       toast.success('Pedido faturado com sucesso!');
       setShowFaturarModal(false);
@@ -956,7 +961,7 @@ export default function PedidosFornecedor() {
                           <div>
                             <span className="text-gray-600">Entrega Prevista:</span>
                             <p className="font-medium">
-                              {new Date(pedido.data_prevista_entrega).toLocaleDateString('pt-BR')}
+                              {new Date(pedido.data_prevista_entrega + 'T00:00:00').toLocaleDateString('pt-BR')}
                             </p>
                           </div>
                         )}
@@ -1227,52 +1232,27 @@ export default function PedidosFornecedor() {
               </p>
             </div>
 
-            {/* Campo de Frete FOB */}
-            <div className="border rounded-lg p-4 bg-orange-50 space-y-3">
-              <h4 className="font-semibold text-orange-900 flex items-center gap-2">
-                <Truck className="w-4 h-4" />
-                Frete FOB (opcional)
-              </h4>
-              <div>
-                <Label htmlFor="valorFreteFOB">Valor do Frete FOB</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">R$</span>
-                  <Input
-                    id="valorFreteFOB"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={valorFreteFOB}
-                    onChange={(e) => setValorFreteFOB(e.target.value)}
-                    placeholder="0,00"
-                    className="pl-10"
-                  />
+            {/* Resumo de valores */}
+            {selectedPedido && (
+              <div className="bg-gray-50 p-3 rounded-lg border">
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-gray-600">Valor dos Produtos:</span>
+                  <span>{formatCurrency(selectedPedido.valor_total || 0)}</span>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Informe o valor do frete a ser cobrado do cliente (frete por conta do comprador)
-                </p>
-              </div>
-
-              {/* Resumo de valores */}
-              {selectedPedido && (
-                <div className="bg-white p-3 rounded-lg border border-orange-200">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-600">Valor dos Produtos:</span>
-                    <span>{formatCurrency(selectedPedido.valor_total || 0)}</span>
-                  </div>
+                {(selectedPedido.valor_frete_fob > 0) && (
                   <div className="flex justify-between text-sm mb-1">
                     <span className="text-gray-600">Frete FOB:</span>
-                    <span>{formatCurrency(parseFloat(valorFreteFOB) || 0)}</span>
+                    <span>{formatCurrency(selectedPedido.valor_frete_fob)}</span>
                   </div>
-                  <div className="flex justify-between font-bold text-lg pt-2 border-t">
-                    <span>Valor Total:</span>
-                    <span className="text-green-600">
-                      {formatCurrency((selectedPedido.valor_total || 0) + (parseFloat(valorFreteFOB) || 0))}
-                    </span>
-                  </div>
+                )}
+                <div className="flex justify-between font-bold text-lg pt-2 border-t">
+                  <span>Valor Total:</span>
+                  <span className="text-green-600">
+                    {formatCurrency((selectedPedido.valor_total || 0) + (parseFloat(selectedPedido.valor_frete_fob) || 0))}
+                  </span>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => setShowFaturarModal(false)}>

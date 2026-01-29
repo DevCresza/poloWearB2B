@@ -36,8 +36,15 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   const [dataPagamentoParcela, setDataPagamentoParcela] = useState('');
   const [uploadingParcela, setUploadingParcela] = useState(false);
 
-  // Verificar se usuário pode fazer upload (fornecedor ou admin)
-  const canUpload = currentUser?.role === 'admin' || currentUser?.tipo_negocio === 'fornecedor';
+  // Estados para frete FOB
+  const [valorFreteFOB, setValorFreteFOB] = useState(pedido.valor_frete_fob || '');
+  const [salvandoFrete, setSalvandoFrete] = useState(false);
+
+  // Verificar se é cliente (somente visualização)
+  const isCliente = currentUser?.tipo_negocio === 'multimarca' || currentUser?.tipo_negocio === 'franqueado';
+
+  // Verificar se usuário pode fazer upload (fornecedor ou admin, nunca cliente)
+  const canUpload = !isCliente && (currentUser?.role === 'admin' || currentUser?.tipo_negocio === 'fornecedor');
 
   // Carregar parcelas do pedido
   useEffect(() => {
@@ -59,6 +66,26 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     };
     loadParcelas();
   }, [pedido?.id]);
+
+  // Salvar frete FOB
+  const handleSalvarFrete = async () => {
+    setSalvandoFrete(true);
+    try {
+      const frete = parseFloat(valorFreteFOB) || 0;
+      const valorFinal = (pedido.valor_total || 0) + frete;
+      await Pedido.update(pedido.id, {
+        valor_frete_fob: frete,
+        valor_final: valorFinal
+      });
+      toast.success('Frete atualizado com sucesso!');
+      if (onUpdate) onUpdate();
+    } catch (error) {
+      console.error('Erro ao salvar frete:', error);
+      toast.error('Erro ao salvar frete');
+    } finally {
+      setSalvandoFrete(false);
+    }
+  };
 
   // Upload de Boleto
   const handleUploadBoleto = async () => {
@@ -242,7 +269,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
           Pedido: #${pedido.id.slice(-8).toUpperCase()}
           Parcela: ${parcelas.findIndex(p => p.id === parcelaSelecionada.id) + 1} de ${parcelas.length}
           Valor: R$ ${parcelaSelecionada.valor?.toFixed(2)}
-          Vencimento: ${new Date(parcelaSelecionada.data_vencimento).toLocaleDateString('pt-BR')}
+          Vencimento: ${new Date(parcelaSelecionada.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}
           Data do Pagamento Informada: ${new Date(dataPagamentoParcela + 'T12:00:00').toLocaleDateString('pt-BR')}
 
           Comprovante: ${uploadResult.file_url}
@@ -408,7 +435,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                 </div>
               )}
 
-              {pedido.observacoes_fornecedor && currentUser?.role === 'admin' && (
+              {pedido.observacoes_fornecedor && !isCliente && (
                 <div className="p-4 bg-purple-50 rounded-lg">
                   <h4 className="font-semibold mb-2">Observações Internas (Fornecedor):</h4>
                   <p className="text-gray-700">{pedido.observacoes_fornecedor}</p>
@@ -445,10 +472,88 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                   <div className="flex items-center gap-2">
                     <Calendar className="w-5 h-5 text-blue-600" />
                     <span className="font-semibold">Data Prevista de Entrega:</span>
-                    <span>{new Date(pedido.data_prevista_entrega).toLocaleDateString('pt-BR')}</span>
+                    <span>{new Date(pedido.data_prevista_entrega + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
                   </div>
                 </div>
               )}
+
+              {/* Frete FOB */}
+              <div className="p-4 bg-orange-50 rounded-lg">
+                <div className="flex items-center gap-2 mb-3">
+                  <Truck className="w-5 h-5 text-orange-600" />
+                  <h4 className="font-semibold">Frete FOB</h4>
+                </div>
+                {canUpload ? (
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="valorFreteFOB">Valor do Frete FOB</Label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">R$</span>
+                        <Input
+                          id="valorFreteFOB"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={valorFreteFOB}
+                          onChange={(e) => setValorFreteFOB(e.target.value)}
+                          placeholder="0,00"
+                          className="pl-10"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Frete por conta do comprador (FOB)
+                      </p>
+                    </div>
+                    <div className="bg-white p-3 rounded-lg border border-orange-200">
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-600">Valor dos Produtos:</span>
+                        <span>R$ {(pedido.valor_total || 0).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-600">Frete FOB:</span>
+                        <span>R$ {(parseFloat(valorFreteFOB) || 0).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-bold pt-2 border-t">
+                        <span>Valor Total:</span>
+                        <span className="text-green-600">
+                          R$ {((pedido.valor_total || 0) + (parseFloat(valorFreteFOB) || 0)).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={handleSalvarFrete}
+                      disabled={salvandoFrete}
+                      className="bg-orange-600 hover:bg-orange-700"
+                    >
+                      {salvandoFrete ? 'Salvando...' : 'Salvar Frete'}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {pedido.valor_frete_fob > 0 ? (
+                      <div className="bg-white p-3 rounded-lg border border-orange-200">
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-gray-600">Valor dos Produtos:</span>
+                          <span>R$ {(pedido.valor_total || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-gray-600">Frete FOB:</span>
+                          <span>R$ {(pedido.valor_frete_fob || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between font-bold pt-2 border-t">
+                          <span>Valor Total:</span>
+                          <span className="text-green-600">
+                            R$ {(pedido.valor_final || pedido.valor_total || 0).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">Frete não informado</p>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {pedido.transportadora && (
                 <div className="p-4 bg-gray-50 rounded-lg">
@@ -485,25 +590,18 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       Recebimento confirmado pelo cliente
                     </AlertDescription>
                   </Alert>
-                ) : currentUser?.tipo_negocio === 'multimarca' ? (
-                  <Alert className="border-green-200 bg-green-50">
-                    <AlertDescription className="flex items-center justify-between">
-                      <span>Confirme o recebimento do produto:</span>
-                      <Button
-                        onClick={() => handleConfirmarRecebimento('produto')}
-                        disabled={confirmando}
-                        className="bg-green-600"
-                      >
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Confirmar Recebimento
-                      </Button>
-                    </AlertDescription>
-                  </Alert>
-                ) : (
+                ) : !isCliente ? (
                   <Alert className="border-yellow-200 bg-yellow-50">
                     <Clock className="h-4 w-4 text-yellow-600" />
                     <AlertDescription className="text-yellow-800">
                       Aguardando confirmação de recebimento pelo cliente
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <Alert className="border-blue-200 bg-blue-50">
+                    <Clock className="h-4 w-4 text-blue-600" />
+                    <AlertDescription className="text-blue-800">
+                      Aguardando recebimento do produto
                     </AlertDescription>
                   </Alert>
                 )
@@ -571,7 +669,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-5 h-5 text-green-600" />
                     <span className="font-semibold">Pagamento Confirmado em:</span>
-                    <span>{new Date(pedido.data_pagamento).toLocaleDateString('pt-BR')}</span>
+                    <span>{new Date(pedido.data_pagamento + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
                   </div>
                 </div>
               )}
@@ -615,12 +713,12 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                                 </div>
                                 <div>
                                   <span className="text-gray-500">Vencimento:</span>
-                                  <span className="ml-2">{new Date(parcela.data_vencimento).toLocaleDateString('pt-BR')}</span>
+                                  <span className="ml-2">{new Date(parcela.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
                                 </div>
                                 {parcela.data_pagamento && (
                                   <div>
                                     <span className="text-gray-500">Pago em:</span>
-                                    <span className="ml-2 text-green-600 font-medium">{new Date(parcela.data_pagamento).toLocaleDateString('pt-BR')}</span>
+                                    <span className="ml-2 text-green-600 font-medium">{new Date(parcela.data_pagamento + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
                                   </div>
                                 )}
                               </div>
@@ -667,40 +765,41 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                               )}
                             </div>
 
-                            {/* Botão de ação */}
-                            <div className="flex gap-2">
-                              {currentUser?.tipo_negocio === 'multimarca' && parcela.status === 'pendente' && (
-                                <Button
-                                  onClick={() => {
-                                    setParcelaSelecionada(parcela);
-                                    setShowUploadParcelaModal(true);
-                                  }}
-                                  size="sm"
-                                  className="bg-blue-600"
-                                >
-                                  <Upload className="w-4 h-4 mr-1" />
-                                  Enviar Comprovante
-                                </Button>
-                              )}
+                            {/* Botão de ação - apenas para fornecedor/admin */}
+                            {!isCliente && (
+                              <div className="flex gap-2">
+                                {parcela.status === 'pendente' && (
+                                  <Button
+                                    onClick={() => {
+                                      setParcelaSelecionada(parcela);
+                                      setShowUploadParcelaModal(true);
+                                    }}
+                                    size="sm"
+                                    className="bg-blue-600"
+                                  >
+                                    <Upload className="w-4 h-4 mr-1" />
+                                    Enviar Comprovante
+                                  </Button>
+                                )}
 
-                              {/* Botão para reenviar comprovante se foi recusado */}
-                              {currentUser?.tipo_negocio === 'multimarca' &&
-                               parcela.comprovante_analisado &&
-                               !parcela.comprovante_aprovado && (
-                                <Button
-                                  onClick={() => {
-                                    setParcelaSelecionada(parcela);
-                                    setShowUploadParcelaModal(true);
-                                  }}
-                                  size="sm"
-                                  variant="outline"
-                                  className="border-orange-500 text-orange-600"
-                                >
-                                  <Upload className="w-4 h-4 mr-1" />
-                                  Reenviar Comprovante
-                                </Button>
-                              )}
-                            </div>
+                                {/* Botão para reenviar comprovante se foi recusado */}
+                                {parcela.comprovante_analisado &&
+                                 !parcela.comprovante_aprovado && (
+                                  <Button
+                                    onClick={() => {
+                                      setParcelaSelecionada(parcela);
+                                      setShowUploadParcelaModal(true);
+                                    }}
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-orange-500 text-orange-600"
+                                  >
+                                    <Upload className="w-4 h-4 mr-1" />
+                                    Reenviar Comprovante
+                                  </Button>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -770,7 +869,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                   {canUpload && pedido.status_pagamento !== 'pago' && (
                     <div className="mt-3 pt-3 border-t border-purple-200">
                       <p className="text-sm text-purple-800">
-                        O cliente enviou o comprovante. Verifique e altere o status para "Pago" se estiver correto.
+                        O cliente enviou o comprovante. Verifique e altere o status para &quot;Pago&quot; se estiver correto.
                       </p>
                     </div>
                   )}
@@ -809,15 +908,11 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                         <Download className="w-4 h-4 mr-2" />
                         Baixar
                       </Button>
-                      {!pedido.cliente_confirmou_boleto && currentUser?.tipo_negocio === 'multimarca' && (
-                        <Button
-                          onClick={() => handleConfirmarRecebimento('boleto')}
-                          disabled={confirmando}
-                          size="sm"
-                          className="bg-green-600"
-                        >
-                          Confirmar Recebimento
-                        </Button>
+                      {!pedido.cliente_confirmou_boleto && !isCliente && (
+                        <Badge className="bg-yellow-100 text-yellow-800">
+                          <Clock className="w-3 h-3 mr-1" />
+                          Aguardando confirmação
+                        </Badge>
                       )}
                     </div>
                   </div>
@@ -910,15 +1005,11 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                         <Download className="w-4 h-4 mr-2" />
                         Baixar
                       </Button>
-                      {!pedido.cliente_confirmou_nf && currentUser?.tipo_negocio === 'multimarca' && (
-                        <Button
-                          onClick={() => handleConfirmarRecebimento('nf')}
-                          disabled={confirmando}
-                          size="sm"
-                          className="bg-green-600"
-                        >
-                          Confirmar Recebimento
-                        </Button>
+                      {!pedido.cliente_confirmou_nf && !isCliente && (
+                        <Badge className="bg-yellow-100 text-yellow-800">
+                          <Clock className="w-3 h-3 mr-1" />
+                          Aguardando confirmação
+                        </Badge>
                       )}
                     </div>
                   </div>
@@ -1040,7 +1131,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                     <div>
                       <p className="text-2xl font-bold">R$ {parcelaSelecionada.valor?.toFixed(2)}</p>
                       <p className="text-sm text-gray-500">
-                        Vencimento: {new Date(parcelaSelecionada.data_vencimento).toLocaleDateString('pt-BR')}
+                        Vencimento: {new Date(parcelaSelecionada.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}
                       </p>
                     </div>
                   </div>

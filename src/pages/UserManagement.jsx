@@ -300,8 +300,8 @@ export default function UserManagement() {
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">
-                            {user.tipo_negocio === 'multimarca'
-                              ? (user.categoria_cliente === 'franqueado' ? 'Franqueado' : 'Multimarca')
+                            {(user.tipo_negocio === 'franqueado' || user.categoria_cliente === 'franqueado') ? 'Franqueado'
+                              : user.tipo_negocio === 'multimarca' ? 'Multimarca'
                               : user.tipo_negocio === 'fornecedor' ? 'Fornecedor' : 'Admin'}
                           </Badge>
                         </TableCell>
@@ -393,8 +393,8 @@ export default function UserManagement() {
                             <TableCell>{pendingUser.email}</TableCell>
                             <TableCell>
                               <Badge variant="outline">
-                                {pendingUser.tipo_negocio === 'multimarca'
-                                  ? (pendingUser.categoria_cliente === 'franqueado' ? 'Franqueado' : 'Multimarca')
+                                {(pendingUser.tipo_negocio === 'franqueado' || pendingUser.categoria_cliente === 'franqueado') ? 'Franqueado'
+                                  : pendingUser.tipo_negocio === 'multimarca' ? 'Multimarca'
                                   : pendingUser.tipo_negocio === 'fornecedor' ? 'Fornecedor' : 'Admin'}
                               </Badge>
                             </TableCell>

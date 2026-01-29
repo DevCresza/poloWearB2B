@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { formatCurrency, exportToCSV, formatDate } from '@/utils/exportUtils';
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
+import MultiSelectFilter from '@/components/MultiSelectFilter';
 
 export default function MeusPedidos() {
   const [pedidos, setPedidos] = useState([]);
@@ -445,45 +446,31 @@ export default function MeusPedidos() {
             </Button>
           </div>
 
-          {/* Filtros de Status com múltipla seleção */}
-          <div>
-            <p className="text-sm text-gray-600 mb-2">Status (clique para selecionar/desmarcar)</p>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { value: 'novo_pedido', label: 'Novos', color: 'bg-blue-100 text-blue-800 border-blue-300' },
-                { value: 'em_analise', label: 'Em Análise', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
-                { value: 'aprovado', label: 'Aprovados', color: 'bg-green-100 text-green-800 border-green-300' },
-                { value: 'em_producao', label: 'Em Produção', color: 'bg-purple-100 text-purple-800 border-purple-300' },
-                { value: 'faturado', label: 'Faturados', color: 'bg-indigo-100 text-indigo-800 border-indigo-300' },
-                { value: 'em_transporte', label: 'Em Transporte', color: 'bg-orange-100 text-orange-800 border-orange-300' },
-                { value: 'finalizado', label: 'Finalizados', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' }
-              ].map(status => (
-                <Badge
-                  key={status.value}
-                  variant="outline"
-                  className={`cursor-pointer px-3 py-1.5 text-sm transition-all ${
-                    filtrosStatus.includes(status.value)
-                      ? `${status.color} border-2`
-                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                  }`}
-                  onClick={() => toggleFiltroStatus(status.value)}
-                >
-                  {filtrosStatus.includes(status.value) && (
-                    <CheckCircle className="w-3 h-3 mr-1" />
-                  )}
-                  {status.label}
-                </Badge>
-              ))}
-            </div>
-          </div>
+          {/* Filtros de Status com dropdown multi-select */}
+          <div className="flex flex-wrap items-center gap-2">
+            <MultiSelectFilter
+              label="Status"
+              options={[
+                { value: 'novo_pedido', label: 'Novos', color: 'bg-blue-500' },
+                { value: 'em_analise', label: 'Em Análise', color: 'bg-yellow-500' },
+                { value: 'aprovado', label: 'Aprovados', color: 'bg-green-500' },
+                { value: 'em_producao', label: 'Em Produção', color: 'bg-purple-500' },
+                { value: 'faturado', label: 'Faturados', color: 'bg-indigo-500' },
+                { value: 'em_transporte', label: 'Em Transporte', color: 'bg-orange-500' },
+                { value: 'finalizado', label: 'Finalizados', color: 'bg-emerald-500' }
+              ]}
+              selected={filtrosStatus}
+              onToggle={toggleFiltroStatus}
+              onClear={() => setFiltrosStatus([])}
+            />
 
-          {/* Indicador de filtros ativos */}
-          {filtrosStatus.length > 0 && (
-            <div className="text-sm text-gray-500">
-              Filtros ativos: {filtrosStatus.length} |
-              Mostrando {filteredPedidos.length} de {pedidos.length} pedidos
-            </div>
-          )}
+            {/* Indicador de resultados */}
+            {(filtrosStatus.length > 0 || searchTerm) && (
+              <span className="text-sm text-gray-500">
+                {filteredPedidos.length} de {pedidos.length} pedidos
+              </span>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -559,7 +546,7 @@ export default function MeusPedidos() {
                         <div className="flex items-center gap-2 text-sm text-gray-600">
                           <Calendar className="w-4 h-4" />
                           <span>
-                            Previsão de entrega: {new Date(pedido.data_prevista_entrega).toLocaleDateString('pt-BR')}
+                            Previsão de entrega: {new Date(pedido.data_prevista_entrega + 'T00:00:00').toLocaleDateString('pt-BR')}
                           </span>
                         </div>
                       )}

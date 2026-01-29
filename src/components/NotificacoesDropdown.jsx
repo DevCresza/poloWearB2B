@@ -83,8 +83,10 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
     hoje.setHours(0, 0, 0, 0);
 
     try {
-      // Para clientes (multimarca): verificar boletos vencendo
-      if (userTipoNegocio === 'multimarca') {
+      // Para clientes (multimarca e franqueado): verificar boletos e pedidos
+      const isCliente = userTipoNegocio === 'multimarca' || userTipoNegocio === 'franqueado';
+      if (isCliente) {
+        // Verificar boletos vencendo
         const titulos = await Carteira.filter({ cliente_user_id: userId, status: 'pendente' });
 
         titulos.forEach(titulo => {
@@ -118,26 +120,40 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
           }
         });
 
-        // Verificar pedidos finalizados recentemente
-        const pedidosRecentes = await Pedido.filter({ comprador_user_id: userId, status: 'finalizado' }, '-updated_at', 5);
+        // Verificar pedidos do cliente com atualizações recentes (todos os status relevantes)
         const seteDiasAtras = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-        pedidosRecentes.forEach(pedido => {
-          const dataAtualizacao = new Date(pedido.updated_at || pedido.created_date);
-          if (dataAtualizacao >= seteDiasAtras) {
-            notificacoesAuto.push({
-              id: `pedido-finalizado-${pedido.id}`,
-              tipo: 'sucesso',
-              titulo: 'Pedido Finalizado',
-              mensagem: `Seu pedido #${pedido.id.slice(-8).toUpperCase()} foi finalizado!`,
-              icone: 'pedido',
-              lida: false,
-              data: pedido.updated_at || pedido.created_date,
-              link: '/MeusPedidos',
-              autogerada: true
+        const statusNotificaveis = [
+          { status: 'em_producao', tipo: 'info', titulo: 'Pedido em Produção', icone: 'pedido', mensagem: (id) => `Seu pedido #${id} está em produção` },
+          { status: 'faturado', tipo: 'info', titulo: 'Pedido Faturado', icone: 'dinheiro', mensagem: (id) => `Seu pedido #${id} foi faturado` },
+          { status: 'em_transporte', tipo: 'aviso', titulo: 'Pedido em Transporte', icone: 'pedido', mensagem: (id) => `Seu pedido #${id} está a caminho!` },
+          { status: 'finalizado', tipo: 'sucesso', titulo: 'Pedido Finalizado', icone: 'sucesso', mensagem: (id) => `Seu pedido #${id} foi finalizado!` },
+          { status: 'cancelado', tipo: 'alerta', titulo: 'Pedido Cancelado', icone: 'alerta', mensagem: (id) => `Seu pedido #${id} foi cancelado` }
+        ];
+
+        for (const statusInfo of statusNotificaveis) {
+          try {
+            const pedidos = await Pedido.filter({ comprador_user_id: userId, status: statusInfo.status }, '-updated_at', 5);
+            pedidos.forEach(pedido => {
+              const dataAtualizacao = new Date(pedido.updated_at || pedido.created_date);
+              if (dataAtualizacao >= seteDiasAtras) {
+                notificacoesAuto.push({
+                  id: `pedido-${statusInfo.status}-${pedido.id}`,
+                  tipo: statusInfo.tipo,
+                  titulo: statusInfo.titulo,
+                  mensagem: statusInfo.mensagem(pedido.id.slice(-8).toUpperCase()),
+                  icone: statusInfo.icone,
+                  lida: false,
+                  data: pedido.updated_at || pedido.created_date,
+                  link: '/MeusPedidos',
+                  autogerada: true
+                });
+              }
             });
+          } catch (e) {
+            // Ignora erro de pedidos específicos
           }
-        });
+        }
       }
 
       // Para fornecedores: verificar novos pedidos

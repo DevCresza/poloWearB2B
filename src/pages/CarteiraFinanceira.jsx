@@ -20,6 +20,7 @@ import {
   Search, Eye
 } from 'lucide-react';
 import { exportToCSV, exportToPDF, formatCurrency, formatDate } from '@/utils/exportUtils';
+import MultiSelectFilter from '@/components/MultiSelectFilter';
 
 export default function CarteiraFinanceira() {
   const [user, setUser] = useState(null);
@@ -112,27 +113,11 @@ export default function CarteiraFinanceira() {
       let titulosList = [];
       let fornecedoresList = [];
 
-      if (currentUser.tipo_negocio === 'multimarca') {
-        // Cliente vê títulos de pedidos que já foram faturados/enviados/entregues
-        const todosOsTitulos = await Carteira.filter({
+      if (currentUser.tipo_negocio === 'multimarca' || currentUser.tipo_negocio === 'franqueado') {
+        // Cliente vê todos os títulos associados a ele
+        titulosList = await Carteira.filter({
           cliente_user_id: currentUser.id
-        }, '-data_vencimento');
-
-        // Carregar pedidos para filtrar apenas os que já passaram pela fase de faturamento
-        const pedidoIds = [...new Set((todosOsTitulos || []).map(t => t.pedido_id).filter(Boolean))];
-        const pedidosPromises = pedidoIds.map(id => Pedido.get(id).catch(() => null));
-        const pedidosResults = await Promise.all(pedidosPromises);
-
-        // Pedidos que já foram faturados, enviados ou finalizados aparecem na carteira
-        const statusPermitidos = ['faturado', 'em_transporte', 'finalizado'];
-        const pedidosComBoleto = new Set(
-          pedidosResults.filter(p => p && statusPermitidos.includes(p.status)).map(p => p.id)
-        );
-
-        // Filtrar títulos de pedidos faturados/enviados/finalizados
-        titulosList = (todosOsTitulos || []).filter(t =>
-          t.pedido_id && pedidosComBoleto.has(t.pedido_id)
-        );
+        }, '-data_vencimento') || [];
       } else if (currentUser.tipo_negocio === 'fornecedor') {
         // Usar fornecedor_id do usuário diretamente (se disponível)
         // ou buscar fornecedor pelo responsavel_user_id (fallback para usuários antigos)
@@ -170,7 +155,7 @@ export default function CarteiraFinanceira() {
       setFornecedores(fornecedoresList || []);
 
       // Recalcular e sincronizar totais do cliente (apenas títulos de pedidos finalizados)
-      if (currentUser.tipo_negocio === 'multimarca' && titulosList) {
+      if ((currentUser.tipo_negocio === 'multimarca' || currentUser.tipo_negocio === 'franqueado') && titulosList) {
         await sincronizarTotaisCliente(currentUser.id, titulosList);
       }
 
@@ -262,7 +247,7 @@ export default function CarteiraFinanceira() {
           Cliente: ${user.empresa || user.full_name}
           Pedido: #${pedido.id.slice(-8).toUpperCase()}
           Valor: ${formatCurrency(selectedTitulo.valor)}
-          Vencimento: ${new Date(selectedTitulo.data_vencimento).toLocaleDateString('pt-BR')}
+          Vencimento: ${new Date(selectedTitulo.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}
           Data do Pagamento Informada: ${new Date(dataPagamentoInformada + 'T12:00:00').toLocaleDateString('pt-BR')}
 
           Comprovante: ${uploadResult.file_url}
@@ -645,7 +630,7 @@ export default function CarteiraFinanceira() {
       </div>
 
       {/* Alertas de Vencimento */}
-      {stats.proximosVencimentos > 0 && user?.tipo_negocio === 'multimarca' && (
+      {stats.proximosVencimentos > 0 && (user?.tipo_negocio === 'multimarca' || user?.tipo_negocio === 'franqueado') && (
         <Alert className="border-orange-200 bg-orange-50">
           <AlertTriangle className="h-4 w-4 text-orange-600" />
           <AlertDescription className="text-orange-800">
@@ -654,7 +639,7 @@ export default function CarteiraFinanceira() {
         </Alert>
       )}
 
-      {stats.totalVencido > 0 && user?.tipo_negocio === 'multimarca' && (
+      {stats.totalVencido > 0 && (user?.tipo_negocio === 'multimarca' || user?.tipo_negocio === 'franqueado') && (
         <Alert className="border-red-200 bg-red-50">
           <AlertTriangle className="h-4 w-4 text-red-600" />
           <AlertDescription className="text-red-800">
@@ -744,60 +729,33 @@ export default function CarteiraFinanceira() {
             )}
           </div>
 
-          {/* Filtros de Status */}
-          <div>
-            <Label className="mb-2 block">Status (clique para selecionar/desmarcar)</Label>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { value: 'pendente', label: 'Pendentes', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
-                { value: 'vencidos', label: 'Vencidos', color: 'bg-red-100 text-red-800 border-red-300' },
-                { value: 'pago', label: 'Pagos', color: 'bg-green-100 text-green-800 border-green-300' },
-                { value: 'em_analise', label: 'Em Análise', color: 'bg-blue-100 text-blue-800 border-blue-300' }
-              ].map(status => (
-                <Badge
-                  key={status.value}
-                  variant="outline"
-                  className={`cursor-pointer px-3 py-1.5 text-sm transition-all ${
-                    filtrosStatus.includes(status.value)
-                      ? `${status.color} border-2`
-                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                  }`}
-                  onClick={() => toggleFiltroStatus(status.value)}
-                >
-                  {filtrosStatus.includes(status.value) && (
-                    <CheckCircle className="w-3 h-3 mr-1" />
-                  )}
-                  {status.label}
-                </Badge>
-              ))}
-            </div>
+          {/* Filtros Dropdown */}
+          <div className="flex flex-wrap gap-2 items-center">
+            <MultiSelectFilter
+              label="Status"
+              options={[
+                { value: 'pendente', label: 'Pendentes' },
+                { value: 'vencidos', label: 'Vencidos' },
+                { value: 'pago', label: 'Pagos' },
+                { value: 'em_analise', label: 'Em Análise' }
+              ]}
+              selected={filtrosStatus}
+              onToggle={toggleFiltroStatus}
+              onClear={() => setFiltrosStatus([])}
+            />
+            {fornecedores.length > 0 && (
+              <MultiSelectFilter
+                label="Fornecedor"
+                options={fornecedores.map(f => ({
+                  value: f.id,
+                  label: f.razao_social || f.nome_fantasia || f.nome_marca
+                }))}
+                selected={filtrosFornecedor}
+                onToggle={toggleFiltroFornecedor}
+                onClear={() => setFiltrosFornecedor([])}
+              />
+            )}
           </div>
-
-          {/* Filtros de Fornecedor */}
-          {fornecedores.length > 0 && (
-            <div>
-              <Label className="mb-2 block">Fornecedor (clique para selecionar/desmarcar)</Label>
-              <div className="flex flex-wrap gap-2">
-                {fornecedores.map(f => (
-                  <Badge
-                    key={f.id}
-                    variant="outline"
-                    className={`cursor-pointer px-3 py-1.5 text-sm transition-all ${
-                      filtrosFornecedor.includes(f.id)
-                        ? 'bg-purple-100 text-purple-800 border-purple-300 border-2'
-                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                    }`}
-                    onClick={() => toggleFiltroFornecedor(f.id)}
-                  >
-                    {filtrosFornecedor.includes(f.id) && (
-                      <CheckCircle className="w-3 h-3 mr-1" />
-                    )}
-                    {f.razao_social || f.nome_fantasia || f.nome_marca}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Indicador de filtros ativos */}
           {(filtrosStatus.length > 0 || filtrosFornecedor.length > 0) && (
@@ -857,12 +815,12 @@ export default function CarteiraFinanceira() {
                         </div>
                         <div>
                           <span className="text-gray-600">Vencimento:</span>
-                          <span className="ml-2">{new Date(titulo.data_vencimento).toLocaleDateString('pt-BR')}</span>
+                          <span className="ml-2">{new Date(titulo.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
                         </div>
                         {titulo.data_pagamento && (
                           <div>
                             <span className="text-gray-600">Pago em:</span>
-                            <span className="ml-2">{new Date(titulo.data_pagamento).toLocaleDateString('pt-BR')}</span>
+                            <span className="ml-2">{new Date(titulo.data_pagamento + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
                           </div>
                         )}
                       </div>
@@ -952,7 +910,7 @@ export default function CarteiraFinanceira() {
                       )}
 
                       {/* Botão Enviar Comprovante (clientes, título pendente) */}
-                      {user?.tipo_negocio === 'multimarca' && titulo.status === 'pendente' && (
+                      {(user?.tipo_negocio === 'multimarca' || user?.tipo_negocio === 'franqueado') && titulo.status === 'pendente' && (
                         <Button
                           onClick={() => {
                             setSelectedTitulo(titulo);
@@ -1013,7 +971,7 @@ export default function CarteiraFinanceira() {
                 <p className="text-sm text-gray-600">Valor:</p>
                 <p className="text-2xl font-bold">{formatCurrency(selectedTitulo.valor)}</p>
                 <p className="text-sm text-gray-600 mt-2">
-                  Vencimento: {new Date(selectedTitulo.data_vencimento).toLocaleDateString('pt-BR')}
+                  Vencimento: {new Date(selectedTitulo.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}
                 </p>
               </div>
             )}
@@ -1094,7 +1052,7 @@ export default function CarteiraFinanceira() {
                 </div>
                 <div className="flex justify-between items-center mt-2">
                   <span className="text-sm text-gray-600">Vencimento:</span>
-                  <span>{new Date(tituloParaAprovar.data_vencimento).toLocaleDateString('pt-BR')}</span>
+                  <span>{new Date(tituloParaAprovar.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
                 </div>
                 {tituloParaAprovar.data_pagamento_informada && (
                   <div className="flex justify-between items-center mt-2 text-blue-600">
@@ -1172,7 +1130,7 @@ export default function CarteiraFinanceira() {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Vencimento:</span>
-                  <span>{new Date(tituloParaRecusar.data_vencimento).toLocaleDateString('pt-BR')}</span>
+                  <span>{new Date(tituloParaRecusar.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
                 </div>
                 {tituloParaRecusar.comprovante_url && (
                   <div className="mt-3 pt-3 border-t">
@@ -1302,7 +1260,7 @@ export default function CarteiraFinanceira() {
                           <div className="text-right">
                             <p className="font-bold">{formatCurrency(titulo.valor)}</p>
                             <p className="text-xs text-gray-500">
-                              Venc: {new Date(titulo.data_vencimento).toLocaleDateString('pt-BR')}
+                              Venc: {new Date(titulo.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}
                             </p>
                           </div>
                         </div>

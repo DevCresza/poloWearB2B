@@ -18,6 +18,7 @@ import PedidoCard from '../components/pedidos/PedidoCard';
 import PedidoDetailsModal from '../components/pedidos/PedidoDetailsModal';
 import PedidoEditModal from '../components/pedidos/PedidoEditModal';
 import { exportToCSV, exportToPDF, formatCurrency, formatDateTime } from '@/utils/exportUtils';
+import MultiSelectFilter from '@/components/MultiSelectFilter';
 
 export default function PedidosAdmin() {
   const [pedidos, setPedidos] = useState([]);
@@ -444,91 +445,47 @@ export default function PedidosAdmin() {
             </div>
           </div>
 
-          {/* Filtros de Status do Pedido */}
-          <div>
-            <p className="text-sm text-gray-600 mb-2">Status do Pedido (clique para selecionar/desmarcar)</p>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { value: 'novo_pedido', label: 'Novos', color: 'bg-blue-100 text-blue-800 border-blue-300' },
-                { value: 'em_producao', label: 'Em Produção', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
-                { value: 'faturado', label: 'Faturados', color: 'bg-purple-100 text-purple-800 border-purple-300' },
-                { value: 'em_transporte', label: 'Em Transporte', color: 'bg-orange-100 text-orange-800 border-orange-300' },
-                { value: 'finalizado', label: 'Finalizados', color: 'bg-green-100 text-green-800 border-green-300' },
-                { value: 'cancelado', label: 'Cancelados', color: 'bg-red-100 text-red-800 border-red-300' }
-              ].map(status => (
-                <Badge
-                  key={status.value}
-                  variant="outline"
-                  className={`cursor-pointer px-3 py-1.5 text-sm transition-all ${
-                    filtrosStatus.includes(status.value)
-                      ? `${status.color} border-2`
-                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                  }`}
-                  onClick={() => toggleFiltroStatus(status.value)}
-                >
-                  {filtrosStatus.includes(status.value) && (
-                    <CheckCircle className="w-3 h-3 mr-1" />
-                  )}
-                  {status.label}
-                </Badge>
-              ))}
-            </div>
+          {/* Filtros Dropdown */}
+          <div className="flex flex-wrap gap-2 items-center">
+            <MultiSelectFilter
+              label="Status do Pedido"
+              options={[
+                { value: 'novo_pedido', label: 'Novos' },
+                { value: 'em_producao', label: 'Em Produção' },
+                { value: 'faturado', label: 'Faturados' },
+                { value: 'em_transporte', label: 'Em Transporte' },
+                { value: 'finalizado', label: 'Finalizados' },
+                { value: 'cancelado', label: 'Cancelados' }
+              ]}
+              selected={filtrosStatus}
+              onToggle={toggleFiltroStatus}
+              onClear={() => setFiltrosStatus([])}
+            />
+            <MultiSelectFilter
+              label="Status Pagamento"
+              options={[
+                { value: 'pendente', label: 'Pendente' },
+                { value: 'pago', label: 'Pago' },
+                { value: 'em_analise', label: 'Em Análise' },
+                { value: 'atrasado', label: 'Atrasado' }
+              ]}
+              selected={filtrosPagamento}
+              onToggle={toggleFiltroPagamento}
+              onClear={() => setFiltrosPagamento([])}
+            />
+            {fornecedores.length > 0 && (
+              <MultiSelectFilter
+                label="Fornecedor"
+                options={fornecedores.map(f => ({
+                  value: f.id,
+                  label: f.razao_social || f.nome_fantasia || f.nome_marca
+                }))}
+                selected={filtrosFornecedor}
+                onToggle={toggleFiltroFornecedor}
+                onClear={() => setFiltrosFornecedor([])}
+              />
+            )}
           </div>
-
-          {/* Filtros de Status de Pagamento */}
-          <div>
-            <p className="text-sm text-gray-600 mb-2">Status de Pagamento</p>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { value: 'pendente', label: 'Pendente', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
-                { value: 'pago', label: 'Pago', color: 'bg-green-100 text-green-800 border-green-300' },
-                { value: 'em_analise', label: 'Em Análise', color: 'bg-blue-100 text-blue-800 border-blue-300' },
-                { value: 'atrasado', label: 'Atrasado', color: 'bg-red-100 text-red-800 border-red-300' }
-              ].map(status => (
-                <Badge
-                  key={status.value}
-                  variant="outline"
-                  className={`cursor-pointer px-3 py-1.5 text-sm transition-all ${
-                    filtrosPagamento.includes(status.value)
-                      ? `${status.color} border-2`
-                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                  }`}
-                  onClick={() => toggleFiltroPagamento(status.value)}
-                >
-                  {filtrosPagamento.includes(status.value) && (
-                    <CheckCircle className="w-3 h-3 mr-1" />
-                  )}
-                  {status.label}
-                </Badge>
-              ))}
-            </div>
-          </div>
-
-          {/* Filtros de Fornecedor */}
-          {fornecedores.length > 0 && (
-            <div>
-              <p className="text-sm text-gray-600 mb-2">Fornecedor</p>
-              <div className="flex flex-wrap gap-2">
-                {fornecedores.map(f => (
-                  <Badge
-                    key={f.id}
-                    variant="outline"
-                    className={`cursor-pointer px-3 py-1.5 text-sm transition-all ${
-                      filtrosFornecedor.includes(f.id)
-                        ? 'bg-indigo-100 text-indigo-800 border-indigo-300 border-2'
-                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                    }`}
-                    onClick={() => toggleFiltroFornecedor(f.id)}
-                  >
-                    {filtrosFornecedor.includes(f.id) && (
-                      <CheckCircle className="w-3 h-3 mr-1" />
-                    )}
-                    {f.razao_social || f.nome_fantasia || f.nome_marca}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Indicador de filtros ativos */}
           {temFiltrosAtivos && (

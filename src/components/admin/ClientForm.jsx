@@ -30,11 +30,18 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
 
   useEffect(() => {
     if (user) {
+      // Determinar o tipo correto do usuário
+      // Franqueados podem ter tipo_negocio='franqueado' OU tipo_negocio='multimarca' com categoria_cliente='franqueado'
+      let tipoUsuario = user.tipo_negocio || user.role || 'multimarca';
+      if (user.categoria_cliente === 'franqueado' || user.tipo_negocio === 'franqueado') {
+        tipoUsuario = 'franqueado';
+      }
+
       setFormData({
         full_name: user.full_name || '',
         email: user.email || '',
         password: '',
-        role: user.tipo_negocio || user.role || 'multimarca',
+        role: tipoUsuario,
         empresa: user.empresa || '',
         telefone: user.telefone || '',
         whatsapp: user.whatsapp || '',
@@ -135,27 +142,46 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
         if (formData.password && formData.password.trim() !== '') {
           if (formData.password.length < 6) {
             toast.error('A senha deve ter no mínimo 6 caracteres.');
+            setLoading(false);
             return;
           }
 
-          const { error } = await supabase.functions.invoke('update-user-password', {
-            body: {
-              user_id: user.id,
-              new_password: formData.password
-            }
-          });
+          try {
+            const { data, error } = await supabase.functions.invoke('update-user-password', {
+              body: {
+                user_id: user.id,
+                new_password: formData.password
+              }
+            });
 
-          if (error) {
-            console.error('Erro ao atualizar senha:', error);
-            toast.warning('Dados atualizados, mas erro ao alterar senha.');
-          } else {
-            toast.success('Cliente e senha atualizados com sucesso!');
+            // Verificar erro na resposta HTTP
+            if (error) {
+              console.error('Erro ao atualizar senha (HTTP):', error);
+              toast.error('Dados atualizados, mas não foi possível alterar a senha. Verifique se o usuário possui registro de autenticação.');
+              onSuccess();
+              return;
+            }
+
+            // Verificar erro no corpo da resposta
+            if (data?.error) {
+              console.error('Erro ao atualizar senha (resposta):', data.error);
+              toast.error(`Dados atualizados, mas erro ao alterar senha: ${data.error}`);
+              onSuccess();
+              return;
+            }
+
+            toast.success('Dados e senha atualizados com sucesso!');
+            onSuccess();
+            return;
+          } catch (senhaError) {
+            console.error('Erro ao chamar Edge Function de senha:', senhaError);
+            toast.error('Dados atualizados, mas erro ao alterar a senha. Tente novamente.');
             onSuccess();
             return;
           }
         }
 
-        toast.success('Cliente atualizado com sucesso!');
+        toast.success('Dados atualizados com sucesso!');
       }
 
       onSuccess();

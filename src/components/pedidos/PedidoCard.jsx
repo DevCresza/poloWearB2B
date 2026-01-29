@@ -73,7 +73,7 @@ export default function PedidoCard({
             <div className="flex items-center gap-2 text-gray-600">
               <Truck className="w-4 h-4 flex-shrink-0" />
               <span className="text-xs">
-                Entrega: {new Date(pedido.data_prevista_entrega).toLocaleDateString('pt-BR')}
+                Entrega: {new Date(pedido.data_prevista_entrega + 'T00:00:00').toLocaleDateString('pt-BR')}
               </span>
             </div>
           )}
