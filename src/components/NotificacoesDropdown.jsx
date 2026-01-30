@@ -401,7 +401,7 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
                             <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
                           )}
                         </div>
-                        <p className="text-sm text-gray-500 line-clamp-2 mt-0.5">
+                        <p className="text-sm text-gray-500 mt-0.5">
                           {notificacao.mensagem}
                         </p>
                         <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">

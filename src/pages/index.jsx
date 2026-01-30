@@ -48,6 +48,8 @@ import MeuPerfil from "./MeuPerfil";
 
 import Login from "./Login";
 
+import ResetPassword from "./ResetPassword";
+
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 
 const PAGES = {
@@ -174,6 +176,8 @@ function PagesContent() {
                 <Route path="/MeuPerfil" element={<MeuPerfil />} />
 
                 <Route path="/Login" element={<Login />} />
+
+                <Route path="/reset-password" element={<ResetPassword />} />
 
             </Routes>
         </Layout>
