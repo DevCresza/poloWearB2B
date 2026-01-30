@@ -257,24 +257,13 @@ export default function MeusPedidos() {
         });
         toast.success('Comprovante da parcela enviado! Aguarde a análise.');
       } else if (selectedPedido) {
-        // Upload para pedido inteiro
+        // Upload para pedido - atualiza apenas o pedido, não as parcelas individuais.
+        // Cada parcela deve ter seu comprovante enviado individualmente.
         await Pedido.update(selectedPedido.id, {
           comprovante_pagamento_url: file_url,
           comprovante_pagamento_data: new Date().toISOString(),
           status_pagamento: 'em_analise'
         });
-
-        // Atualizar apenas os títulos pendentes deste pedido
-        const titulosPedido = carteira.filter(t => t.pedido_id === selectedPedido.id && t.status === 'pendente');
-        for (const titulo of titulosPedido) {
-          await Carteira.update(titulo.id, {
-            comprovante_url: file_url,
-            comprovante_data_upload: new Date().toISOString(),
-            comprovante_analisado: false,
-            data_pagamento_informada: dataPagamentoComprovante,
-            status: 'em_analise'
-          });
-        }
         toast.success('Comprovante enviado! Aguarde a análise do financeiro.');
       }
 
