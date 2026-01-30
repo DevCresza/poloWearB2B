@@ -1055,7 +1055,7 @@ export default function PedidosFornecedor() {
                       )}
 
                       {/* Botão para enviar boleto separadamente */}
-                      {['em_producao', 'faturado'].includes(pedido.status) && (
+                      {['em_producao', 'faturado', 'em_transporte', 'finalizado'].includes(pedido.status) && (
                         <Button
                           variant="outline"
                           onClick={() => {
