@@ -582,29 +582,55 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                 </div>
               )}
 
-              {(pedido.status === 'em_transporte' || pedido.status === 'finalizado') && (
-                pedido.cliente_confirmou_recebimento ? (
-                  <Alert className="border-green-200 bg-green-50">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    <AlertDescription className="text-green-800">
-                      Recebimento confirmado pelo cliente
-                    </AlertDescription>
-                  </Alert>
-                ) : !isCliente ? (
-                  <Alert className="border-yellow-200 bg-yellow-50">
-                    <Clock className="h-4 w-4 text-yellow-600" />
-                    <AlertDescription className="text-yellow-800">
-                      Aguardando confirmação de recebimento pelo cliente
-                    </AlertDescription>
-                  </Alert>
-                ) : (
-                  <Alert className="border-blue-200 bg-blue-50">
-                    <Clock className="h-4 w-4 text-blue-600" />
-                    <AlertDescription className="text-blue-800">
-                      Aguardando recebimento do produto
-                    </AlertDescription>
-                  </Alert>
-                )
+              {/* Confirmações do cliente */}
+              {(pedido.status === 'faturado' || pedido.status === 'em_transporte' || pedido.status === 'finalizado') && (
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <h4 className="font-semibold mb-3">Confirmações de Recebimento</h4>
+                  <div className="space-y-2">
+                    {/* NF */}
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Nota Fiscal:</span>
+                      {pedido.cliente_confirmou_nf ? (
+                        <span className="text-green-600 font-medium flex items-center gap-1">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          Confirmado {pedido.data_confirmacao_nf ? `em ${new Date(pedido.data_confirmacao_nf + 'T00:00:00').toLocaleDateString('pt-BR')}` : ''}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">Pendente</span>
+                      )}
+                    </div>
+                    {/* Boleto */}
+                    {pedido.boleto_url && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">Boleto:</span>
+                        {pedido.cliente_confirmou_boleto ? (
+                          <span className="text-green-600 font-medium flex items-center gap-1">
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            Confirmado {pedido.data_confirmacao_boleto ? `em ${new Date(pedido.data_confirmacao_boleto + 'T00:00:00').toLocaleDateString('pt-BR')}` : ''}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">Pendente</span>
+                        )}
+                      </div>
+                    )}
+                    {/* Produto */}
+                    {(pedido.status === 'em_transporte' || pedido.status === 'finalizado') && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">Produto:</span>
+                        {pedido.cliente_confirmou_recebimento ? (
+                          <span className="text-green-600 font-medium flex items-center gap-1">
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            Confirmado {pedido.data_confirmacao_recebimento ? `em ${new Date(pedido.data_confirmacao_recebimento + 'T00:00:00').toLocaleDateString('pt-BR')}` : ''}
+                          </span>
+                        ) : !isCliente ? (
+                          <span className="text-yellow-600">Aguardando cliente</span>
+                        ) : (
+                          <span className="text-blue-600">Aguardando recebimento</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
             </TabsContent>
 
@@ -765,32 +791,31 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                               )}
                             </div>
 
-                            {/* Botão de ação - apenas para fornecedor/admin */}
-                            {!isCliente && (
-                              <div className="flex gap-2">
-                                {parcela.status === 'pendente' && (
-                                  <Button
-                                    onClick={() => {
-                                      setParcelaSelecionada(parcela);
-                                      setShowUploadParcelaModal(true);
-                                    }}
-                                    size="sm"
-                                    className="bg-blue-600"
-                                  >
-                                    <Upload className="w-4 h-4 mr-1" />
-                                    Enviar Comprovante
-                                  </Button>
-                                )}
+                            {/* Botão de ação - enviar comprovante */}
+                            <div className="flex gap-2">
+                              {parcela.status === 'pendente' && (
+                                <Button
+                                  onClick={() => {
+                                    setParcelaSelecionada(parcela);
+                                    setShowUploadParcelaModal(true);
+                                  }}
+                                  size="sm"
+                                  className="bg-blue-600"
+                                >
+                                  <Upload className="w-4 h-4 mr-1" />
+                                  Enviar Comprovante
+                                </Button>
+                              )}
 
-                                {/* Botão para reenviar comprovante se foi recusado */}
-                                {parcela.comprovante_analisado &&
-                                 !parcela.comprovante_aprovado && (
-                                  <Button
-                                    onClick={() => {
-                                      setParcelaSelecionada(parcela);
-                                      setShowUploadParcelaModal(true);
-                                    }}
-                                    size="sm"
+                              {/* Botão para reenviar comprovante se foi recusado */}
+                              {parcela.comprovante_analisado &&
+                               !parcela.comprovante_aprovado && (
+                                <Button
+                                  onClick={() => {
+                                    setParcelaSelecionada(parcela);
+                                    setShowUploadParcelaModal(true);
+                                  }}
+                                  size="sm"
                                     variant="outline"
                                     className="border-orange-500 text-orange-600"
                                   >
@@ -799,7 +824,6 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                                   </Button>
                                 )}
                               </div>
-                            )}
                           </div>
                         </div>
                       );

@@ -39,6 +39,12 @@ export default function MeusPedidos() {
   const [comprovanteFile, setComprovanteFile] = useState(null);
   const [dataPagamentoComprovante, setDataPagamentoComprovante] = useState('');
 
+  // Estados para confirmação com data
+  const [showConfirmacaoModal, setShowConfirmacaoModal] = useState(false);
+  const [tipoConfirmacao, setTipoConfirmacao] = useState('');
+  const [pedidoConfirmacao, setPedidoConfirmacao] = useState(null);
+  const [dataConfirmacao, setDataConfirmacao] = useState('');
+
   useEffect(() => {
     loadData();
   }, []);
@@ -155,24 +161,44 @@ export default function MeusPedidos() {
     return statusMap[status] || statusMap.pendente;
   };
 
-  const handleConfirmacao = async (pedidoId, tipo) => {
+  // Abrir modal de confirmação com data
+  const abrirConfirmacao = (pedido, tipo) => {
+    setPedidoConfirmacao(pedido);
+    setTipoConfirmacao(tipo);
+    setDataConfirmacao('');
+    setShowConfirmacaoModal(true);
+  };
+
+  const handleConfirmacao = async () => {
+    if (!dataConfirmacao) {
+      toast.info('Informe a data de recebimento');
+      return;
+    }
+
     try {
       const updateData = {};
-      
-      if (tipo === 'boleto') {
+
+      if (tipoConfirmacao === 'boleto') {
         updateData.cliente_confirmou_boleto = true;
-      } else if (tipo === 'nf') {
+        updateData.data_confirmacao_boleto = dataConfirmacao;
+      } else if (tipoConfirmacao === 'nf') {
         updateData.cliente_confirmou_nf = true;
-      } else if (tipo === 'recebimento') {
+        updateData.data_confirmacao_nf = dataConfirmacao;
+      } else if (tipoConfirmacao === 'recebimento') {
         updateData.cliente_confirmou_recebimento = true;
+        updateData.data_confirmacao_recebimento = dataConfirmacao;
       }
-      
-      await Pedido.update(pedidoId, updateData);
+
+      await Pedido.update(pedidoConfirmacao.id, updateData);
       toast.success('Confirmação registrada com sucesso!');
+      setShowConfirmacaoModal(false);
+      setPedidoConfirmacao(null);
+      setTipoConfirmacao('');
+      setDataConfirmacao('');
       loadData();
-      
+
       if (showDetailsModal) {
-        const pedidoAtualizado = await Pedido.get(pedidoId);
+        const pedidoAtualizado = await Pedido.get(pedidoConfirmacao.id);
         setSelectedPedido(pedidoAtualizado);
       }
     } catch (_error) {
@@ -204,9 +230,9 @@ export default function MeusPedidos() {
     }
   };
 
-  // Enviar comprovante diretamente no pedido
+  // Enviar comprovante - funciona para pedido inteiro ou título individual
   const handleEnviarComprovantePedido = async () => {
-    if (!comprovanteFile || !selectedPedido) {
+    if (!comprovanteFile) {
       toast.info('Selecione o arquivo do comprovante');
       return;
     }
@@ -218,32 +244,45 @@ export default function MeusPedidos() {
 
     setUploadingComprovante(true);
     try {
-      // Upload do arquivo
       const { file_url } = await UploadFile({ file: comprovanteFile });
 
-      // Atualizar pedido com comprovante
-      await Pedido.update(selectedPedido.id, {
-        comprovante_pagamento_url: file_url,
-        comprovante_pagamento_data: new Date().toISOString(),
-        status_pagamento: 'em_analise'
-      });
-
-      // Também atualizar os títulos da carteira relacionados a este pedido
-      const titulosPedido = carteira.filter(t => t.pedido_id === selectedPedido.id && t.status === 'pendente');
-      for (const titulo of titulosPedido) {
-        await Carteira.update(titulo.id, {
+      if (selectedTitulo) {
+        // Upload para título individual (vindo da Carteira Financeira)
+        await Carteira.update(selectedTitulo.id, {
           comprovante_url: file_url,
           comprovante_data_upload: new Date().toISOString(),
           comprovante_analisado: false,
-          data_pagamento_informada: dataPagamentoComprovante
+          data_pagamento_informada: dataPagamentoComprovante,
+          status: 'em_analise'
         });
+        toast.success('Comprovante da parcela enviado! Aguarde a análise.');
+      } else if (selectedPedido) {
+        // Upload para pedido inteiro
+        await Pedido.update(selectedPedido.id, {
+          comprovante_pagamento_url: file_url,
+          comprovante_pagamento_data: new Date().toISOString(),
+          status_pagamento: 'em_analise'
+        });
+
+        // Atualizar apenas os títulos pendentes deste pedido
+        const titulosPedido = carteira.filter(t => t.pedido_id === selectedPedido.id && t.status === 'pendente');
+        for (const titulo of titulosPedido) {
+          await Carteira.update(titulo.id, {
+            comprovante_url: file_url,
+            comprovante_data_upload: new Date().toISOString(),
+            comprovante_analisado: false,
+            data_pagamento_informada: dataPagamentoComprovante,
+            status: 'em_analise'
+          });
+        }
+        toast.success('Comprovante enviado! Aguarde a análise do financeiro.');
       }
 
-      toast.success('Comprovante enviado com sucesso! Aguarde a análise do financeiro.');
       setShowComprovanteModal(false);
       setComprovanteFile(null);
       setDataPagamentoComprovante('');
       setSelectedPedido(null);
+      setSelectedTitulo(null);
       loadData();
     } catch (_error) {
       toast.error('Erro ao enviar comprovante. Tente novamente.');
@@ -578,31 +617,31 @@ export default function MeusPedidos() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleConfirmacao(pedido.id, 'nf')}
+                            onClick={() => abrirConfirmacao(pedido, 'nf')}
                             className="rounded-lg"
                           >
                             <CheckCircle className="w-4 h-4 mr-2" />
                             Confirmar Recebimento da NF
                           </Button>
                         )}
-                        
+
                         {pedido.status === 'faturado' && pedido.boleto_url && !pedido.cliente_confirmou_boleto && (
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleConfirmacao(pedido.id, 'boleto')}
+                            onClick={() => abrirConfirmacao(pedido, 'boleto')}
                             className="rounded-lg"
                           >
                             <CheckCircle className="w-4 h-4 mr-2" />
                             Confirmar Recebimento do Boleto
                           </Button>
                         )}
-                        
+
                         {pedido.status === 'em_transporte' && !pedido.cliente_confirmou_recebimento && (
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleConfirmacao(pedido.id, 'recebimento')}
+                            onClick={() => abrirConfirmacao(pedido, 'recebimento')}
                             className="rounded-lg bg-green-50 hover:bg-green-100"
                           >
                             <CheckCircle className="w-4 h-4 mr-2" />
@@ -647,12 +686,13 @@ export default function MeusPedidos() {
                         </Button>
                       )}
 
-                      {/* Botão para enviar comprovante de pagamento */}
-                      {pedido.boleto_url && pedido.status_pagamento !== 'pago' && (
+                      {/* Botão para enviar comprovante de pagamento (boleto, PIX, transferência) */}
+                      {(pedido.boleto_url || pedido.metodo_pagamento === 'pix' || pedido.metodo_pagamento === 'a_vista') && pedido.status_pagamento !== 'pago' && (
                         <Button
                           variant="outline"
                           onClick={() => {
                             setSelectedPedido(pedido);
+                            setSelectedTitulo(null);
                             setShowComprovanteModal(true);
                           }}
                           className={`w-full rounded-xl ${pedido.comprovante_pagamento_url ? 'border-green-300 text-green-700' : 'border-orange-300 text-orange-700'}`}
@@ -787,32 +827,18 @@ export default function MeusPedidos() {
                               </div>
                               
                               {titulo.status === 'pendente' && (
-                                <div>
-                                  <input
-                                    type="file"
-                                    accept=".pdf,.jpg,.jpeg,.png"
-                                    onChange={(e) => {
-                                      const file = e.target.files[0];
-                                      if (file) {
-                                        handleUploadComprovante(titulo.id, file);
-                                      }
-                                    }}
-                                    className="hidden"
-                                    id={`upload-${titulo.id}`}
-                                  />
-                                  <p className="text-xs text-gray-500 mb-1"><strong>Formatos:</strong> PDF, JPG, PNG</p>
-                                  <label htmlFor={`upload-${titulo.id}`}>
-                                    <Button
-                                      type="button"
-                                      onClick={() => document.getElementById(`upload-${titulo.id}`).click()}
-                                      disabled={uploadingComprovante}
-                                      className="cursor-pointer"
-                                    >
-                                      <Upload className="w-4 h-4 mr-2" />
-                                      {uploadingComprovante ? 'Enviando...' : 'Enviar Comprovante'}
-                                    </Button>
-                                  </label>
-                                </div>
+                                <Button
+                                  onClick={() => {
+                                    setSelectedTitulo(titulo);
+                                    setSelectedPedido(null);
+                                    setShowFinanceiroModal(false);
+                                    setShowComprovanteModal(true);
+                                  }}
+                                  disabled={uploadingComprovante}
+                                >
+                                  <Upload className="w-4 h-4 mr-2" />
+                                  Enviar Comprovante
+                                </Button>
                               )}
                               
                               {titulo.comprovante_url && (
@@ -845,13 +871,25 @@ export default function MeusPedidos() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {selectedPedido && (
+            {selectedTitulo ? (
+              <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                <p className="text-sm text-gray-600">
+                  Parcela - Pedido #{selectedTitulo.pedido_id?.slice(-8).toUpperCase()}
+                </p>
+                <p className="font-semibold text-lg text-blue-600">
+                  {formatCurrency(selectedTitulo.valor)}
+                </p>
+                <p className="text-sm text-gray-600">
+                  Vencimento: {new Date(selectedTitulo.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}
+                </p>
+              </div>
+            ) : selectedPedido ? (
               <div className="bg-gray-50 p-4 rounded-lg space-y-2">
                 <p className="text-sm text-gray-600">
                   Pedido #{selectedPedido.id.slice(-8).toUpperCase()}
                 </p>
                 <p className="font-semibold text-lg text-blue-600">
-                  {formatCurrency(selectedPedido.valor_total)}
+                  {formatCurrency(selectedPedido.valor_final || selectedPedido.valor_total)}
                 </p>
                 {selectedPedido.comprovante_pagamento_url && (
                   <div className="flex items-center gap-2 text-green-600">
@@ -867,7 +905,7 @@ export default function MeusPedidos() {
                   </div>
                 )}
               </div>
-            )}
+            ) : null}
 
             <div>
               <label className="block text-sm font-medium mb-2">
@@ -912,6 +950,7 @@ export default function MeusPedidos() {
                   setComprovanteFile(null);
                   setDataPagamentoComprovante('');
                   setSelectedPedido(null);
+                  setSelectedTitulo(null);
                 }}
                 className="rounded-xl"
               >
@@ -923,6 +962,76 @@ export default function MeusPedidos() {
                 className="bg-green-600 hover:bg-green-700 rounded-xl"
               >
                 {uploadingComprovante ? 'Enviando...' : 'Enviar Comprovante'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmação com Data */}
+      <Dialog open={showConfirmacaoModal} onOpenChange={setShowConfirmacaoModal}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              {tipoConfirmacao === 'nf' && 'Confirmar Recebimento da NF'}
+              {tipoConfirmacao === 'boleto' && 'Confirmar Recebimento do Boleto'}
+              {tipoConfirmacao === 'recebimento' && 'Confirmar Recebimento do Produto'}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {pedidoConfirmacao && (
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-600">
+                  Pedido #{pedidoConfirmacao.id.slice(-8).toUpperCase()}
+                </p>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                {tipoConfirmacao === 'recebimento' ? 'Data de Recebimento do Produto *' :
+                 tipoConfirmacao === 'nf' ? 'Data de Recebimento da NF *' :
+                 'Data de Recebimento do Boleto *'}
+              </label>
+              <Input
+                type="date"
+                value={dataConfirmacao}
+                onChange={(e) => setDataConfirmacao(e.target.value)}
+                className="rounded-xl"
+                max={new Date().toISOString().split('T')[0]}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Informe a data em que você recebeu {tipoConfirmacao === 'recebimento' ? 'o produto' : tipoConfirmacao === 'nf' ? 'a nota fiscal' : 'o boleto'}
+              </p>
+            </div>
+
+            <Alert>
+              <AlertDescription className="text-sm">
+                Esta data serve como registro oficial de recebimento. Preencha com a data correta para evitar divergências.
+              </AlertDescription>
+            </Alert>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowConfirmacaoModal(false);
+                  setPedidoConfirmacao(null);
+                  setTipoConfirmacao('');
+                  setDataConfirmacao('');
+                }}
+                className="rounded-xl"
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleConfirmacao}
+                disabled={!dataConfirmacao}
+                className="bg-green-600 hover:bg-green-700 rounded-xl"
+              >
+                Confirmar Recebimento
               </Button>
             </div>
           </div>
