@@ -179,10 +179,12 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
           }
         });
 
-        // Verificar produtos com estoque baixo
+        // Verificar produtos com estoque baixo (apenas pronta_entrega, ignora programação/sob_encomenda)
         try {
           const produtos = await Produto.list();
-          const produtosBaixoEstoque = produtos.filter(p => {
+          const produtosEstoque = produtos.filter(p => p.disponibilidade === 'pronta_entrega');
+
+          const produtosBaixoEstoque = produtosEstoque.filter(p => {
             const estoqueAtual = p.estoque_atual || 0;
             const estoqueMinimo = p.estoque_minimo || 5;
             return estoqueAtual <= estoqueMinimo && estoqueAtual > 0;
@@ -202,8 +204,8 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
             });
           });
 
-          // Produtos sem estoque
-          const produtosSemEstoque = produtos.filter(p => (p.estoque_atual || 0) === 0 && p.ativo).slice(0, 3);
+          // Produtos sem estoque (apenas pronta_entrega)
+          const produtosSemEstoque = produtosEstoque.filter(p => (p.estoque_atual || 0) === 0 && p.ativo).slice(0, 3);
           produtosSemEstoque.forEach(produto => {
             notificacoesAuto.push({
               id: `sem-estoque-${produto.id}`,
@@ -222,19 +224,19 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
         }
       }
 
-      // Para admin: verificar comprovantes pendentes
-      if (userRole === 'admin') {
+      // Para admin e fornecedor: verificar comprovantes pendentes de análise
+      if (userRole === 'admin' || userTipoNegocio === 'fornecedor') {
         try {
-          const comprovantesPendentes = await Carteira.filter({ status: 'em_analise' }, '-created_at', 5);
+          const comprovantesPendentes = await Carteira.filter({ status: 'em_analise' }, '-created_at', 10);
           if (comprovantesPendentes.length > 0) {
             notificacoesAuto.push({
               id: `comprovantes-pendentes`,
-              tipo: 'info',
-              titulo: 'Comprovantes Pendentes',
-              mensagem: `${comprovantesPendentes.length} comprovante(s) aguardando análise`,
+              tipo: 'aviso',
+              titulo: 'Comprovantes Recebidos',
+              mensagem: `${comprovantesPendentes.length} comprovante(s) enviado(s) por clientes aguardando análise`,
               icone: 'dinheiro',
               lida: false,
-              data: new Date().toISOString(),
+              data: comprovantesPendentes[0]?.created_at || new Date().toISOString(),
               link: '/CarteiraFinanceira',
               autogerada: true
             });
