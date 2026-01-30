@@ -85,20 +85,25 @@ export default function DashboardAdmin() {
         Pedido.list('-created_date'),
         Produto.list(),
         Fornecedor.list(),
-        User.filter({ tipo_negocio: 'multimarca' }),
+        User.list(),
         Carteira.list(),
         Meta.filter({ ano: anoSelecionado, mes: mesSelecionado })
       ]);
 
+      // Filtrar apenas clientes (multimarca e franqueado)
+      const clientesFiltrados = (clientesList || []).filter(u =>
+        u.tipo_negocio === 'multimarca' || u.tipo_negocio === 'franqueado' || u.categoria_cliente === 'franqueado'
+      );
+
       setPedidos(pedidosList || []);
       setProdutos(produtosList || []);
       setFornecedores(fornecedoresList || []);
-      setClientes(clientesList || []);
+      setClientes(clientesFiltrados);
       setCarteira(carteiraList || []);
       setMetas(metasList || []);
 
-      calculateStats(pedidosList, produtosList, clientesList, carteiraList);
-      generateChartData(pedidosList, fornecedoresList, clientesList);
+      calculateStats(pedidosList, produtosList, clientesFiltrados, carteiraList);
+      generateChartData(pedidosList, fornecedoresList, clientesFiltrados);
 
       // Carregar pedidos atrasados
       const hoje = new Date();
@@ -162,19 +167,19 @@ export default function DashboardAdmin() {
     const pedidosParaFaturamento = pedidosList.filter(p =>
       ['finalizado', 'faturado', 'em_transporte'].includes(p.status)
     );
-    const faturamentoTotal = pedidosParaFaturamento.reduce((sum, p) => sum + (p.valor_total || 0), 0);
+    const faturamentoTotal = pedidosParaFaturamento.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
 
     const pedidosMes = pedidosParaFaturamento.filter(p => {
       const data = new Date(p.created_date);
       return data >= inicioMes && data <= fimMes;
     });
-    const faturamentoMes = pedidosMes.reduce((sum, p) => sum + (p.valor_total || 0), 0);
+    const faturamentoMes = pedidosMes.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
 
     const pedidosMesAnterior = pedidosParaFaturamento.filter(p => {
       const data = new Date(p.created_date);
       return data >= mesAnterior && data <= fimMesAnterior;
     });
-    const faturamentoMesAnterior = pedidosMesAnterior.reduce((sum, p) => sum + (p.valor_total || 0), 0);
+    const faturamentoMesAnterior = pedidosMesAnterior.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
 
     const crescimentoMensal = faturamentoMesAnterior > 0
       ? ((faturamentoMes - faturamentoMesAnterior) / faturamentoMesAnterior) * 100
@@ -212,8 +217,8 @@ export default function DashboardAdmin() {
     ).length;
 
     // Ticket Médio
-    const ticketMedio = pedidosFinalizados.length > 0
-      ? faturamentoTotal / pedidosFinalizados.length
+    const ticketMedio = pedidosParaFaturamento.length > 0
+      ? faturamentoTotal / pedidosParaFaturamento.length
       : 0;
 
     setStats({
@@ -254,7 +259,7 @@ export default function DashboardAdmin() {
         return data >= inicioMes && data <= fimMes;
       });
 
-      const valor = pedidosMes.reduce((sum, p) => sum + (p.valor_total || 0), 0);
+      const valor = pedidosMes.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
 
       faturamentoMensal.push({
         mes: mes.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
@@ -284,7 +289,7 @@ export default function DashboardAdmin() {
       const pedidosFornecedor = pedidosList.filter(p =>
         p.fornecedor_id === fornecedor.id && statusFaturamento.includes(p.status)
       );
-      const valor = pedidosFornecedor.reduce((sum, p) => sum + (p.valor_total || 0), 0);
+      const valor = pedidosFornecedor.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
 
       return {
         nome: fornecedor.nome_marca || fornecedor.razao_social || fornecedor.nome_fantasia,
@@ -298,7 +303,7 @@ export default function DashboardAdmin() {
       const pedidosCliente = pedidosList.filter(p =>
         p.comprador_user_id === cliente.id && statusFaturamento.includes(p.status)
       );
-      const valor = pedidosCliente.reduce((sum, p) => sum + (p.valor_total || 0), 0);
+      const valor = pedidosCliente.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
 
       return {
         nome: cliente.empresa || cliente.razao_social || cliente.nome_marca || cliente.full_name,
@@ -344,7 +349,7 @@ export default function DashboardAdmin() {
       evolucaoPedidos.push({
         dia: dia.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
         pedidos: pedidosDia.length,
-        valor: pedidosDia.reduce((sum, p) => sum + (p.valor_total || 0), 0)
+        valor: pedidosDia.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0)
       });
     }
 

@@ -302,7 +302,9 @@ export default function UserManagement() {
                           <Badge variant="outline">
                             {(user.tipo_negocio === 'franqueado' || user.categoria_cliente === 'franqueado') ? 'Franqueado'
                               : user.tipo_negocio === 'multimarca' ? 'Multimarca'
-                              : user.tipo_negocio === 'fornecedor' ? 'Fornecedor' : 'Admin'}
+                              : user.tipo_negocio === 'fornecedor' ? 'Fornecedor'
+                              : user.role === 'admin' ? 'Admin'
+                              : user.tipo_negocio || 'Usuário'}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -395,7 +397,9 @@ export default function UserManagement() {
                               <Badge variant="outline">
                                 {(pendingUser.tipo_negocio === 'franqueado' || pendingUser.categoria_cliente === 'franqueado') ? 'Franqueado'
                                   : pendingUser.tipo_negocio === 'multimarca' ? 'Multimarca'
-                                  : pendingUser.tipo_negocio === 'fornecedor' ? 'Fornecedor' : 'Admin'}
+                                  : pendingUser.tipo_negocio === 'fornecedor' ? 'Fornecedor'
+                                  : pendingUser.role === 'admin' ? 'Admin'
+                                  : pendingUser.tipo_negocio || 'Usuário'}
                               </Badge>
                             </TableCell>
                             <TableCell>{getStatusBadge(pendingUser.status)}</TableCell>
