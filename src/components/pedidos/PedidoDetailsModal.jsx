@@ -36,6 +36,15 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   const [dataPagamentoParcela, setDataPagamentoParcela] = useState('');
   const [uploadingParcela, setUploadingParcela] = useState(false);
 
+  // Estados para aprovação/recusa de comprovante por parcela
+  const [showAprovacaoParcelaModal, setShowAprovacaoParcelaModal] = useState(false);
+  const [showRecusaParcelaModal, setShowRecusaParcelaModal] = useState(false);
+  const [parcelaParaAprovar, setParcelaParaAprovar] = useState(null);
+  const [parcelaParaRecusar, setParcelaParaRecusar] = useState(null);
+  const [dataPagamentoConfirmada, setDataPagamentoConfirmada] = useState('');
+  const [motivoRecusa, setMotivoRecusa] = useState('');
+  const [processandoAprovacao, setProcessandoAprovacao] = useState(false);
+
   // Estados para frete FOB
   const [valorFreteFOB, setValorFreteFOB] = useState(pedido.valor_frete_fob || '');
   const [salvandoFrete, setSalvandoFrete] = useState(false);
@@ -200,6 +209,105 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       toast.error('Erro ao registrar confirmação');
     } finally {
       setConfirmando(false);
+    }
+  };
+
+  // Recarregar parcelas
+  const reloadParcelas = async () => {
+    try {
+      const titulosList = await Carteira.filter({ pedido_id: pedido.id });
+      const parcelasReais = (titulosList || []).filter(t => t.parcela_numero);
+      const sorted = parcelasReais.sort((a, b) =>
+        new Date(a.data_vencimento) - new Date(b.data_vencimento)
+      );
+      setParcelas(sorted);
+    } catch (e) {
+      console.error('Erro ao recarregar parcelas:', e);
+    }
+  };
+
+  // Aprovar comprovante de parcela
+  const handleAprovarParcela = async () => {
+    if (!dataPagamentoConfirmada) {
+      toast.error('Informe a data de pagamento');
+      return;
+    }
+    setProcessandoAprovacao(true);
+    try {
+      await Carteira.update(parcelaParaAprovar.id, {
+        comprovante_analisado: true,
+        comprovante_aprovado: true,
+        status: 'pago',
+        data_pagamento: dataPagamentoConfirmada
+      });
+
+      // Atualizar totais do cliente
+      try {
+        const cliente = await UserEntity.get(parcelaParaAprovar.cliente_user_id);
+        const novoAberto = Math.max(0, (cliente.total_em_aberto || 0) - parcelaParaAprovar.valor);
+        const hoje = new Date(); hoje.setHours(0,0,0,0);
+        const vencido = new Date(parcelaParaAprovar.data_vencimento + 'T00:00:00') < hoje;
+        const novoVencido = vencido ? Math.max(0, (cliente.total_vencido || 0) - parcelaParaAprovar.valor) : (cliente.total_vencido || 0);
+        await UserEntity.update(parcelaParaAprovar.cliente_user_id, { total_em_aberto: novoAberto, total_vencido: novoVencido });
+      } catch (e) { console.warn('Erro totais:', e); }
+
+      // Verificar se todas as parcelas do pedido estão pagas
+      try {
+        const titulosDoPedido = await Carteira.filter({ pedido_id: pedido.id });
+        const todosPagos = titulosDoPedido.filter(t => t.parcela_numero).every(t => t.status === 'pago' || t.id === parcelaParaAprovar.id);
+        if (todosPagos && pedido.status_pagamento !== 'pago') {
+          await Pedido.update(pedido.id, { status_pagamento: 'pago', data_pagamento: dataPagamentoConfirmada });
+        }
+      } catch (e) { console.warn('Erro status pedido:', e); }
+
+      toast.success('Comprovante aprovado!');
+      setShowAprovacaoParcelaModal(false);
+      setParcelaParaAprovar(null);
+      setDataPagamentoConfirmada('');
+      await reloadParcelas();
+      onUpdate();
+    } catch (_error) {
+      toast.error('Erro ao aprovar comprovante');
+    } finally {
+      setProcessandoAprovacao(false);
+    }
+  };
+
+  // Recusar comprovante de parcela
+  const handleRecusarParcela = async () => {
+    if (!motivoRecusa.trim()) {
+      toast.error('Informe o motivo da recusa');
+      return;
+    }
+    setProcessandoAprovacao(true);
+    try {
+      await Carteira.update(parcelaParaRecusar.id, {
+        comprovante_analisado: true,
+        comprovante_aprovado: false,
+        motivo_recusa_comprovante: motivoRecusa.trim(),
+        status: 'pendente',
+        comprovante_url: null,
+        comprovante_data_upload: null,
+        data_pagamento_informada: null
+      });
+
+      // Atualizar status_pagamento do pedido
+      try {
+        if (pedido.status_pagamento === 'em_analise' || pedido.status_pagamento === 'pago') {
+          await Pedido.update(pedido.id, { status_pagamento: 'pendente' });
+        }
+      } catch (e) { console.warn('Erro status pedido:', e); }
+
+      toast.success('Comprovante recusado.');
+      setShowRecusaParcelaModal(false);
+      setParcelaParaRecusar(null);
+      setMotivoRecusa('');
+      await reloadParcelas();
+      onUpdate();
+    } catch (_error) {
+      toast.error('Erro ao recusar comprovante');
+    } finally {
+      setProcessandoAprovacao(false);
     }
   };
 
@@ -794,9 +902,10 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                               )}
                             </div>
 
-                            {/* Botão de ação - enviar comprovante */}
-                            <div className="flex gap-2">
-                              {parcela.status === 'pendente' && (
+                            {/* Botões de ação */}
+                            <div className="flex flex-wrap gap-2">
+                              {/* Cliente: enviar comprovante */}
+                              {parcela.status === 'pendente' && !parcela.comprovante_url && (
                                 <Button
                                   onClick={() => {
                                     setParcelaSelecionada(parcela);
@@ -810,7 +919,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                                 </Button>
                               )}
 
-                              {/* Botão para reenviar comprovante se foi recusado */}
+                              {/* Cliente: reenviar comprovante se foi recusado */}
                               {parcela.comprovante_analisado &&
                                !parcela.comprovante_aprovado && (
                                 <Button
@@ -819,14 +928,44 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                                     setShowUploadParcelaModal(true);
                                   }}
                                   size="sm"
-                                    variant="outline"
-                                    className="border-orange-500 text-orange-600"
+                                  variant="outline"
+                                  className="border-orange-500 text-orange-600"
+                                >
+                                  <Upload className="w-4 h-4 mr-1" />
+                                  Reenviar Comprovante
+                                </Button>
+                              )}
+
+                              {/* Fornecedor/Admin: aprovar/recusar comprovante em_analise */}
+                              {!isCliente && parcela.status === 'em_analise' && parcela.comprovante_url && (
+                                <>
+                                  <Button
+                                    onClick={() => {
+                                      setParcelaParaAprovar(parcela);
+                                      setDataPagamentoConfirmada(parcela.data_pagamento_informada || new Date().toISOString().split('T')[0]);
+                                      setShowAprovacaoParcelaModal(true);
+                                    }}
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700"
                                   >
-                                    <Upload className="w-4 h-4 mr-1" />
-                                    Reenviar Comprovante
+                                    <CheckCircle className="w-4 h-4 mr-1" />
+                                    Aprovar
                                   </Button>
-                                )}
-                              </div>
+                                  <Button
+                                    onClick={() => {
+                                      setParcelaParaRecusar(parcela);
+                                      setMotivoRecusa('');
+                                      setShowRecusaParcelaModal(true);
+                                    }}
+                                    size="sm"
+                                    variant="destructive"
+                                  >
+                                    <AlertTriangle className="w-4 h-4 mr-1" />
+                                    Recusar
+                                  </Button>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
@@ -1217,6 +1356,122 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                   className="bg-blue-600"
                 >
                   {uploadingParcela ? 'Enviando...' : 'Enviar Comprovante'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Modal de Aprovação de Comprovante por Parcela */}
+      {showAprovacaoParcelaModal && parcelaParaAprovar && (
+        <Dialog open={showAprovacaoParcelaModal} onOpenChange={setShowAprovacaoParcelaModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-green-600">
+                <CheckCircle className="w-5 h-5" />
+                Aprovar Comprovante
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="p-4 bg-gray-50 rounded-lg border">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-gray-600">Parcela:</span>
+                  <span className="font-medium">{parcelaParaAprovar.parcela_numero} de {parcelaParaAprovar.total_parcelas}</span>
+                </div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-gray-600">Valor:</span>
+                  <span className="font-bold">R$ {parcelaParaAprovar.valor?.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-gray-600">Vencimento:</span>
+                  <span>{new Date(parcelaParaAprovar.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+                </div>
+                {parcelaParaAprovar.data_pagamento_informada && (
+                  <div className="flex justify-between items-center text-blue-600">
+                    <span className="text-sm">Data informada pelo cliente:</span>
+                    <span>{new Date(parcelaParaAprovar.data_pagamento_informada + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+                  </div>
+                )}
+                {parcelaParaAprovar.comprovante_url && (
+                  <div className="mt-3 pt-3 border-t">
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => window.open(parcelaParaAprovar.comprovante_url, '_blank')}>
+                      <FileText className="w-4 h-4 mr-2" />
+                      Visualizar Comprovante
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Label>Data do Pagamento Confirmada *</Label>
+                <Input
+                  type="date"
+                  value={dataPagamentoConfirmada}
+                  onChange={(e) => setDataPagamentoConfirmada(e.target.value)}
+                  className="mt-2"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="outline" onClick={() => { setShowAprovacaoParcelaModal(false); setParcelaParaAprovar(null); }} disabled={processandoAprovacao}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleAprovarParcela} disabled={!dataPagamentoConfirmada || processandoAprovacao} className="bg-green-600 hover:bg-green-700">
+                  {processandoAprovacao ? 'Processando...' : 'Confirmar Aprovação'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Modal de Recusa de Comprovante por Parcela */}
+      {showRecusaParcelaModal && parcelaParaRecusar && (
+        <Dialog open={showRecusaParcelaModal} onOpenChange={setShowRecusaParcelaModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <AlertTriangle className="w-5 h-5" />
+                Recusar Comprovante
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="p-4 bg-gray-50 rounded-lg border">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-gray-600">Parcela:</span>
+                  <span className="font-medium">{parcelaParaRecusar.parcela_numero} de {parcelaParaRecusar.total_parcelas}</span>
+                </div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-gray-600">Valor:</span>
+                  <span className="font-bold">R$ {parcelaParaRecusar.valor?.toFixed(2)}</span>
+                </div>
+                {parcelaParaRecusar.comprovante_url && (
+                  <div className="mt-3 pt-3 border-t">
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => window.open(parcelaParaRecusar.comprovante_url, '_blank')}>
+                      <FileText className="w-4 h-4 mr-2" />
+                      Visualizar Comprovante
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Label>Motivo da Recusa *</Label>
+                <Input
+                  value={motivoRecusa}
+                  onChange={(e) => setMotivoRecusa(e.target.value)}
+                  placeholder="Ex: valor incorreto, comprovante ilegível..."
+                  className="mt-2"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="outline" onClick={() => { setShowRecusaParcelaModal(false); setParcelaParaRecusar(null); }} disabled={processandoAprovacao}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleRecusarParcela} disabled={!motivoRecusa.trim() || processandoAprovacao} variant="destructive">
+                  {processandoAprovacao ? 'Processando...' : 'Confirmar Recusa'}
                 </Button>
               </div>
             </div>
