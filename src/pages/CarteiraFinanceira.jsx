@@ -114,10 +114,23 @@ export default function CarteiraFinanceira() {
       let fornecedoresList = [];
 
       if (currentUser.tipo_negocio === 'multimarca' || currentUser.tipo_negocio === 'franqueado') {
-        // Cliente vê todos os títulos associados a ele
-        titulosList = await Carteira.filter({
+        // Cliente vê títulos associados a ele, exceto de pedidos ainda não aprovados
+        const todosOsTitulos = await Carteira.filter({
           cliente_user_id: currentUser.id
         }, '-data_vencimento') || [];
+
+        // Filtrar títulos de pedidos que já foram pelo menos aprovados (não mostrar novo_pedido)
+        const pedidoIds = [...new Set(todosOsTitulos.map(t => t.pedido_id).filter(Boolean))];
+        if (pedidoIds.length > 0) {
+          const pedidosPromises = pedidoIds.map(id => Pedido.get(id).catch(() => null));
+          const pedidosResults = await Promise.all(pedidosPromises);
+          const pedidosNaoAprovados = new Set(
+            pedidosResults.filter(p => p && p.status === 'novo_pedido').map(p => p.id)
+          );
+          titulosList = todosOsTitulos.filter(t => !t.pedido_id || !pedidosNaoAprovados.has(t.pedido_id));
+        } else {
+          titulosList = todosOsTitulos;
+        }
       } else if (currentUser.tipo_negocio === 'fornecedor') {
         // Usar fornecedor_id do usuário diretamente (se disponível)
         // ou buscar fornecedor pelo responsavel_user_id (fallback para usuários antigos)
@@ -233,7 +246,8 @@ export default function CarteiraFinanceira() {
         comprovante_url: uploadResult.file_url,
         comprovante_data_upload: new Date().toISOString(),
         comprovante_analisado: false,
-        data_pagamento_informada: dataPagamentoInformada
+        data_pagamento_informada: dataPagamentoInformada,
+        status: 'em_analise'
       });
 
       // Enviar notificação ao fornecedor
@@ -857,36 +871,6 @@ export default function CarteiraFinanceira() {
                         </div>
                       )}
 
-                      {/* Comprovante do Pedido (enviado pelo cliente em MeusPedidos) */}
-                      {!titulo.comprovante_url && pedidosMap[titulo.pedido_id]?.comprovante_pagamento_url && (
-                        <div className="mt-2 flex items-center gap-2 text-sm">
-                          {pedidosMap[titulo.pedido_id]?.status_pagamento === 'em_analise' ? (
-                            <Badge className="bg-yellow-100 text-yellow-800">
-                              <Clock className="w-3 h-3 mr-1" />
-                              Comprovante em Análise
-                            </Badge>
-                          ) : pedidosMap[titulo.pedido_id]?.status_pagamento === 'pago' ? (
-                            <Badge className="bg-green-100 text-green-800">
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                              Pagamento Confirmado
-                            </Badge>
-                          ) : (
-                            <Badge className="bg-blue-100 text-blue-800">
-                              <FileText className="w-3 h-3 mr-1" />
-                              Comprovante Enviado
-                            </Badge>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => window.open(pedidosMap[titulo.pedido_id].comprovante_pagamento_url, '_blank')}
-                          >
-                            <FileText className="w-4 h-4 mr-1" />
-                            Ver Comprovante do Pedido
-                          </Button>
-                        </div>
-                      )}
-
                       {titulo.motivo_recusa_comprovante && (
                         <Alert className="mt-2 border-red-200 bg-red-50">
                           <AlertDescription className="text-red-800 text-sm">
@@ -1225,13 +1209,13 @@ export default function CarteiraFinanceira() {
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-gray-500">Valor Total</p>
                   <p className="font-bold text-lg text-blue-600">
-                    {formatCurrency(pedidoSelecionado.total || 0)}
+                    {formatCurrency(pedidoSelecionado.valor_final || pedidoSelecionado.valor_total || 0)}
                   </p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-gray-500">Forma de Pagamento</p>
                   <p className="font-medium capitalize">
-                    {pedidoSelecionado.forma_pagamento?.replace(/_/g, ' ') || '-'}
+                    {pedidoSelecionado.metodo_pagamento?.replace(/_/g, ' ') || '-'}
                   </p>
                 </div>
               </div>
@@ -1300,17 +1284,36 @@ export default function CarteiraFinanceira() {
               )}
 
               {/* Rastreamento */}
-              {pedidoSelecionado.link_rastreio && (
+              {(pedidoSelecionado.transportadora || pedidoSelecionado.codigo_rastreio) && (
                 <div className="border-t pt-4">
                   <h4 className="font-medium mb-2">Rastreamento</h4>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.open(pedidoSelecionado.link_rastreio, '_blank')}
-                    className="w-full"
-                  >
-                    Rastrear Pedido
-                  </Button>
+                  <div className="space-y-2">
+                    {pedidoSelecionado.transportadora && (
+                      <p className="text-sm text-gray-700">
+                        <strong>Transportadora:</strong> {pedidoSelecionado.transportadora}
+                      </p>
+                    )}
+                    {pedidoSelecionado.codigo_rastreio && (
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-gray-700">
+                          <strong>Código de Rastreio:</strong>{' '}
+                          <span className="font-mono bg-gray-100 px-2 py-0.5 rounded select-all">
+                            {pedidoSelecionado.codigo_rastreio}
+                          </span>
+                        </p>
+                      </div>
+                    )}
+                    {pedidoSelecionado.link_rastreio && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(pedidoSelecionado.link_rastreio, '_blank')}
+                        className="w-full"
+                      >
+                        Rastrear Pedido
+                      </Button>
+                    )}
+                  </div>
                 </div>
               )}
 
