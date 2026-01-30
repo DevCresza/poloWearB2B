@@ -646,7 +646,7 @@ export default function MeusPedidos() {
 
                       {/* Alertas e Ações */}
                       <div className="flex flex-wrap gap-2">
-                        {pedido.status === 'faturado' && pedido.nf_url && !pedido.cliente_confirmou_nf && (
+                        {['faturado', 'em_transporte', 'finalizado'].includes(pedido.status) && pedido.nf_url && !pedido.cliente_confirmou_nf && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -658,7 +658,7 @@ export default function MeusPedidos() {
                           </Button>
                         )}
 
-                        {pedido.status === 'faturado' && pedido.boleto_url && !pedido.cliente_confirmou_boleto && (
+                        {['faturado', 'em_transporte', 'finalizado'].includes(pedido.status) && pedido.boleto_url && !pedido.cliente_confirmou_boleto && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -670,7 +670,7 @@ export default function MeusPedidos() {
                           </Button>
                         )}
 
-                        {pedido.status === 'em_transporte' && !pedido.cliente_confirmou_recebimento && (
+                        {['em_transporte', 'finalizado'].includes(pedido.status) && !pedido.cliente_confirmou_recebimento && (
                           <Button
                             size="sm"
                             variant="outline"
