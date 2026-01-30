@@ -20,6 +20,51 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+// Helpers para persistir notificações auto-geradas dispensadas no localStorage
+const DISMISSED_KEY = 'polo_notif_dismissed';
+
+const getDismissedIds = (userId) => {
+  try {
+    const raw = localStorage.getItem(`${DISMISSED_KEY}_${userId}`);
+    if (!raw) return {};
+    const data = JSON.parse(raw);
+    // Limpar entradas com mais de 7 dias para não crescer infinitamente
+    const agora = Date.now();
+    const limpo = {};
+    for (const [id, ts] of Object.entries(data)) {
+      if (agora - ts < 7 * 24 * 60 * 60 * 1000) {
+        limpo[id] = ts;
+      }
+    }
+    return limpo;
+  } catch {
+    return {};
+  }
+};
+
+const dismissNotifId = (userId, notifId) => {
+  const data = getDismissedIds(userId);
+  data[notifId] = Date.now();
+  try {
+    localStorage.setItem(`${DISMISSED_KEY}_${userId}`, JSON.stringify(data));
+  } catch {
+    // localStorage cheio ou indisponível
+  }
+};
+
+const dismissMultipleNotifIds = (userId, notifIds) => {
+  const data = getDismissedIds(userId);
+  const agora = Date.now();
+  for (const id of notifIds) {
+    data[id] = agora;
+  }
+  try {
+    localStorage.setItem(`${DISMISSED_KEY}_${userId}`, JSON.stringify(data));
+  } catch {
+    // localStorage cheio ou indisponível
+  }
+};
+
 export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio }) {
   const [notificacoes, setNotificacoes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -64,8 +109,12 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
       // Gerar notificações automáticas baseadas em eventos do sistema
       const notificacoesAutomaticas = await gerarNotificacoesAutomaticas();
 
+      // Filtrar auto-geradas que já foram dispensadas (persistido no localStorage)
+      const dismissed = getDismissedIds(userId);
+      const autoFiltradas = notificacoesAutomaticas.filter(n => !dismissed[n.id]);
+
       // Combinar e ordenar por data
-      const todasNotificacoes = [...notificacoesUsuario, ...notificacoesAutomaticas]
+      const todasNotificacoes = [...notificacoesUsuario, ...autoFiltradas]
         .sort((a, b) => new Date(b.created_at || b.data) - new Date(a.created_at || a.data));
 
       setNotificacoes(todasNotificacoes);
@@ -256,7 +305,8 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
   // Marcar notificação como lida
   const marcarComoLida = async (notificacao) => {
     if (notificacao.autogerada) {
-      // Para notificações auto-geradas, apenas remove da lista localmente
+      // Persistir no localStorage para que não volte ao recarregar
+      dismissNotifId(userId, notificacao.id);
       setNotificacoes(prev => prev.filter(n => n.id !== notificacao.id));
       return;
     }
@@ -278,6 +328,12 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
       const notificacoesBanco = notificacoes.filter(n => !n.autogerada && !n.lida);
       for (const notif of notificacoesBanco) {
         await Notificacao.update(notif.id, { lida: true });
+      }
+
+      // Persistir auto-geradas no localStorage
+      const autoIds = notificacoes.filter(n => n.autogerada).map(n => n.id);
+      if (autoIds.length > 0) {
+        dismissMultipleNotifIds(userId, autoIds);
       }
 
       // Remove auto-geradas e marca banco como lidas

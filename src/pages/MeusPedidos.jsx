@@ -18,7 +18,7 @@ import {
   Download, CreditCard, Calendar, MapPin, Receipt, Upload,
   AlertTriangle, ArrowUpCircle, DollarSign
 } from 'lucide-react';
-import { formatCurrency, exportToCSV, formatDate } from '@/utils/exportUtils';
+import { formatCurrency, exportToCSV, exportToPDF, formatDate } from '@/utils/exportUtils';
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
 import MultiSelectFilter from '@/components/MultiSelectFilter';
 
@@ -328,6 +328,42 @@ export default function MeusPedidos() {
     );
   };
 
+  const handleExportPDF = () => {
+    const exportData = filteredPedidos.map(pedido => {
+      const statusInfo = getStatusInfo(pedido.status);
+      const paymentInfo = getPaymentStatusInfo(pedido.status_pagamento);
+      const itens = Array.isArray(pedido.itens) ? pedido.itens : JSON.parse(pedido.itens || '[]');
+      const totalItens = itens.reduce((sum, item) => sum + item.quantidade, 0);
+
+      return {
+        numero_pedido: `#${pedido.id.slice(-8).toUpperCase()}`,
+        fornecedor: getFornecedorNome(pedido.fornecedor_id),
+        data_pedido: formatDate(pedido.created_date),
+        status: statusInfo.label,
+        status_pagamento: paymentInfo.label,
+        quantidade_itens: totalItens,
+        valor_total: formatCurrency(pedido.valor_final || pedido.valor_total)
+      };
+    });
+
+    const columns = [
+      { key: 'numero_pedido', label: 'Nº Pedido' },
+      { key: 'fornecedor', label: 'Fornecedor' },
+      { key: 'data_pedido', label: 'Data' },
+      { key: 'status', label: 'Status' },
+      { key: 'status_pagamento', label: 'Pagamento' },
+      { key: 'quantidade_itens', label: 'Qtd.' },
+      { key: 'valor_total', label: 'Valor Total' }
+    ];
+
+    exportToPDF(
+      exportData,
+      columns,
+      `Meus Pedidos - ${user?.empresa || user?.full_name || 'Cliente'}`,
+      `meus_pedidos_${new Date().toISOString().split('T')[0]}.pdf`
+    );
+  };
+
   // Função para toggle de filtro (adiciona ou remove do array)
   const toggleFiltroStatus = (status) => {
     setFiltrosStatus(prev =>
@@ -464,6 +500,14 @@ export default function MeusPedidos() {
               Carteira Financeira
             </Button>
 
+            <Button
+              onClick={handleExportPDF}
+              variant="outline"
+              className="rounded-xl"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Exportar PDF
+            </Button>
             <Button
               onClick={handleExportCSV}
               variant="outline"

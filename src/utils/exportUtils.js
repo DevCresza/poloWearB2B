@@ -1,6 +1,6 @@
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 // Utilitários para exportação de dados para CSV e PDF
 
@@ -110,7 +110,7 @@ export const exportToPDF = (data, columns, title = 'Relatório', filename = 'exp
     );
 
     // Adicionar tabela usando autoTable
-    doc.autoTable({
+    autoTable(doc, {
       head: headers,
       body: rows,
       startY: 28,
