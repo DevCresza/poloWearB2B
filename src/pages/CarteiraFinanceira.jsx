@@ -908,8 +908,8 @@ export default function CarteiraFinanceira() {
                         </Button>
                       )}
 
-                      {/* Botões de aprovação/recusa para admin */}
-                      {user?.role === 'admin' && titulo.comprovante_url && !titulo.comprovante_analisado && (
+                      {/* Botões de aprovação/recusa para admin e fornecedor */}
+                      {(user?.role === 'admin' || user?.tipo_negocio === 'fornecedor') && titulo.comprovante_url && !titulo.comprovante_analisado && (
                         <>
                           <Button
                             onClick={() => handleIniciarAprovacao(titulo)}

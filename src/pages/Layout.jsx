@@ -171,6 +171,10 @@ export default function Layout({ children, currentPageName }) {
             <Package className="w-5 h-5" />
             <span>{isAdmin ? 'Pedidos Fornecedores' : 'Meus Pedidos'}</span>
           </Link>
+          <Link to={createPageUrl('CarteiraFinanceira')} className={getNavLinkClasses('CarteiraFinanceira')} onClick={() => setMobileMenuOpen(false)}>
+            <DollarSign className="w-5 h-5" />
+            <span>Carteira Financeira</span>
+          </Link>
         </div>
       )}
 
