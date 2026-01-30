@@ -53,8 +53,11 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       setLoadingParcelas(true);
       try {
         const titulosList = await Carteira.filter({ pedido_id: pedido.id });
+        // Filtrar apenas parcelas reais (tipo a_receber com parcela_numero),
+        // excluindo o placeholder criado pelo Carrinho (tipo a_pagar)
+        const parcelasReais = (titulosList || []).filter(t => t.parcela_numero);
         // Ordenar por data de vencimento
-        const sorted = (titulosList || []).sort((a, b) =>
+        const sorted = parcelasReais.sort((a, b) =>
           new Date(a.data_vencimento) - new Date(b.data_vencimento)
         );
         setParcelas(sorted);

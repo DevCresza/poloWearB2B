@@ -425,6 +425,16 @@ export default function PedidosFornecedor() {
         })))
       });
 
+      // Remover placeholder criado pelo Carrinho (tipo a_pagar) antes de criar parcelas reais
+      try {
+        const placeholders = await Carteira.filter({ pedido_id: selectedPedido.id, tipo: 'a_pagar' });
+        for (const ph of (placeholders || [])) {
+          await Carteira.delete(ph.id);
+        }
+      } catch (e) {
+        console.warn('Erro ao limpar placeholders:', e);
+      }
+
       // Criar títulos na carteira financeira para cada parcela
       // Usar valor_final se disponível (inclui frete FOB), caso contrário usar valor_total
       const valorBase = selectedPedido.valor_final || selectedPedido.valor_total;
