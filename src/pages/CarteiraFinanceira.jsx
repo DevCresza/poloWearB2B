@@ -119,17 +119,21 @@ export default function CarteiraFinanceira() {
           cliente_user_id: currentUser.id
         }, '-data_vencimento') || [];
 
-        // Filtrar títulos de pedidos que já foram pelo menos aprovados (não mostrar novo_pedido)
-        const pedidoIds = [...new Set(todosOsTitulos.map(t => t.pedido_id).filter(Boolean))];
+        // Filtrar:
+        // 1. Remover placeholders (sem parcela_numero) - criados pelo Carrinho antes do fornecedor preencher dados de pagamento
+        // 2. Remover títulos de pedidos ainda não aprovados (novo_pedido)
+        const titulosComParcela = todosOsTitulos.filter(t => t.parcela_numero);
+
+        const pedidoIds = [...new Set(titulosComParcela.map(t => t.pedido_id).filter(Boolean))];
         if (pedidoIds.length > 0) {
           const pedidosPromises = pedidoIds.map(id => Pedido.get(id).catch(() => null));
           const pedidosResults = await Promise.all(pedidosPromises);
           const pedidosNaoAprovados = new Set(
             pedidosResults.filter(p => p && p.status === 'novo_pedido').map(p => p.id)
           );
-          titulosList = todosOsTitulos.filter(t => !t.pedido_id || !pedidosNaoAprovados.has(t.pedido_id));
+          titulosList = titulosComParcela.filter(t => !t.pedido_id || !pedidosNaoAprovados.has(t.pedido_id));
         } else {
-          titulosList = todosOsTitulos;
+          titulosList = titulosComParcela;
         }
       } else if (currentUser.tipo_negocio === 'fornecedor') {
         // Usar fornecedor_id do usuário diretamente (se disponível)
