@@ -94,16 +94,16 @@ export default function HistoricoCompras() {
       setProdutos(produtosList || []);
       setFornecedores(fornecedoresList || []);
 
-      // Calcular stats apenas com pedidos finalizados e pagos
-      calculateStats(pedidosFiltrados, produtosList);
+      // Calcular stats com todos os pedidos finalizados (não apenas os totalmente pagos)
+      calculateStats(pedidosList || [], produtosList, fornecedoresList || []);
     } catch (_error) {
     } finally {
       setLoading(false);
     }
   };
 
-  const calculateStats = (pedidosList, produtosList) => {
-    const totalComprado = pedidosList.reduce((sum, p) => sum + (p.valor_total || 0), 0);
+  const calculateStats = (pedidosList, produtosList, fornecedoresList) => {
+    const totalComprado = pedidosList.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
     const totalPedidos = pedidosList.length;
     const ticketMedio = totalPedidos > 0 ? totalComprado / totalPedidos : 0;
 
@@ -153,7 +153,7 @@ export default function HistoricoCompras() {
 
       comprasPorMes.push({
         mes: data.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
-        valor: pedidosMes.reduce((sum, p) => sum + (p.valor_total || 0), 0),
+        valor: pedidosMes.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0),
         pedidos: pedidosMes.length
       });
     }
@@ -167,13 +167,13 @@ export default function HistoricoCompras() {
           pedidos: 0
         };
       }
-      fornecedorMap[pedido.fornecedor_id].valor += pedido.valor_total || 0;
+      fornecedorMap[pedido.fornecedor_id].valor += pedido.valor_final || pedido.valor_total || 0;
       fornecedorMap[pedido.fornecedor_id].pedidos += 1;
     });
 
     const comprasPorFornecedor = Object.entries(fornecedorMap).map(([id, data]) => ({
       fornecedor_id: id,
-      nome: fornecedores.find(f => f.id === id)?.nome_marca || 'N/A',
+      nome: fornecedoresList.find(f => f.id === id)?.nome_marca || 'N/A',
       ...data
     }));
 
@@ -679,9 +679,9 @@ export default function HistoricoCompras() {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold text-green-600">{formatCurrency(pedido.valor_total)}</p>
-                  <Badge className="bg-green-100 text-green-800 mt-1">
-                    Finalizado
+                  <p className="font-bold text-green-600">{formatCurrency(pedido.valor_final || pedido.valor_total)}</p>
+                  <Badge className={`mt-1 ${pedido.status === 'cancelado' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                    {pedido.status === 'cancelado' ? 'Cancelado' : 'Finalizado'}
                   </Badge>
                 </div>
               </div>
