@@ -390,23 +390,45 @@ export default function CarteiraFinanceira() {
 
     setProcessandoRecusa(true);
     try {
-      const updateData = {
+      // Atualizar título: voltar status para pendente e limpar comprovante para reenvio
+      await Carteira.update(tituloParaRecusar.id, {
         comprovante_analisado: true,
         comprovante_aprovado: false,
-        motivo_recusa_comprovante: motivoRecusa.trim()
-      };
-
-      await Carteira.update(tituloParaRecusar.id, updateData);
-
-      // Notificar cliente
-      const pedido = await Pedido.get(tituloParaRecusar.pedido_id);
-      const cliente = await User.get(tituloParaRecusar.cliente_user_id);
-
-      await SendEmail({
-        to: cliente.email,
-        subject: `Comprovante Recusado - Pedido #${pedido.id.slice(-8).toUpperCase()}`,
-        body: `Seu comprovante de pagamento foi recusado.\n\nMotivo: ${motivoRecusa.trim()}\n\nPor favor, envie um novo comprovante.`
+        motivo_recusa_comprovante: motivoRecusa.trim(),
+        status: 'pendente',
+        comprovante_url: null,
+        comprovante_data_upload: null,
+        data_pagamento_informada: null
       });
+
+      // Atualizar status_pagamento do pedido de volta para pendente se necessário
+      try {
+        if (tituloParaRecusar.pedido_id) {
+          const pedido = await Pedido.get(tituloParaRecusar.pedido_id);
+          if (pedido.status_pagamento === 'em_analise' || pedido.status_pagamento === 'pago') {
+            await Pedido.update(pedido.id, {
+              status_pagamento: 'pendente'
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Erro ao atualizar status do pedido:', e);
+      }
+
+      // Notificar cliente (não bloqueia recusa se falhar)
+      try {
+        const cliente = await User.get(tituloParaRecusar.cliente_user_id);
+        if (cliente?.email) {
+          const pedidoId = tituloParaRecusar.pedido_id ? `#${tituloParaRecusar.pedido_id.slice(-8).toUpperCase()}` : '';
+          await SendEmail({
+            to: cliente.email,
+            subject: `Comprovante Recusado${pedidoId ? ` - Pedido ${pedidoId}` : ''}`,
+            body: `Seu comprovante de pagamento foi recusado.\n\nMotivo: ${motivoRecusa.trim()}\n\nPor favor, envie um novo comprovante.`
+          });
+        }
+      } catch (e) {
+        console.warn('Erro ao enviar email de recusa:', e);
+      }
 
       toast.success('Comprovante recusado. Cliente notificado.');
       setShowRecusaModal(false);
