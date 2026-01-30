@@ -301,53 +301,68 @@ export default function CarteiraFinanceira() {
     }
 
     try {
-      const updateData = {
+      // 1. Atualizar o título na carteira (operação principal)
+      await Carteira.update(tituloParaAprovar.id, {
         comprovante_analisado: true,
         comprovante_aprovado: true,
         status: 'pago',
         data_pagamento: dataPagamentoConfirmada
-      };
-
-      await Carteira.update(tituloParaAprovar.id, updateData);
-
-      // Atualizar totais do cliente
-      const cliente = await User.get(tituloParaAprovar.cliente_user_id);
-      const novoTotalAberto = (cliente.total_em_aberto || 0) - tituloParaAprovar.valor;
-
-      // Verificar se o título estava vencido (status pendente E data de vencimento anterior a hoje)
-      const hoje = new Date();
-      hoje.setHours(0, 0, 0, 0);
-      const dataVencimento = new Date(tituloParaAprovar.data_vencimento + 'T00:00:00');
-      const estaVencido = tituloParaAprovar.status === 'pendente' && dataVencimento < hoje;
-
-      const novoTotalVencido = estaVencido
-        ? (cliente.total_vencido || 0) - tituloParaAprovar.valor
-        : (cliente.total_vencido || 0);
-
-      await User.update(tituloParaAprovar.cliente_user_id, {
-        total_em_aberto: Math.max(0, novoTotalAberto),
-        total_vencido: Math.max(0, novoTotalVencido)
       });
 
-      // Verificar se todos os títulos do pedido foram pagos e atualizar status_pagamento do pedido
-      const pedido = await Pedido.get(tituloParaAprovar.pedido_id);
-      const titulosDoPedido = await Carteira.filter({ pedido_id: tituloParaAprovar.pedido_id });
-      const todosPagos = titulosDoPedido.every(t => t.status === 'pago' || t.id === tituloParaAprovar.id);
+      // 2. Atualizar totais do cliente (não bloqueia aprovação se falhar)
+      try {
+        const cliente = await User.get(tituloParaAprovar.cliente_user_id);
+        const novoTotalAberto = (cliente.total_em_aberto || 0) - tituloParaAprovar.valor;
 
-      if (todosPagos && pedido.status_pagamento !== 'pago') {
-        await Pedido.update(pedido.id, {
-          status_pagamento: 'pago',
-          data_pagamento: dataPagamentoConfirmada
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        const dataVencimento = new Date(tituloParaAprovar.data_vencimento + 'T00:00:00');
+        const estaVencido = dataVencimento < hoje;
+
+        const novoTotalVencido = estaVencido
+          ? (cliente.total_vencido || 0) - tituloParaAprovar.valor
+          : (cliente.total_vencido || 0);
+
+        await User.update(tituloParaAprovar.cliente_user_id, {
+          total_em_aberto: Math.max(0, novoTotalAberto),
+          total_vencido: Math.max(0, novoTotalVencido)
         });
+      } catch (e) {
+        console.warn('Erro ao atualizar totais do cliente:', e);
       }
 
-      // Notificar cliente
+      // 3. Verificar se todos os títulos do pedido foram pagos (não bloqueia aprovação se falhar)
+      try {
+        if (tituloParaAprovar.pedido_id) {
+          const pedido = await Pedido.get(tituloParaAprovar.pedido_id);
+          const titulosDoPedido = await Carteira.filter({ pedido_id: tituloParaAprovar.pedido_id });
+          const todosPagos = titulosDoPedido.every(t => t.status === 'pago' || t.id === tituloParaAprovar.id);
 
-      await SendEmail({
-        to: cliente.email,
-        subject: `Comprovante Aprovado - Pedido #${pedido.id.slice(-8).toUpperCase()}`,
-        body: `Seu comprovante de pagamento foi aprovado!\n\nPedido: #${pedido.id.slice(-8).toUpperCase()}\nValor: ${formatCurrency(tituloParaAprovar.valor)}\nData do Pagamento: ${new Date(dataPagamentoConfirmada + 'T12:00:00').toLocaleDateString('pt-BR')}`
-      });
+          if (todosPagos && pedido.status_pagamento !== 'pago') {
+            await Pedido.update(pedido.id, {
+              status_pagamento: 'pago',
+              data_pagamento: dataPagamentoConfirmada
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Erro ao atualizar status do pedido:', e);
+      }
+
+      // 4. Notificar cliente por email (não bloqueia aprovação se falhar)
+      try {
+        const cliente = await User.get(tituloParaAprovar.cliente_user_id);
+        if (cliente?.email) {
+          const pedidoId = tituloParaAprovar.pedido_id ? `#${tituloParaAprovar.pedido_id.slice(-8).toUpperCase()}` : '';
+          await SendEmail({
+            to: cliente.email,
+            subject: `Comprovante Aprovado${pedidoId ? ` - Pedido ${pedidoId}` : ''}`,
+            body: `Seu comprovante de pagamento foi aprovado!\n\n${pedidoId ? `Pedido: ${pedidoId}\n` : ''}Valor: ${formatCurrency(tituloParaAprovar.valor)}\nData do Pagamento: ${new Date(dataPagamentoConfirmada + 'T12:00:00').toLocaleDateString('pt-BR')}`
+          });
+        }
+      } catch (e) {
+        console.warn('Erro ao enviar email de aprovação:', e);
+      }
 
       toast.success('Comprovante aprovado!');
       setShowAprovacaoModal(false);
