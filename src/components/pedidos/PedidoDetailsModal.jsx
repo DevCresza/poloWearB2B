@@ -311,6 +311,53 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     }
   };
 
+  // Alterar status de uma parcela individual
+  const handleAlterarStatusParcela = async (parcela, novoStatus) => {
+    try {
+      const updateData = { status: novoStatus };
+
+      if (novoStatus === 'pago') {
+        updateData.data_pagamento = new Date().toISOString().split('T')[0];
+      }
+
+      if (novoStatus === 'pendente') {
+        updateData.data_pagamento = null;
+      }
+
+      await Carteira.update(parcela.id, updateData);
+
+      // Atualizar totais do cliente ao marcar como pago
+      if (novoStatus === 'pago') {
+        try {
+          const cliente = await UserEntity.get(parcela.cliente_user_id);
+          const novoAberto = Math.max(0, (cliente.total_em_aberto || 0) - parcela.valor);
+          const hoje = new Date(); hoje.setHours(0,0,0,0);
+          const vencido = new Date(parcela.data_vencimento + 'T00:00:00') < hoje;
+          const novoVencido = vencido ? Math.max(0, (cliente.total_vencido || 0) - parcela.valor) : (cliente.total_vencido || 0);
+          await UserEntity.update(parcela.cliente_user_id, { total_em_aberto: novoAberto, total_vencido: novoVencido });
+        } catch (e) { console.warn('Erro totais:', e); }
+      }
+
+      // Verificar se todas as parcelas do pedido estão pagas
+      try {
+        const titulosDoPedido = await Carteira.filter({ pedido_id: pedido.id });
+        const parcelasReais = titulosDoPedido.filter(t => t.parcela_numero);
+        const todosPagos = parcelasReais.every(t => t.status === 'pago' || t.id === parcela.id && novoStatus === 'pago');
+        if (todosPagos && pedido.status_pagamento !== 'pago') {
+          await Pedido.update(pedido.id, { status_pagamento: 'pago', data_pagamento: new Date().toISOString().split('T')[0] });
+        } else if (!todosPagos && pedido.status_pagamento === 'pago') {
+          await Pedido.update(pedido.id, { status_pagamento: 'pendente' });
+        }
+      } catch (e) { console.warn('Erro status pedido:', e); }
+
+      toast.success('Status da parcela atualizado!');
+      await reloadParcelas();
+      onUpdate();
+    } catch (_error) {
+      toast.error('Erro ao atualizar status da parcela');
+    }
+  };
+
   // Função para obter info de status da parcela
   const getParcelaStatusInfo = (parcela) => {
     // Se já está pago, retornar status pago
@@ -903,9 +950,26 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                             </div>
 
                             {/* Botões de ação */}
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap gap-2 items-center">
+                              {/* Fornecedor/Admin: alterar status da parcela */}
+                              {!isCliente && (
+                                <Select
+                                  value={parcela.status || 'pendente'}
+                                  onValueChange={(value) => handleAlterarStatusParcela(parcela, value)}
+                                >
+                                  <SelectTrigger className="w-[160px] h-8 text-xs">
+                                    <SelectValue placeholder="Status" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="pendente">Pendente</SelectItem>
+                                    <SelectItem value="em_analise">Em Análise</SelectItem>
+                                    <SelectItem value="pago">Pago</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              )}
+
                               {/* Cliente: enviar comprovante */}
-                              {parcela.status === 'pendente' && !parcela.comprovante_url && (
+                              {isCliente && parcela.status === 'pendente' && !parcela.comprovante_url && (
                                 <Button
                                   onClick={() => {
                                     setParcelaSelecionada(parcela);
@@ -920,7 +984,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                               )}
 
                               {/* Cliente: reenviar comprovante se foi recusado */}
-                              {parcela.comprovante_analisado &&
+                              {isCliente && parcela.comprovante_analisado &&
                                !parcela.comprovante_aprovado && (
                                 <Button
                                   onClick={() => {
