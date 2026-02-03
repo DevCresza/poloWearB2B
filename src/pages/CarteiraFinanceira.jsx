@@ -26,6 +26,7 @@ export default function CarteiraFinanceira() {
   const [user, setUser] = useState(null);
   const [titulos, setTitulos] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
+  const [clientesMap, setClientesMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [filtrosStatus, setFiltrosStatus] = useState([]); // Array para múltipla seleção
   const [filtrosFornecedor, setFiltrosFornecedor] = useState([]); // Array para múltipla seleção
@@ -170,6 +171,20 @@ export default function CarteiraFinanceira() {
 
       setTitulos(titulosList || []);
       setFornecedores(fornecedoresList || []);
+
+      // Carregar nomes dos clientes para fornecedor/admin
+      if (currentUser.tipo_negocio === 'fornecedor' || currentUser.role === 'admin') {
+        const clienteIds = [...new Set((titulosList || []).map(t => t.cliente_user_id).filter(Boolean))];
+        if (clienteIds.length > 0) {
+          const clientesPromises = clienteIds.map(id => User.get(id).catch(() => null));
+          const clientesResults = await Promise.all(clientesPromises);
+          const map = {};
+          clientesResults.forEach(c => {
+            if (c) map[c.id] = c.empresa || c.razao_social || c.nome_marca || c.full_name || 'Cliente';
+          });
+          setClientesMap(map);
+        }
+      }
 
       // Recalcular e sincronizar totais do cliente (apenas títulos de pedidos finalizados)
       if ((currentUser.tipo_negocio === 'multimarca' || currentUser.tipo_negocio === 'franqueado') && titulosList) {
@@ -858,6 +873,11 @@ export default function CarteiraFinanceira() {
                           <StatusIcon className="w-4 h-4 mr-1" />
                           {statusInfo.label}
                         </Badge>
+                        {(user?.tipo_negocio === 'fornecedor' || user?.role === 'admin') && titulo.cliente_user_id && clientesMap[titulo.cliente_user_id] && (
+                          <Badge variant="outline" className="bg-blue-50">
+                            {clientesMap[titulo.cliente_user_id]}
+                          </Badge>
+                        )}
                         <Badge variant="outline">
                           {getFornecedorNome(titulo)}
                         </Badge>
