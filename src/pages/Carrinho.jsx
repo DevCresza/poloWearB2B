@@ -275,6 +275,7 @@ export default function Carrinho() {
           referencia: item.referencia_polo || item.referencia_fornecedor || '',
           tipo_venda: item.tipo_venda,
           quantidade: item.quantidade,
+          total_pecas_grade: item.total_pecas_grade || 0,
           preco: item.tipo_venda === 'grade' ? item.preco_grade_completa : item.preco_por_peca,
           total: (item.tipo_venda === 'grade' ? item.preco_grade_completa : item.preco_por_peca) * item.quantidade,
           foto: getPrimeiraFoto(item),

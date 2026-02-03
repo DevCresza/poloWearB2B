@@ -46,11 +46,14 @@ export default function GestaoMetas() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [metasList, fornecedoresList, clientesList] = await Promise.all([
+      const [metasList, fornecedoresList, allUsers] = await Promise.all([
         Meta.filter({ ano: anoSelecionado, mes: mesSelecionado }),
         Fornecedor.list(),
-        User.filter({ tipo_negocio: 'multimarca' })
+        User.list()
       ]);
+      const clientesList = (allUsers || []).filter(u =>
+        u.tipo_negocio === 'multimarca' || u.tipo_negocio === 'franqueado' || u.categoria_cliente === 'franqueado'
+      );
 
       // Atualizar realizado de cada meta
       for (const meta of metasList) {
@@ -69,7 +72,7 @@ export default function GestaoMetas() {
   const atualizarRealizadoMeta = async (meta) => {
     try {
       const dataInicio = new Date(meta.ano, meta.mes - 1, 1);
-      const dataFim = new Date(meta.ano, meta.mes, 0);
+      const dataFim = new Date(meta.ano, meta.mes, 0, 23, 59, 59, 999);
 
       // Buscar pedidos com status que indicam venda confirmada (não cancelados)
       let pedidos = await Pedido.list();
@@ -93,21 +96,37 @@ export default function GestaoMetas() {
         pedidos = pedidos.filter(p => p.comprador_user_id === meta.user_id);
       }
 
-      const valorRealizado = pedidos.reduce((sum, p) => sum + (p.valor_total || 0), 0);
+      const valorRealizado = pedidos.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
       
       // Calcular peças realizadas
       let pecasRealizadas = 0;
       pedidos.forEach(p => {
         try {
-          const itens = Array.isArray(p.itens) ? p.itens : JSON.parse(p.itens);
+          const itens = Array.isArray(p.itens) ? p.itens : JSON.parse(p.itens || '[]');
           itens.forEach(item => {
             if (item.tipo_venda === 'grade') {
-              pecasRealizadas += (item.quantidade || 0) * (item.total_pecas_grade || 0);
+              let pecasPorGrade = item.total_pecas_grade || 0;
+              // Fallback: calcular a partir de grade_selecionada para pedidos antigos
+              if (!pecasPorGrade && item.grade_selecionada?.quantidades_por_tamanho) {
+                pecasPorGrade = Object.values(item.grade_selecionada.quantidades_por_tamanho)
+                  .reduce((sum, qty) => sum + (Number(qty) || 0), 0);
+              }
+              pecasRealizadas += (item.quantidade || 0) * pecasPorGrade;
+            } else if (item.tipo === 'capsula') {
+              // Cápsulas: somar quantidade de cada produto dentro da cápsula
+              if (item.produtos_quantidades && typeof item.produtos_quantidades === 'object') {
+                const totalPecasCapsula = Object.values(item.produtos_quantidades)
+                  .reduce((sum, qty) => sum + (Number(qty) || 0), 0);
+                pecasRealizadas += totalPecasCapsula * (item.quantidade || 1);
+              } else {
+                pecasRealizadas += item.quantidade || 0;
+              }
             } else {
               pecasRealizadas += item.quantidade || 0;
             }
           });
         } catch (e) {
+          // Itens inválidos são ignorados
         }
       });
 
