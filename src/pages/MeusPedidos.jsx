@@ -719,33 +719,7 @@ export default function MeusPedidos() {
                         </Button>
                       )}
 
-                      {/* Botão para enviar comprovante de pagamento (boleto, PIX, transferência) */}
-                      {(pedido.boleto_url || pedido.metodo_pagamento === 'pix' || pedido.metodo_pagamento === 'a_vista') && pedido.status_pagamento !== 'pago' && (
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedPedido(pedido);
-                            setSelectedTitulo(null);
-                            setShowComprovanteModal(true);
-                          }}
-                          className={`w-full rounded-xl ${pedido.comprovante_pagamento_url ? 'border-green-300 text-green-700' : 'border-orange-300 text-orange-700'}`}
-                        >
-                          <Upload className="w-4 h-4 mr-2" />
-                          {pedido.comprovante_pagamento_url ? 'Atualizar Comprovante' : 'Enviar Comprovante'}
-                        </Button>
-                      )}
-
-                      {/* Ver comprovante enviado */}
-                      {pedido.comprovante_pagamento_url && (
-                        <Button
-                          variant="outline"
-                          onClick={() => window.open(pedido.comprovante_pagamento_url, '_blank')}
-                          className="w-full rounded-xl border-blue-300 text-blue-700"
-                        >
-                          <Eye className="w-4 h-4 mr-2" />
-                          Ver Comprovante
-                        </Button>
-                      )}
+                      {/* Comprovantes devem ser enviados por parcela via Carteira Financeira ou Ver Detalhes */}
                     </div>
                   </div>
                 </CardContent>
@@ -896,110 +870,7 @@ export default function MeusPedidos() {
         </Dialog>
       )}
 
-      {/* Modal de Envio de Comprovante de Pagamento */}
-      <Dialog open={showComprovanteModal} onOpenChange={setShowComprovanteModal}>
-        <DialogContent className="rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="text-xl">Enviar Comprovante de Pagamento</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            {selectedTitulo ? (
-              <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                <p className="text-sm text-gray-600">
-                  Parcela - Pedido #{selectedTitulo.pedido_id?.slice(-8).toUpperCase()}
-                </p>
-                <p className="font-semibold text-lg text-blue-600">
-                  {formatCurrency(selectedTitulo.valor)}
-                </p>
-                <p className="text-sm text-gray-600">
-                  Vencimento: {new Date(selectedTitulo.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}
-                </p>
-              </div>
-            ) : selectedPedido ? (
-              <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                <p className="text-sm text-gray-600">
-                  Pedido #{selectedPedido.id.slice(-8).toUpperCase()}
-                </p>
-                <p className="font-semibold text-lg text-blue-600">
-                  {formatCurrency(selectedPedido.valor_final || selectedPedido.valor_total)}
-                </p>
-                {selectedPedido.comprovante_pagamento_url && (
-                  <div className="flex items-center gap-2 text-green-600">
-                    <CheckCircle className="w-4 h-4" />
-                    <span className="text-sm">Comprovante já enviado</span>
-                    <Button
-                      variant="link"
-                      className="p-0 h-auto"
-                      onClick={() => window.open(selectedPedido.comprovante_pagamento_url, '_blank')}
-                    >
-                      Ver
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ) : null}
-
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Data do Pagamento *
-              </label>
-              <Input
-                type="date"
-                value={dataPagamentoComprovante}
-                onChange={(e) => setDataPagamentoComprovante(e.target.value)}
-                className="rounded-xl"
-                max={new Date().toISOString().split('T')[0]}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Informe a data em que o pagamento foi realizado
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Arquivo do Comprovante *
-              </label>
-              <Input
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={(e) => setComprovanteFile(e.target.files[0])}
-                className="rounded-xl"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                <strong>Formatos aceitos:</strong> PDF, JPG, JPEG, PNG
-              </p>
-              <p className="text-xs text-gray-500">
-                Envie o comprovante de pagamento (PIX, transferência, depósito).
-                O financeiro irá analisar e confirmar o pagamento.
-              </p>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-4">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowComprovanteModal(false);
-                  setComprovanteFile(null);
-                  setDataPagamentoComprovante('');
-                  setSelectedPedido(null);
-                  setSelectedTitulo(null);
-                }}
-                className="rounded-xl"
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleEnviarComprovantePedido}
-                disabled={uploadingComprovante || !comprovanteFile || !dataPagamentoComprovante}
-                className="bg-green-600 hover:bg-green-700 rounded-xl"
-              >
-                {uploadingComprovante ? 'Enviando...' : 'Enviar Comprovante'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Comprovantes são enviados por parcela via Carteira Financeira ou Ver Detalhes */}
 
       {/* Modal de Confirmação com Data */}
       <Dialog open={showConfirmacaoModal} onOpenChange={setShowConfirmacaoModal}>
