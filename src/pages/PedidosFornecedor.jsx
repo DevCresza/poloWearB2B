@@ -47,6 +47,7 @@ export default function PedidosFornecedor() {
   const [showEnvioModal, setShowEnvioModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showBoletoModal, setShowBoletoModal] = useState(false);
+  const [showAtualizarNFModal, setShowAtualizarNFModal] = useState(false);
   const [showStatusPagamentoModal, setShowStatusPagamentoModal] = useState(false);
   const [showCancelarModal, setShowCancelarModal] = useState(false);
   
@@ -602,6 +603,70 @@ export default function PedidosFornecedor() {
       loadPedidos();
     } catch (error) {
       toast.error('Erro ao marcar pedido como entregue');
+    }
+  };
+
+  // Handler para atualizar NF (nota fiscal)
+  const handleAtualizarNF = async () => {
+    if (!nfFile || !nfNumero || !nfDataEmissao) {
+      toast.info('Preencha o número, a data de emissão e envie a nota fiscal');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const nfUpload = await UploadFile({ file: nfFile });
+
+      await Pedido.update(selectedPedido.id, {
+        nf_url: nfUpload.file_url,
+        nf_numero: nfNumero,
+        nf_data_upload: nfDataEmissao + 'T00:00:00'
+      });
+
+      // Notificar cliente
+      try {
+        const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
+        if (cliente?.email) {
+          await SendEmail({
+            from_name: 'POLO B2B',
+            to: cliente.email,
+            subject: `Nota Fiscal Atualizada - NF #${nfNumero}`,
+            body: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); padding: 30px; text-align: center;">
+                  <h1 style="color: white; margin: 0;">Nota Fiscal Atualizada</h1>
+                </div>
+                <div style="padding: 30px; background: white;">
+                  <p>A nota fiscal do pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi atualizada.</p>
+                  <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                    <p><strong>Nova NF:</strong> #${nfNumero}</p>
+                    <p><strong>Data de Emissão:</strong> ${new Date(nfDataEmissao).toLocaleDateString('pt-BR')}</p>
+                  </div>
+                  <div style="text-align: center; margin-top: 30px;">
+                    <a href="${nfUpload.file_url}" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px;">
+                      Baixar Nota Fiscal
+                    </a>
+                  </div>
+                </div>
+              </div>
+            `
+          });
+        }
+      } catch (emailError) {
+        console.warn('Erro ao enviar email de NF atualizada:', emailError);
+      }
+
+      toast.success('Nota Fiscal atualizada com sucesso!');
+      setShowAtualizarNFModal(false);
+      setNfFile(null);
+      setNfNumero('');
+      setNfDataEmissao('');
+      loadPedidos();
+    } catch (error) {
+      console.error('Erro ao atualizar NF:', error);
+      toast.error('Erro ao atualizar nota fiscal');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -1199,6 +1264,24 @@ export default function PedidosFornecedor() {
                         </Button>
                       )}
 
+                      {/* Botão para atualizar NF separadamente */}
+                      {['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && pedido.nf_url && (
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedPedido(pedido);
+                            setNfNumero(pedido.nf_numero || '');
+                            setNfDataEmissao(pedido.nf_data_upload ? pedido.nf_data_upload.split('T')[0] : '');
+                            setNfFile(null);
+                            setShowAtualizarNFModal(true);
+                          }}
+                          className="border-indigo-300 text-indigo-700"
+                        >
+                          <FileText className="w-4 h-4 mr-2" />
+                          Atualizar NF
+                        </Button>
+                      )}
+
                       {/* Botão para enviar boleto separadamente */}
                       {['em_producao', 'faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && (
                         <Button
@@ -1630,6 +1713,99 @@ export default function PedidosFornecedor() {
                 className="bg-green-600 hover:bg-green-700"
               >
                 {uploading ? 'Enviando...' : 'Enviar Boleto'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Atualizar NF */}
+      <Dialog open={showAtualizarNFModal} onOpenChange={setShowAtualizarNFModal}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Atualizar Nota Fiscal</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {selectedPedido?.nf_url && (
+              <Alert className="bg-indigo-50 border-indigo-300">
+                <FileText className="h-4 w-4 text-indigo-600" />
+                <AlertDescription className="text-indigo-800">
+                  Este pedido já possui uma NF anexada
+                  {selectedPedido.nf_numero && <> (NF #{selectedPedido.nf_numero})</>}.
+                  <Button
+                    variant="link"
+                    className="p-0 h-auto ml-2"
+                    onClick={() => window.open(selectedPedido.nf_url, '_blank')}
+                  >
+                    Ver NF atual
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="nfNumeroAtualizar">Número da NF *</Label>
+                <Input
+                  id="nfNumeroAtualizar"
+                  value={nfNumero}
+                  onChange={(e) => setNfNumero(e.target.value)}
+                  placeholder="Ex: 12345"
+                />
+              </div>
+              <div>
+                <Label htmlFor="nfDataEmissaoAtualizar">Data de Emissão *</Label>
+                <Input
+                  id="nfDataEmissaoAtualizar"
+                  type="date"
+                  value={nfDataEmissao}
+                  onChange={(e) => setNfDataEmissao(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="nfFileAtualizar">Upload da Nota Fiscal *</Label>
+              <Input
+                id="nfFileAtualizar"
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.crm"
+                onChange={(e) => setNfFile(e.target.files[0])}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                <strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM
+              </p>
+            </div>
+
+            {/* Resumo do pedido */}
+            {selectedPedido && (
+              <div className="bg-gray-50 p-3 rounded-lg border">
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-gray-600">Pedido:</span>
+                  <span className="font-mono">#{selectedPedido.id.slice(-8).toUpperCase()}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Valor Total:</span>
+                  <span className="font-bold text-green-600">
+                    {formatCurrency(selectedPedido.valor_final || selectedPedido.valor_total || 0)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <Button variant="outline" onClick={() => {
+                setShowAtualizarNFModal(false);
+                setNfFile(null);
+              }}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleAtualizarNF}
+                disabled={uploading || !nfFile || !nfNumero || !nfDataEmissao}
+                className="bg-indigo-600 hover:bg-indigo-700"
+              >
+                {uploading ? 'Enviando...' : 'Atualizar Nota Fiscal'}
               </Button>
             </div>
           </div>
