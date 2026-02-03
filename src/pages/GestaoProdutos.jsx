@@ -261,8 +261,11 @@ export default function GestaoProdutos() {
 
   // Filtrar produtos
   const filteredProdutos = produtos.filter(produto => {
-    const matchesSearch = produto.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         produto.marca?.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = produto.nome?.toLowerCase().includes(term) ||
+                         produto.marca?.toLowerCase().includes(term) ||
+                         produto.referencia_polo?.toLowerCase().includes(term) ||
+                         produto.referencia_fornecedor?.toLowerCase().includes(term);
     const matchesFornecedor = filterFornecedor === 'all' || produto.fornecedor_id === filterFornecedor;
     const matchesCategoria = filterCategoria === 'all' || produto.categoria === filterCategoria;
     

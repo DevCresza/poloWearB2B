@@ -204,10 +204,19 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
         setIsUserFornecedor(true);
 
         // Buscar o fornecedor associado ao usuário
-        const fornecedoresDoUsuario = await Fornecedor.filter({ responsavel_user_id: user.id });
+        // Primeiro tenta pelo fornecedor_id direto no usuário, depois pelo responsavel_user_id
+        let fornecedor = null;
+        if (user.fornecedor_id) {
+          try {
+            fornecedor = await Fornecedor.get(user.fornecedor_id);
+          } catch (_e) { /* fornecedor_id inválido, tenta fallback */ }
+        }
+        if (!fornecedor) {
+          const fornecedoresDoUsuario = await Fornecedor.filter({ responsavel_user_id: user.id });
+          fornecedor = fornecedoresDoUsuario?.[0] || null;
+        }
 
-        if (fornecedoresDoUsuario && fornecedoresDoUsuario.length > 0) {
-          const fornecedor = fornecedoresDoUsuario[0];
+        if (fornecedor) {
           setFornecedores([fornecedor]);
           setUserFornecedorId(fornecedor.id);
 
