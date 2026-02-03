@@ -414,10 +414,13 @@ export default function PedidosFornecedor() {
       const boletoUpload = await UploadFile({ file: boletoFile });
 
       // Atualizar pedido com boleto e info de parcelas
+      // Resetar confirmação de boleto do cliente ao atualizar
       await Pedido.update(selectedPedido.id, {
         boleto_url: boletoUpload.file_url,
         boleto_data_upload: new Date().toISOString(),
         qtd_parcelas: qtdParcelas,
+        cliente_confirmou_boleto: false,
+        status_pagamento: 'pendente',
         parcelas_info: JSON.stringify(parcelas.map((p, i) => ({
           numero: i + 1,
           dataVencimento: p.dataVencimento,
@@ -425,14 +428,15 @@ export default function PedidosFornecedor() {
         })))
       });
 
-      // Remover placeholder criado pelo Carrinho (tipo a_pagar) antes de criar parcelas reais
+      // Excluir TODAS as cobranças existentes do pedido (placeholders e parcelas reais)
+      // Ao atualizar boleto, todas as parcelas anteriores são substituídas pelas novas
       try {
-        const placeholders = await Carteira.filter({ pedido_id: selectedPedido.id, tipo: 'a_pagar' });
-        for (const ph of (placeholders || [])) {
-          await Carteira.delete(ph.id);
+        const todasEntradas = await Carteira.filter({ pedido_id: selectedPedido.id });
+        for (const entrada of (todasEntradas || [])) {
+          await Carteira.delete(entrada.id);
         }
       } catch (e) {
-        console.warn('Erro ao limpar placeholders:', e);
+        console.warn('Erro ao limpar cobranças anteriores:', e);
       }
 
       // Criar títulos na carteira financeira para cada parcela
@@ -1437,7 +1441,6 @@ export default function PedidosFornecedor() {
                           type="date"
                           value={parcela.dataVencimento}
                           onChange={(e) => handleParcelaDataChange(index, e.target.value)}
-                          min={new Date().toISOString().split('T')[0]}
                         />
                       </div>
                     </div>
