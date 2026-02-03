@@ -59,6 +59,10 @@ export default function CarteiraFinanceira() {
   const [pesquisaPedido, setPesquisaPedido] = useState('');
   const [filtroVencimentoDe, setFiltroVencimentoDe] = useState('');
   const [filtroVencimentoAte, setFiltroVencimentoAte] = useState('');
+  const [filtroEmissaoDe, setFiltroEmissaoDe] = useState('');
+  const [filtroEmissaoAte, setFiltroEmissaoAte] = useState('');
+  const [filtroFaturamentoDe, setFiltroFaturamentoDe] = useState('');
+  const [filtroFaturamentoAte, setFiltroFaturamentoAte] = useState('');
 
   // Estado para modal de detalhes do pedido
   const [showDetalhesModal, setShowDetalhesModal] = useState(false);
@@ -624,6 +628,10 @@ export default function CarteiraFinanceira() {
     setPesquisaPedido('');
     setFiltroVencimentoDe('');
     setFiltroVencimentoAte('');
+    setFiltroEmissaoDe('');
+    setFiltroEmissaoAte('');
+    setFiltroFaturamentoDe('');
+    setFiltroFaturamentoAte('');
   };
 
   const filteredTitulos = titulos.filter(titulo => {
@@ -643,9 +651,35 @@ export default function CarteiraFinanceira() {
     if (filtroVencimentoDe && titulo.data_vencimento < filtroVencimentoDe) matchesVencimento = false;
     if (filtroVencimentoAte && titulo.data_vencimento > filtroVencimentoAte) matchesVencimento = false;
 
+    // Filtro por data de emissão do pedido
+    let matchesEmissao = true;
+    if (filtroEmissaoDe || filtroEmissaoAte) {
+      const pedido = titulo.pedido_id ? pedidosMap[titulo.pedido_id] : null;
+      const dataEmissao = pedido?.created_date?.split('T')[0];
+      if (!dataEmissao) {
+        matchesEmissao = false;
+      } else {
+        if (filtroEmissaoDe && dataEmissao < filtroEmissaoDe) matchesEmissao = false;
+        if (filtroEmissaoAte && dataEmissao > filtroEmissaoAte) matchesEmissao = false;
+      }
+    }
+
+    // Filtro por data de faturamento do pedido
+    let matchesFaturamento = true;
+    if (filtroFaturamentoDe || filtroFaturamentoAte) {
+      const pedido = titulo.pedido_id ? pedidosMap[titulo.pedido_id] : null;
+      const dataFat = pedido?.nf_data_upload?.split('T')[0];
+      if (!dataFat) {
+        matchesFaturamento = false;
+      } else {
+        if (filtroFaturamentoDe && dataFat < filtroFaturamentoDe) matchesFaturamento = false;
+        if (filtroFaturamentoAte && dataFat > filtroFaturamentoAte) matchesFaturamento = false;
+      }
+    }
+
     // Filtro por status (múltipla seleção)
     if (filtrosStatus.length === 0) {
-      return matchesFornecedor && matchesPesquisa && matchesVencimento;
+      return matchesFornecedor && matchesPesquisa && matchesVencimento && matchesEmissao && matchesFaturamento;
     }
 
     // Verificar se algum dos filtros de status selecionados corresponde
@@ -668,7 +702,7 @@ export default function CarteiraFinanceira() {
       }
     }
 
-    return matchesStatus && matchesFornecedor && matchesPesquisa && matchesVencimento;
+    return matchesStatus && matchesFornecedor && matchesPesquisa && matchesVencimento && matchesEmissao && matchesFaturamento;
   });
 
   if (loading) {
@@ -797,7 +831,7 @@ export default function CarteiraFinanceira() {
                 />
               </div>
             </div>
-            {(filtrosStatus.length > 0 || filtrosFornecedor.length > 0 || pesquisaPedido || filtroVencimentoDe || filtroVencimentoAte) && (
+            {(filtrosStatus.length > 0 || filtrosFornecedor.length > 0 || pesquisaPedido || filtroVencimentoDe || filtroVencimentoAte || filtroEmissaoDe || filtroEmissaoAte || filtroFaturamentoDe || filtroFaturamentoAte) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -809,25 +843,28 @@ export default function CarteiraFinanceira() {
             )}
           </div>
 
-          {/* Filtro por data de vencimento */}
-          <div className="flex flex-wrap gap-4 items-end">
-            <div className="space-y-1">
-              <Label className="text-xs text-gray-500 font-medium">Vencimento De</Label>
-              <Input
-                type="date"
-                value={filtroVencimentoDe}
-                onChange={(e) => setFiltroVencimentoDe(e.target.value)}
-                className="w-[160px]"
-              />
+          {/* Filtros por data */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs text-gray-500 font-medium">Vencimento do Título</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Input type="date" value={filtroVencimentoDe} onChange={(e) => setFiltroVencimentoDe(e.target.value)} title="Vencimento De" />
+                <Input type="date" value={filtroVencimentoAte} onChange={(e) => setFiltroVencimentoAte(e.target.value)} title="Vencimento Até" />
+              </div>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-gray-500 font-medium">Vencimento Até</Label>
-              <Input
-                type="date"
-                value={filtroVencimentoAte}
-                onChange={(e) => setFiltroVencimentoAte(e.target.value)}
-                className="w-[160px]"
-              />
+            <div className="space-y-2">
+              <Label className="text-xs text-gray-500 font-medium">Emissão do Pedido</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Input type="date" value={filtroEmissaoDe} onChange={(e) => setFiltroEmissaoDe(e.target.value)} title="Emissão De" />
+                <Input type="date" value={filtroEmissaoAte} onChange={(e) => setFiltroEmissaoAte(e.target.value)} title="Emissão Até" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-gray-500 font-medium">Faturamento do Pedido</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Input type="date" value={filtroFaturamentoDe} onChange={(e) => setFiltroFaturamentoDe(e.target.value)} title="Faturamento De" />
+                <Input type="date" value={filtroFaturamentoAte} onChange={(e) => setFiltroFaturamentoAte(e.target.value)} title="Faturamento Até" />
+              </div>
             </div>
           </div>
 
@@ -860,9 +897,8 @@ export default function CarteiraFinanceira() {
           </div>
 
           {/* Indicador de filtros ativos */}
-          {(filtrosStatus.length > 0 || filtrosFornecedor.length > 0 || filtroVencimentoDe || filtroVencimentoAte) && (
+          {(filtrosStatus.length > 0 || filtrosFornecedor.length > 0 || filtroVencimentoDe || filtroVencimentoAte || filtroEmissaoDe || filtroEmissaoAte || filtroFaturamentoDe || filtroFaturamentoAte) && (
             <div className="text-sm text-gray-500">
-              Filtros ativos: {filtrosStatus.length + filtrosFornecedor.length + (filtroVencimentoDe ? 1 : 0) + (filtroVencimentoAte ? 1 : 0)} |
               Mostrando {filteredTitulos.length} de {titulos.length} títulos
             </div>
           )}
