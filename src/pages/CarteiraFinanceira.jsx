@@ -57,6 +57,8 @@ export default function CarteiraFinanceira() {
 
   // Estado para pesquisa por número de pedido
   const [pesquisaPedido, setPesquisaPedido] = useState('');
+  const [filtroVencimentoDe, setFiltroVencimentoDe] = useState('');
+  const [filtroVencimentoAte, setFiltroVencimentoAte] = useState('');
 
   // Estado para modal de detalhes do pedido
   const [showDetalhesModal, setShowDetalhesModal] = useState(false);
@@ -620,6 +622,8 @@ export default function CarteiraFinanceira() {
     setFiltrosStatus([]);
     setFiltrosFornecedor([]);
     setPesquisaPedido('');
+    setFiltroVencimentoDe('');
+    setFiltroVencimentoAte('');
   };
 
   const filteredTitulos = titulos.filter(titulo => {
@@ -628,14 +632,20 @@ export default function CarteiraFinanceira() {
 
     // Filtro por número de pedido (cliente pode pesquisar pelo código)
     const numeroPedido = titulo.pedido_id ? titulo.pedido_id.slice(-8).toUpperCase() : '';
+    const clienteNome = clientesMap[titulo.cliente_user_id] || '';
     const matchesPesquisa = !pesquisaPedido ||
       numeroPedido.includes(pesquisaPedido.toUpperCase()) ||
-      titulo.pedido_id?.toLowerCase().includes(pesquisaPedido.toLowerCase());
+      titulo.pedido_id?.toLowerCase().includes(pesquisaPedido.toLowerCase()) ||
+      clienteNome.toLowerCase().includes(pesquisaPedido.toLowerCase());
+
+    // Filtro por data de vencimento
+    let matchesVencimento = true;
+    if (filtroVencimentoDe && titulo.data_vencimento < filtroVencimentoDe) matchesVencimento = false;
+    if (filtroVencimentoAte && titulo.data_vencimento > filtroVencimentoAte) matchesVencimento = false;
 
     // Filtro por status (múltipla seleção)
     if (filtrosStatus.length === 0) {
-      // Sem filtro de status = mostrar todos
-      return matchesFornecedor && matchesPesquisa;
+      return matchesFornecedor && matchesPesquisa && matchesVencimento;
     }
 
     // Verificar se algum dos filtros de status selecionados corresponde
@@ -658,7 +668,7 @@ export default function CarteiraFinanceira() {
       }
     }
 
-    return matchesStatus && matchesFornecedor && matchesPesquisa;
+    return matchesStatus && matchesFornecedor && matchesPesquisa && matchesVencimento;
   });
 
   if (loading) {
@@ -787,7 +797,7 @@ export default function CarteiraFinanceira() {
                 />
               </div>
             </div>
-            {(filtrosStatus.length > 0 || filtrosFornecedor.length > 0 || pesquisaPedido) && (
+            {(filtrosStatus.length > 0 || filtrosFornecedor.length > 0 || pesquisaPedido || filtroVencimentoDe || filtroVencimentoAte) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -797,6 +807,28 @@ export default function CarteiraFinanceira() {
                 Limpar Filtros
               </Button>
             )}
+          </div>
+
+          {/* Filtro por data de vencimento */}
+          <div className="flex flex-wrap gap-4 items-end">
+            <div className="space-y-1">
+              <Label className="text-xs text-gray-500 font-medium">Vencimento De</Label>
+              <Input
+                type="date"
+                value={filtroVencimentoDe}
+                onChange={(e) => setFiltroVencimentoDe(e.target.value)}
+                className="w-[160px]"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-gray-500 font-medium">Vencimento Até</Label>
+              <Input
+                type="date"
+                value={filtroVencimentoAte}
+                onChange={(e) => setFiltroVencimentoAte(e.target.value)}
+                className="w-[160px]"
+              />
+            </div>
           </div>
 
           {/* Filtros Dropdown */}
@@ -828,9 +860,9 @@ export default function CarteiraFinanceira() {
           </div>
 
           {/* Indicador de filtros ativos */}
-          {(filtrosStatus.length > 0 || filtrosFornecedor.length > 0) && (
+          {(filtrosStatus.length > 0 || filtrosFornecedor.length > 0 || filtroVencimentoDe || filtroVencimentoAte) && (
             <div className="text-sm text-gray-500">
-              Filtros ativos: {filtrosStatus.length + filtrosFornecedor.length} |
+              Filtros ativos: {filtrosStatus.length + filtrosFornecedor.length + (filtroVencimentoDe ? 1 : 0) + (filtroVencimentoAte ? 1 : 0)} |
               Mostrando {filteredTitulos.length} de {titulos.length} títulos
             </div>
           )}

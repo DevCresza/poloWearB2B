@@ -34,6 +34,10 @@ export default function PedidosFornecedor() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [filtroMes, setFiltroMes] = useState('todos');
+  const [filtroEmissaoDe, setFiltroEmissaoDe] = useState('');
+  const [filtroEmissaoAte, setFiltroEmissaoAte] = useState('');
+  const [filtroFaturamentoDe, setFiltroFaturamentoDe] = useState('');
+  const [filtroFaturamentoAte, setFiltroFaturamentoAte] = useState('');
   const [selectedPedido, setSelectedPedido] = useState(null);
   
   // Modais
@@ -723,9 +727,19 @@ export default function PedidosFornecedor() {
     return badges[status] || badges.novo_pedido;
   };
 
+  const limparFiltrosDatas = () => {
+    setFiltroEmissaoDe('');
+    setFiltroEmissaoAte('');
+    setFiltroFaturamentoDe('');
+    setFiltroFaturamentoAte('');
+    setFiltroMes('todos');
+  };
+
+  const temFiltroData = filtroEmissaoDe || filtroEmissaoAte || filtroFaturamentoDe || filtroFaturamentoAte;
+
   // Filtrar pedidos
   const filteredPedidos = pedidos.filter(pedido => {
-    const matchesSearch = 
+    const matchesSearch =
       pedido.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       getClienteNome(pedido.comprador_user_id).toLowerCase().includes(searchTerm.toLowerCase()) ||
       getClienteEmpresa(pedido.comprador_user_id).toLowerCase().includes(searchTerm.toLowerCase());
@@ -736,11 +750,34 @@ export default function PedidosFornecedor() {
     if (filtroMes !== 'todos') {
       const dataPedido = new Date(pedido.created_date);
       const [ano, mes] = filtroMes.split('-');
-      matchesMes = dataPedido.getFullYear() === parseInt(ano) && 
+      matchesMes = dataPedido.getFullYear() === parseInt(ano) &&
                    dataPedido.getMonth() + 1 === parseInt(mes);
     }
 
-    return matchesSearch && matchesStatus && matchesMes;
+    // Filtro por data de emissão
+    let matchesEmissao = true;
+    if (filtroEmissaoDe) {
+      const dataEmissao = pedido.created_date?.split('T')[0];
+      if (!dataEmissao || dataEmissao < filtroEmissaoDe) matchesEmissao = false;
+    }
+    if (filtroEmissaoAte) {
+      const dataEmissao = pedido.created_date?.split('T')[0];
+      if (!dataEmissao || dataEmissao > filtroEmissaoAte) matchesEmissao = false;
+    }
+
+    // Filtro por data de faturamento
+    let matchesFaturamento = true;
+    if (filtroFaturamentoDe || filtroFaturamentoAte) {
+      const dataFat = pedido.nf_data_upload?.split('T')[0];
+      if (!dataFat) {
+        matchesFaturamento = false;
+      } else {
+        if (filtroFaturamentoDe && dataFat < filtroFaturamentoDe) matchesFaturamento = false;
+        if (filtroFaturamentoAte && dataFat > filtroFaturamentoAte) matchesFaturamento = false;
+      }
+    }
+
+    return matchesSearch && matchesStatus && matchesMes && matchesEmissao && matchesFaturamento;
   });
 
   // Agrupar por mês de referência para faturamento - not used in rendering, only in the original outline comments.
@@ -848,6 +885,55 @@ export default function PedidosFornecedor() {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Filtros por data */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <div className="space-y-2">
+              <Label className="text-xs text-gray-500 font-medium">Data de Emissão</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  type="date"
+                  value={filtroEmissaoDe}
+                  onChange={(e) => setFiltroEmissaoDe(e.target.value)}
+                  placeholder="De"
+                  title="Data emissão - De"
+                />
+                <Input
+                  type="date"
+                  value={filtroEmissaoAte}
+                  onChange={(e) => setFiltroEmissaoAte(e.target.value)}
+                  placeholder="Até"
+                  title="Data emissão - Até"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-gray-500 font-medium">Data de Faturamento</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  type="date"
+                  value={filtroFaturamentoDe}
+                  onChange={(e) => setFiltroFaturamentoDe(e.target.value)}
+                  placeholder="De"
+                  title="Data faturamento - De"
+                />
+                <Input
+                  type="date"
+                  value={filtroFaturamentoAte}
+                  onChange={(e) => setFiltroFaturamentoAte(e.target.value)}
+                  placeholder="Até"
+                  title="Data faturamento - Até"
+                />
+              </div>
+            </div>
+          </div>
+          {temFiltroData && (
+            <div className="mt-2">
+              <Button variant="ghost" size="sm" onClick={limparFiltrosDatas} className="text-xs text-gray-500">
+                Limpar filtros de data
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
