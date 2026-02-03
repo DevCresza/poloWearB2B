@@ -294,7 +294,7 @@ export default function Layout({ children, currentPageName }) {
 
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <header className="bg-slate-100 border-b border-gray-200 px-4 lg:px-8 py-4 sticky top-0 lg:top-auto z-40">
+        <header className="bg-slate-100 border-b border-gray-200 px-4 lg:px-8 py-4 sticky top-0 lg:top-auto z-50">
           <div className="flex items-center justify-between">
             <h1 className="text-xl lg:text-2xl font-bold text-gray-800">
               {currentPageName.replace(/([A-Z])/g, ' $1').trim()}
@@ -305,6 +305,7 @@ export default function Layout({ children, currentPageName }) {
                 userId={currentUser.id}
                 userRole={currentUser.role}
                 userTipoNegocio={currentUser.tipo_negocio}
+                userFornecedorId={currentUser.fornecedor_id}
               />
 
               <span className="hidden sm:inline text-sm font-semibold text-gray-600">

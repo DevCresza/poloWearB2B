@@ -203,6 +203,87 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
             // Ignora erro de pedidos específicos
           }
         }
+
+        // Notificação de NF e Boleto disponíveis - solicitar confirmação de recebimento
+        try {
+          const pedidosCliente = await Pedido.filter({ comprador_user_id: userId }, '-updated_at', 20);
+          const seteDiasAtrasDoc = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+          pedidosCliente.forEach(pedido => {
+            const dataAtualizacao = new Date(pedido.updated_at || pedido.created_date);
+            if (dataAtualizacao < seteDiasAtrasDoc) return;
+            const idPedido = pedido.id.slice(-8).toUpperCase();
+
+            // NF disponível mas não confirmada
+            if (pedido.nf_url && !pedido.cliente_confirmou_nf) {
+              notificacoesAuto.push({
+                id: `nf-disponivel-${pedido.id}`,
+                tipo: 'aviso',
+                titulo: 'Nota Fiscal Disponível',
+                mensagem: `A NF do pedido #${idPedido} foi emitida. Confirme o recebimento.`,
+                icone: 'dinheiro',
+                lida: false,
+                data: pedido.nf_data_upload || pedido.updated_at,
+                link: '/MeusPedidos',
+                autogerada: true
+              });
+            }
+
+            // Boleto disponível mas não confirmado
+            if (pedido.boleto_url && !pedido.cliente_confirmou_boleto) {
+              notificacoesAuto.push({
+                id: `boleto-disponivel-${pedido.id}`,
+                tipo: 'aviso',
+                titulo: 'Boleto Disponível',
+                mensagem: `O boleto do pedido #${idPedido} foi emitido. Confirme o recebimento.`,
+                icone: 'dinheiro',
+                lida: false,
+                data: pedido.boleto_data_upload || pedido.updated_at,
+                link: '/MeusPedidos',
+                autogerada: true
+              });
+            }
+          });
+        } catch (e) {
+          // Ignora erro
+        }
+
+        // Notificação de comprovante aprovado ou recusado
+        try {
+          const titulosCliente = await Carteira.filter({ cliente_user_id: userId }, '-created_at', 20);
+
+          titulosCliente.forEach(titulo => {
+            if (!titulo.comprovante_analisado) return;
+
+            if (titulo.comprovante_aprovado) {
+              notificacoesAuto.push({
+                id: `comprovante-aprovado-${titulo.id}`,
+                tipo: 'sucesso',
+                titulo: 'Comprovante Aprovado',
+                mensagem: `Seu comprovante foi aprovado e o título de R$ ${titulo.valor?.toFixed(2)} foi baixado.`,
+                icone: 'sucesso',
+                lida: false,
+                data: titulo.updated_at || new Date().toISOString(),
+                link: '/CarteiraFinanceira',
+                autogerada: true
+              });
+            } else {
+              notificacoesAuto.push({
+                id: `comprovante-recusado-${titulo.id}`,
+                tipo: 'alerta',
+                titulo: 'Comprovante Recusado',
+                mensagem: `Seu comprovante foi recusado${titulo.motivo_recusa_comprovante ? ': ' + titulo.motivo_recusa_comprovante : ''}. Reenvie o comprovante.`,
+                icone: 'alerta',
+                lida: false,
+                data: titulo.updated_at || new Date().toISOString(),
+                link: '/CarteiraFinanceira',
+                autogerada: true
+              });
+            }
+          });
+        } catch (e) {
+          // Ignora erro
+        }
       }
 
       // Para fornecedores: verificar novos pedidos
