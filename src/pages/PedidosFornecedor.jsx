@@ -17,6 +17,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'; // Not used, but kept from original imports
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Switch } from '@/components/ui/switch';
 import {
   Package, Clock, CheckCircle, XCircle, Calendar, DollarSign,
   FileText, Upload, Download, Filter, Eye, Edit, Truck, AlertTriangle
@@ -68,6 +70,9 @@ export default function PedidosFornecedor() {
   const [novoStatusPagamento, setNovoStatusPagamento] = useState('');
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
   const [valorFreteFOB, setValorFreteFOB] = useState('');
+  const [tipoFrete, setTipoFrete] = useState('CIF');
+  const [freteInclusoBoleto, setFreteInclusoBoleto] = useState(false);
+  const [freteModoCobr, setFreteModoCobr] = useState('diluido');
 
   // Estados para parcelas do boleto
   const [qtdParcelas, setQtdParcelas] = useState(1);
@@ -318,32 +323,126 @@ export default function PedidosFornecedor() {
       return;
     }
 
+    const valorFrete = parseFloat(valorFreteFOB) || 0;
+
+    if (tipoFrete === 'FOB' && valorFrete <= 0) {
+      toast.error('Informe o valor do frete FOB');
+      return;
+    }
+
     try {
-      await Pedido.update(selectedPedido.id, {
+      // Calcular valor_final com base no tipo de frete
+      const valorProdutos = selectedPedido.valor_total || 0;
+      let valorFinal = selectedPedido.valor_final || valorProdutos;
+
+      if (tipoFrete === 'FOB') {
+        if (freteInclusoBoleto) {
+          // FOB + incluir no boleto: valor_final = produtos + frete
+          valorFinal = valorProdutos + valorFrete;
+        } else {
+          // FOB + separado: valor_final fica só os produtos
+          valorFinal = valorProdutos;
+        }
+      }
+      // CIF: valor_final não muda (frete por conta do fornecedor)
+
+      const updateData = {
         status: 'em_transporte',
         transportadora,
         codigo_rastreio: codigoRastreio,
         link_rastreio: linkRastreio || null,
-        data_envio_real: dataEnvio
-      });
+        data_envio_real: dataEnvio,
+        tipo_frete: tipoFrete,
+        valor_frete_fob: tipoFrete === 'FOB' ? valorFrete : 0,
+        frete_incluso_boleto: tipoFrete === 'FOB' ? freteInclusoBoleto : false,
+        frete_modo_cobranca: tipoFrete === 'FOB' && freteInclusoBoleto ? freteModoCobr : null,
+        valor_final: valorFinal
+      };
+
+      await Pedido.update(selectedPedido.id, updateData);
+
+      // Se FOB + incluir no boleto e já existem parcelas, recalcular
+      if (tipoFrete === 'FOB' && freteInclusoBoleto && valorFrete > 0) {
+        try {
+          const parcelasExistentes = await Carteira.filter({ pedido_id: selectedPedido.id });
+          const parcelasReais = (parcelasExistentes || []).filter(t => t.parcela_numero);
+
+          if (parcelasReais.length > 0) {
+            const totalParcelas = parcelasReais.length;
+
+            // Deletar parcelas existentes
+            for (const parcela of parcelasExistentes) {
+              await Carteira.delete(parcela.id);
+            }
+
+            // Recriar com novo valor, respeitando frete_modo_cobranca
+            if (freteModoCobr === 'primeiro_boleto' && totalParcelas > 1) {
+              const valorProdutosParcela = valorProdutos / totalParcelas;
+              for (let i = 0; i < totalParcelas; i++) {
+                const valor = i === 0 ? valorProdutosParcela + valorFrete : valorProdutosParcela;
+                await Carteira.create({
+                  pedido_id: selectedPedido.id,
+                  cliente_user_id: selectedPedido.comprador_user_id,
+                  fornecedor_id: selectedPedido.fornecedor_id,
+                  tipo: 'a_receber',
+                  valor: valor,
+                  data_vencimento: parcelasReais[i]?.data_vencimento,
+                  status: 'pendente',
+                  parcela_numero: i + 1,
+                  total_parcelas: totalParcelas,
+                  boleto_url: parcelasReais[i]?.boleto_url,
+                  descricao: totalParcelas > 1 ? `Parcela ${i + 1}/${totalParcelas} - Pedido #${selectedPedido.id.slice(-8).toUpperCase()}` : `Pedido #${selectedPedido.id.slice(-8).toUpperCase()}`
+                });
+              }
+            } else {
+              // Diluído: valor_final / totalParcelas
+              const valorParcela = valorFinal / totalParcelas;
+              for (let i = 0; i < totalParcelas; i++) {
+                await Carteira.create({
+                  pedido_id: selectedPedido.id,
+                  cliente_user_id: selectedPedido.comprador_user_id,
+                  fornecedor_id: selectedPedido.fornecedor_id,
+                  tipo: 'a_receber',
+                  valor: valorParcela,
+                  data_vencimento: parcelasReais[i]?.data_vencimento,
+                  status: 'pendente',
+                  parcela_numero: i + 1,
+                  total_parcelas: totalParcelas,
+                  boleto_url: parcelasReais[i]?.boleto_url,
+                  descricao: totalParcelas > 1 ? `Parcela ${i + 1}/${totalParcelas} - Pedido #${selectedPedido.id.slice(-8).toUpperCase()}` : `Pedido #${selectedPedido.id.slice(-8).toUpperCase()}`
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Erro ao recalcular parcelas com frete:', e);
+        }
+      }
 
       // Notificar cliente
       const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
+      const freteEmailHtml = tipoFrete === 'FOB' ? `
+                <p><strong>Tipo de Frete:</strong> FOB (por conta do cliente)</p>
+                <p><strong>Valor do Frete:</strong> R$ ${valorFrete.toFixed(2).replace('.', ',')}</p>
+                ${freteInclusoBoleto ? '<p><em>Frete incluso no boleto</em></p>' : '<p><em>Frete cobrado separadamente</em></p>'}
+      ` : `<p><strong>Tipo de Frete:</strong> CIF (por conta do fornecedor)</p>`;
+
       await SendEmail({
         from_name: 'POLO B2B',
         to: cliente?.email,
-        subject: `🚚 Pedido Enviado - #${selectedPedido.id.slice(-8).toUpperCase()}`,
+        subject: `Pedido Enviado - #${selectedPedido.id.slice(-8).toUpperCase()}`,
         body: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 30px; text-align: center;">
-              <h1 style="color: white; margin: 0;">🚚 Pedido em Transporte</h1>
+              <h1 style="color: white; margin: 0;">Pedido em Transporte</h1>
             </div>
             <div style="padding: 30px; background: white;">
               <p>Seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi enviado!</p>
               <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0;">
                 <p><strong>Transportadora:</strong> ${transportadora}</p>
-                ${codigoRastreio ? `<p><strong>Código de Rastreio:</strong> ${codigoRastreio}</p>` : ''}
+                ${codigoRastreio ? `<p><strong>Codigo de Rastreio:</strong> ${codigoRastreio}</p>` : ''}
                 <p><strong>Data de Envio:</strong> ${new Date(dataEnvio).toLocaleDateString('pt-BR')}</p>
+                ${freteEmailHtml}
               </div>
               <p>Acompanhe seu pedido no sistema!</p>
             </div>
@@ -351,12 +450,12 @@ export default function PedidosFornecedor() {
         `
       });
 
-      toast.info('Informações de envio salvas!');
+      toast.info('Informacoes de envio salvas!');
       setShowEnvioModal(false);
       resetEnvioForm();
-      loadPedidos(); // Changed from loadData
+      loadPedidos();
     } catch (error) {
-      toast.error('Erro ao atualizar informações de envio');
+      toast.error('Erro ao atualizar informacoes de envio');
     }
   };
 
@@ -448,29 +547,62 @@ export default function PedidosFornecedor() {
       // Criar títulos na carteira financeira para cada parcela
       // Usar valor_final se disponível (inclui frete FOB), caso contrário usar valor_total
       const valorBase = selectedPedido.valor_final || selectedPedido.valor_total;
-      const valorParcela = valorBase / qtdParcelas;
+      const frete = parseFloat(selectedPedido.valor_frete_fob) || 0;
+      const freteNoBoleto = selectedPedido.frete_incluso_boleto && frete > 0;
 
-      for (let i = 0; i < qtdParcelas; i++) {
-        await Carteira.create({
-          pedido_id: selectedPedido.id,
-          cliente_user_id: selectedPedido.comprador_user_id,
-          fornecedor_id: selectedPedido.fornecedor_id,
-          tipo: 'a_receber',
-          valor: valorParcela,
-          data_vencimento: parcelas[i].dataVencimento,
-          status: 'pendente',
-          parcela_numero: i + 1,
-          total_parcelas: qtdParcelas,
-          boleto_url: boletoUpload.file_url,
-          descricao: qtdParcelas > 1 ? `Parcela ${i + 1}/${qtdParcelas} - Pedido #${selectedPedido.id.slice(-8).toUpperCase()}` : `Pedido #${selectedPedido.id.slice(-8).toUpperCase()}`
-        });
+      if (freteNoBoleto && selectedPedido.frete_modo_cobranca === 'primeiro_boleto' && qtdParcelas > 1) {
+        // Valor dos produtos dividido igualmente, frete todo na primeira parcela
+        const valorProdutosParcela = (selectedPedido.valor_total || 0) / qtdParcelas;
+        for (let i = 0; i < qtdParcelas; i++) {
+          const valor = i === 0 ? valorProdutosParcela + frete : valorProdutosParcela;
+          await Carteira.create({
+            pedido_id: selectedPedido.id,
+            cliente_user_id: selectedPedido.comprador_user_id,
+            fornecedor_id: selectedPedido.fornecedor_id,
+            tipo: 'a_receber',
+            valor: valor,
+            data_vencimento: parcelas[i].dataVencimento,
+            status: 'pendente',
+            parcela_numero: i + 1,
+            total_parcelas: qtdParcelas,
+            boleto_url: boletoUpload.file_url,
+            descricao: qtdParcelas > 1 ? `Parcela ${i + 1}/${qtdParcelas} - Pedido #${selectedPedido.id.slice(-8).toUpperCase()}` : `Pedido #${selectedPedido.id.slice(-8).toUpperCase()}`
+          });
+        }
+      } else {
+        // Fluxo normal: valor_final já inclui frete se diluído
+        const valorParcela = valorBase / qtdParcelas;
+        for (let i = 0; i < qtdParcelas; i++) {
+          await Carteira.create({
+            pedido_id: selectedPedido.id,
+            cliente_user_id: selectedPedido.comprador_user_id,
+            fornecedor_id: selectedPedido.fornecedor_id,
+            tipo: 'a_receber',
+            valor: valorParcela,
+            data_vencimento: parcelas[i].dataVencimento,
+            status: 'pendente',
+            parcela_numero: i + 1,
+            total_parcelas: qtdParcelas,
+            boleto_url: boletoUpload.file_url,
+            descricao: qtdParcelas > 1 ? `Parcela ${i + 1}/${qtdParcelas} - Pedido #${selectedPedido.id.slice(-8).toUpperCase()}` : `Pedido #${selectedPedido.id.slice(-8).toUpperCase()}`
+          });
+        }
       }
 
       // Montar lista de parcelas para o email
+      // Calcular valor individual de cada parcela para o email
+      const getValorParcelaEmail = (index) => {
+        if (freteNoBoleto && selectedPedido.frete_modo_cobranca === 'primeiro_boleto' && qtdParcelas > 1) {
+          const valorProdutosParcela = (selectedPedido.valor_total || 0) / qtdParcelas;
+          return index === 0 ? valorProdutosParcela + frete : valorProdutosParcela;
+        }
+        return valorBase / qtdParcelas;
+      };
+
       const parcelasHtml = parcelas.map((p, i) => `
         <tr>
           <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${i + 1}/${qtdParcelas}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${formatCurrency(valorParcela)}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${formatCurrency(getValorParcelaEmail(i))}</td>
           <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${new Date(p.dataVencimento + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
         </tr>
       `).join('');
@@ -495,7 +627,7 @@ export default function PedidosFornecedor() {
                   <p><strong>Frete FOB:</strong> ${formatCurrency(selectedPedido.valor_frete_fob)}</p>
                 ` : ''}
                 <p><strong>Valor Total:</strong> ${formatCurrency(valorBase)}</p>
-                ${qtdParcelas > 1 ? `<p><strong>Parcelado em:</strong> ${qtdParcelas}x de ${formatCurrency(valorParcela)}</p>` : ''}
+                ${qtdParcelas > 1 ? `<p><strong>Parcelado em:</strong> ${qtdParcelas}x de ${formatCurrency(valorBase / qtdParcelas)}</p>` : ''}
               </div>
 
               ${qtdParcelas > 0 ? `
@@ -797,6 +929,10 @@ export default function PedidosFornecedor() {
     setCodigoRastreio('');
     setLinkRastreio('');
     setDataEnvio('');
+    setTipoFrete('CIF');
+    setValorFreteFOB('');
+    setFreteInclusoBoleto(false);
+    setFreteModoCobr('diluido');
   };
 
   // Helper objects for status badges, used in the CardHeader
@@ -1521,7 +1657,7 @@ export default function PedidosFornecedor() {
 
       {/* Modal de Envio */}
       <Dialog open={showEnvioModal} onOpenChange={setShowEnvioModal}>
-        <DialogContent>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Informar Envio</DialogTitle>
           </DialogHeader>
@@ -1537,7 +1673,7 @@ export default function PedidosFornecedor() {
             </div>
 
             <div>
-              <Label htmlFor="codigoRastreio">Código de Rastreio</Label>
+              <Label htmlFor="codigoRastreio">Codigo de Rastreio</Label>
               <Input
                 id="codigoRastreio"
                 value={codigoRastreio}
@@ -1570,11 +1706,129 @@ export default function PedidosFornecedor() {
               />
             </div>
 
+            {/* Tipo de Frete */}
+            <div className="border rounded-lg p-4 bg-blue-50 space-y-4">
+              <h4 className="font-semibold text-blue-900 flex items-center gap-2">
+                <Truck className="w-4 h-4" />
+                Tipo de Frete
+              </h4>
+
+              <RadioGroup value={tipoFrete} onValueChange={(val) => {
+                setTipoFrete(val);
+                if (val === 'CIF') {
+                  setValorFreteFOB('');
+                  setFreteInclusoBoleto(false);
+                  setFreteModoCobr('diluido');
+                }
+              }}>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="CIF" id="frete-cif" />
+                  <Label htmlFor="frete-cif" className="cursor-pointer">
+                    <span className="font-medium">CIF</span>
+                    <span className="text-xs text-gray-500 ml-1">- Frete por conta do fornecedor</span>
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="FOB" id="frete-fob" />
+                  <Label htmlFor="frete-fob" className="cursor-pointer">
+                    <span className="font-medium">FOB</span>
+                    <span className="text-xs text-gray-500 ml-1">- Frete por conta do cliente</span>
+                  </Label>
+                </div>
+              </RadioGroup>
+
+              {/* Campos FOB */}
+              {tipoFrete === 'FOB' && (
+                <div className="space-y-4 pt-2 border-t border-blue-200">
+                  {/* Valor do Frete */}
+                  <div>
+                    <Label htmlFor="valorFreteFOB">Valor do Frete (R$) *</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">R$</span>
+                      <Input
+                        id="valorFreteFOB"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={valorFreteFOB}
+                        onChange={(e) => setValorFreteFOB(e.target.value)}
+                        placeholder="0,00"
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Incluir no Boleto */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor="freteInclusoBoleto" className="cursor-pointer">Incluir frete no boleto?</Label>
+                      <p className="text-xs text-gray-500">O valor do frete sera somado ao valor do pedido</p>
+                    </div>
+                    <Switch
+                      id="freteInclusoBoleto"
+                      checked={freteInclusoBoleto}
+                      onCheckedChange={setFreteInclusoBoleto}
+                    />
+                  </div>
+
+                  {/* Modo de Cobranca */}
+                  {freteInclusoBoleto && (
+                    <div className="space-y-2">
+                      <Label>Modo de cobranca do frete</Label>
+                      <RadioGroup value={freteModoCobr} onValueChange={setFreteModoCobr}>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="diluido" id="cobr-diluido" />
+                          <Label htmlFor="cobr-diluido" className="cursor-pointer text-sm">
+                            Diluir nas parcelas
+                            <span className="text-xs text-gray-500 ml-1">- Frete dividido igualmente entre as parcelas</span>
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="primeiro_boleto" id="cobr-primeiro" />
+                          <Label htmlFor="cobr-primeiro" className="cursor-pointer text-sm">
+                            Cobrar no primeiro boleto
+                            <span className="text-xs text-gray-500 ml-1">- Frete integral na 1a parcela</span>
+                          </Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                  )}
+
+                  {/* Resumo de valores */}
+                  {parseFloat(valorFreteFOB) > 0 && selectedPedido && (
+                    <div className="bg-white p-3 rounded-lg border border-blue-200">
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-600">Valor dos Produtos:</span>
+                        <span>{formatCurrency(selectedPedido.valor_total || 0)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-600">Frete FOB:</span>
+                        <span>{formatCurrency(parseFloat(valorFreteFOB))}</span>
+                      </div>
+                      {freteInclusoBoleto && (
+                        <div className="flex justify-between font-bold text-sm pt-2 border-t">
+                          <span>Total (com frete no boleto):</span>
+                          <span className="text-green-600">
+                            {formatCurrency((selectedPedido.valor_total || 0) + parseFloat(valorFreteFOB))}
+                          </span>
+                        </div>
+                      )}
+                      {!freteInclusoBoleto && (
+                        <div className="text-xs text-gray-500 pt-2 border-t">
+                          Frete sera cobrado separadamente (nao incluso no boleto)
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-end gap-3">
               <Button variant="outline" onClick={() => setShowEnvioModal(false)}>
                 Cancelar
               </Button>
-              <Button 
+              <Button
                 onClick={handleEnviar}
                 className="bg-orange-600 hover:bg-orange-700"
               >
