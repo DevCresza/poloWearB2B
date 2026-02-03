@@ -57,6 +57,7 @@ export default function PedidosFornecedor() {
   const [nfFile, setNfFile] = useState(null);
   const [boletoFile, setBoletoFile] = useState(null);
   const [nfNumero, setNfNumero] = useState('');
+  const [nfDataEmissao, setNfDataEmissao] = useState('');
   const [transportadora, setTransportadora] = useState('');
   const [codigoRastreio, setCodigoRastreio] = useState('');
   const [linkRastreio, setLinkRastreio] = useState('');
@@ -236,8 +237,8 @@ export default function PedidosFornecedor() {
   };
 
   const handleFaturar = async () => {
-    if (!nfFile || !nfNumero) {
-      toast.info('Envie a nota fiscal e informe o número');
+    if (!nfFile || !nfNumero || !nfDataEmissao) {
+      toast.info('Preencha o número, a data de emissão e envie a nota fiscal');
       return;
     }
 
@@ -257,7 +258,7 @@ export default function PedidosFornecedor() {
         status: 'faturado',
         nf_url: nfUpload.file_url,
         nf_numero: nfNumero,
-        nf_data_upload: new Date().toISOString(),
+        nf_data_upload: nfDataEmissao + 'T00:00:00',
         metodo_pagamento_original: selectedPedido.metodo_pagamento,
         metodo_pagamento: metodoPagamentoFinal,
         valor_final: valorFinal
@@ -1115,6 +1116,9 @@ export default function PedidosFornecedor() {
                           <Button
                             onClick={() => {
                               setSelectedPedido(pedido);
+                              setNfNumero('');
+                              setNfDataEmissao(new Date().toISOString().split('T')[0]);
+                              setNfFile(null);
                               setShowFaturarModal(true);
                             }}
                             className="bg-indigo-600 hover:bg-indigo-700"
@@ -1285,14 +1289,25 @@ export default function PedidosFornecedor() {
             <DialogTitle>Faturar Pedido</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div>
-              <Label htmlFor="nfNumero">Número da Nota Fiscal *</Label>
-              <Input
-                id="nfNumero"
-                value={nfNumero}
-                onChange={(e) => setNfNumero(e.target.value)}
-                placeholder="Ex: 12345"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="nfNumero">Número da NF *</Label>
+                <Input
+                  id="nfNumero"
+                  value={nfNumero}
+                  onChange={(e) => setNfNumero(e.target.value)}
+                  placeholder="Ex: 12345"
+                />
+              </div>
+              <div>
+                <Label htmlFor="nfDataEmissao">Data de Emissão/Faturamento *</Label>
+                <Input
+                  id="nfDataEmissao"
+                  type="date"
+                  value={nfDataEmissao}
+                  onChange={(e) => setNfDataEmissao(e.target.value)}
+                />
+              </div>
             </div>
 
             <div>
