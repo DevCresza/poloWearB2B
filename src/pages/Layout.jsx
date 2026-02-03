@@ -240,6 +240,7 @@ export default function Layout({ children, currentPageName }) {
               userId={currentUser.id}
               userRole={currentUser.role}
               userTipoNegocio={currentUser.tipo_negocio}
+              userFornecedorId={currentUser.fornecedor_id}
             />
             <Button
               variant="ghost"

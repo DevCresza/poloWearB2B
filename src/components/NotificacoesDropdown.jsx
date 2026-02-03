@@ -65,7 +65,7 @@ const dismissMultipleNotifIds = (userId, notifIds) => {
   }
 };
 
-export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio }) {
+export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio, userFornecedorId }) {
   const [notificacoes, setNotificacoes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
@@ -227,6 +227,68 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
             });
           }
         });
+
+        // Verificar confirmações do cliente (NF, boleto, recebimento de produto)
+        try {
+          const seteDiasAtras = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
+          const filtros = userFornecedorId
+            ? { fornecedor_id: userFornecedorId }
+            : {};
+
+          // Buscar pedidos recentes que podem ter confirmações
+          const pedidosRecentes = await Pedido.filter(filtros, '-updated_at', 20);
+
+          pedidosRecentes.forEach(pedido => {
+            const dataAtualizacao = new Date(pedido.updated_at || pedido.created_date);
+            if (dataAtualizacao < seteDiasAtras) return;
+
+            const idPedido = pedido.id.slice(-8).toUpperCase();
+
+            if (pedido.cliente_confirmou_nf) {
+              notificacoesAuto.push({
+                id: `confirmou-nf-${pedido.id}`,
+                tipo: 'sucesso',
+                titulo: 'NF Confirmada pelo Cliente',
+                mensagem: `Cliente confirmou recebimento da NF do pedido #${idPedido}`,
+                icone: 'sucesso',
+                lida: false,
+                data: pedido.updated_at || pedido.created_date,
+                link: '/PedidosFornecedor',
+                autogerada: true
+              });
+            }
+
+            if (pedido.cliente_confirmou_boleto) {
+              notificacoesAuto.push({
+                id: `confirmou-boleto-${pedido.id}`,
+                tipo: 'sucesso',
+                titulo: 'Boleto Confirmado pelo Cliente',
+                mensagem: `Cliente confirmou recebimento do boleto do pedido #${idPedido}`,
+                icone: 'dinheiro',
+                lida: false,
+                data: pedido.updated_at || pedido.created_date,
+                link: '/PedidosFornecedor',
+                autogerada: true
+              });
+            }
+
+            if (pedido.cliente_confirmou_recebimento) {
+              notificacoesAuto.push({
+                id: `confirmou-recebimento-${pedido.id}`,
+                tipo: 'sucesso',
+                titulo: 'Produto Recebido pelo Cliente',
+                mensagem: `Cliente confirmou recebimento do pedido #${idPedido}`,
+                icone: 'pedido',
+                lida: false,
+                data: pedido.updated_at || pedido.created_date,
+                link: '/PedidosFornecedor',
+                autogerada: true
+              });
+            }
+          });
+        } catch (e) {
+          // Ignora erro
+        }
 
         // Verificar produtos com estoque baixo (apenas pronta_entrega, ignora programação/sob_encomenda)
         try {
