@@ -176,6 +176,7 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
           { status: 'em_producao', tipo: 'info', titulo: 'Pedido em Produção', icone: 'pedido', mensagem: (id) => `Seu pedido #${id} está em produção` },
           { status: 'faturado', tipo: 'info', titulo: 'Pedido Faturado', icone: 'dinheiro', mensagem: (id) => `Seu pedido #${id} foi faturado` },
           { status: 'em_transporte', tipo: 'aviso', titulo: 'Pedido em Transporte', icone: 'pedido', mensagem: (id) => `Seu pedido #${id} está a caminho!` },
+          { status: 'pendente_pagamento', tipo: 'aviso', titulo: 'Pedido Entregue', icone: 'dinheiro', mensagem: (id) => `Seu pedido #${id} foi entregue! Aguardando confirmação de pagamento.` },
           { status: 'finalizado', tipo: 'sucesso', titulo: 'Pedido Finalizado', icone: 'sucesso', mensagem: (id) => `Seu pedido #${id} foi finalizado!` },
           { status: 'cancelado', tipo: 'alerta', titulo: 'Pedido Cancelado', icone: 'alerta', mensagem: (id) => `Seu pedido #${id} foi cancelado` }
         ];

@@ -71,6 +71,7 @@ export default function PedidosAdmin() {
           em_producao: 'Em Produção',
           faturado: 'Faturado',
           em_transporte: 'Em Transporte',
+          pendente_pagamento: 'Aguardando Pagamento',
           finalizado: 'Finalizado',
           cancelado: 'Cancelado'
         };
@@ -172,6 +173,7 @@ export default function PedidosAdmin() {
       em_producao: { label: 'Em Produção', color: 'bg-yellow-100 text-yellow-800', icon: Package },
       faturado: { label: 'Faturado', color: 'bg-purple-100 text-purple-800', icon: FileText },
       em_transporte: { label: 'Em Transporte', color: 'bg-orange-100 text-orange-800', icon: Truck },
+      pendente_pagamento: { label: 'Aguardando Pagamento', color: 'bg-amber-100 text-amber-800', icon: Clock },
       finalizado: { label: 'Finalizado', color: 'bg-green-100 text-green-800', icon: CheckCircle },
       cancelado: { label: 'Cancelado', color: 'bg-red-100 text-red-800', icon: X }
     };
@@ -284,6 +286,7 @@ export default function PedidosAdmin() {
       em_producao: { count: 0, valor: 0 },
       faturado: { count: 0, valor: 0 },
       em_transporte: { count: 0, valor: 0 },
+      pendente_pagamento: { count: 0, valor: 0 },
       finalizado: { count: 0, valor: 0 },
       cancelado: { count: 0, valor: 0 }
     };
@@ -306,6 +309,7 @@ export default function PedidosAdmin() {
     { key: 'em_producao', title: 'Em Produção', color: 'border-yellow-500' },
     { key: 'faturado', title: 'Faturados', color: 'border-purple-500' },
     { key: 'em_transporte', title: 'Em Transporte', color: 'border-orange-500' },
+    { key: 'pendente_pagamento', title: 'Aguardando Pagamento', color: 'border-amber-500' },
     { key: 'finalizado', title: 'Finalizados', color: 'border-green-500' },
     { key: 'cancelado', title: 'Cancelados', color: 'border-red-500' }
   ];
@@ -454,6 +458,7 @@ export default function PedidosAdmin() {
                 { value: 'em_producao', label: 'Em Produção' },
                 { value: 'faturado', label: 'Faturados' },
                 { value: 'em_transporte', label: 'Em Transporte' },
+                { value: 'pendente_pagamento', label: 'Aguardando Pagamento' },
                 { value: 'finalizado', label: 'Finalizados' },
                 { value: 'cancelado', label: 'Cancelados' }
               ]}

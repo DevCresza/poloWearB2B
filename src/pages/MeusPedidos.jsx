@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -36,6 +37,12 @@ export default function MeusPedidos() {
   const [uploadingComprovante, setUploadingComprovante] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filtrosStatus, setFiltrosStatus] = useState([]); // Array para múltipla seleção
+  const [filtroEmissaoDe, setFiltroEmissaoDe] = useState('');
+  const [filtroEmissaoAte, setFiltroEmissaoAte] = useState('');
+  const [filtroFaturamentoDe, setFiltroFaturamentoDe] = useState('');
+  const [filtroFaturamentoAte, setFiltroFaturamentoAte] = useState('');
+  const [filtroVencimentoDe, setFiltroVencimentoDe] = useState('');
+  const [filtroVencimentoAte, setFiltroVencimentoAte] = useState('');
   const [comprovanteFile, setComprovanteFile] = useState(null);
   const [dataPagamentoComprovante, setDataPagamentoComprovante] = useState('');
 
@@ -128,17 +135,23 @@ export default function MeusPedidos() {
         icon: FileText,
         description: 'Nota fiscal e boleto disponíveis para download'
       },
-      em_transporte: { 
-        label: 'Em Transporte', 
-        color: 'bg-orange-100 text-orange-800', 
+      em_transporte: {
+        label: 'Em Transporte',
+        color: 'bg-orange-100 text-orange-800',
         icon: Truck,
         description: 'Seu pedido foi enviado e está a caminho'
       },
-      finalizado: { 
-        label: 'Finalizado', 
-        color: 'bg-green-100 text-green-800', 
+      pendente_pagamento: {
+        label: 'Aguardando Pagamento',
+        color: 'bg-amber-100 text-amber-800',
+        icon: DollarSign,
+        description: 'Pedido entregue, aguardando confirmação de pagamento'
+      },
+      finalizado: {
+        label: 'Finalizado',
+        color: 'bg-green-100 text-green-800',
         icon: CheckCircle,
-        description: 'Pedido entregue com sucesso'
+        description: 'Pedido entregue e pago com sucesso'
       },
       cancelado: { 
         label: 'Cancelado', 
@@ -187,6 +200,16 @@ export default function MeusPedidos() {
       } else if (tipoConfirmacao === 'recebimento') {
         updateData.cliente_confirmou_recebimento = true;
         updateData.data_confirmacao_recebimento = dataConfirmacao;
+
+        // Transição de status: em_transporte → pendente_pagamento ou finalizado
+        if (pedidoConfirmacao.status === 'em_transporte') {
+          const titulosDoPedido = await Carteira.filter({ pedido_id: pedidoConfirmacao.id });
+          const parcelasReais = (titulosDoPedido || []).filter(t => t.parcela_numero);
+          const todasPagas = parcelasReais.length > 0
+            ? parcelasReais.every(t => t.status === 'pago')
+            : pedidoConfirmacao.status_pagamento === 'pago';
+          updateData.status = todasPagas ? 'finalizado' : 'pendente_pagamento';
+        }
       }
 
       await Pedido.update(pedidoConfirmacao.id, updateData);
@@ -376,13 +399,62 @@ export default function MeusPedidos() {
   const limparFiltros = () => {
     setFiltrosStatus([]);
     setSearchTerm('');
+    setFiltroEmissaoDe('');
+    setFiltroEmissaoAte('');
+    setFiltroFaturamentoDe('');
+    setFiltroFaturamentoAte('');
+    setFiltroVencimentoDe('');
+    setFiltroVencimentoAte('');
   };
+
+  const hasDateFilters = filtroEmissaoDe || filtroEmissaoAte || filtroFaturamentoDe || filtroFaturamentoAte || filtroVencimentoDe || filtroVencimentoAte;
 
   const filteredPedidos = pedidos.filter(pedido => {
     const matchesSearch = pedido.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          getFornecedorNome(pedido.fornecedor_id).toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filtrosStatus.length === 0 || filtrosStatus.includes(pedido.status);
-    return matchesSearch && matchesStatus;
+
+    // Filtro por data de emissão do pedido (created_date)
+    let matchesEmissao = true;
+    if (filtroEmissaoDe || filtroEmissaoAte) {
+      const dataEmissao = pedido.created_date ? pedido.created_date.split('T')[0] : '';
+      if (dataEmissao) {
+        if (filtroEmissaoDe && dataEmissao < filtroEmissaoDe) matchesEmissao = false;
+        if (filtroEmissaoAte && dataEmissao > filtroEmissaoAte) matchesEmissao = false;
+      } else {
+        matchesEmissao = false;
+      }
+    }
+
+    // Filtro por data de faturamento (nf_data_upload)
+    let matchesFaturamento = true;
+    if (filtroFaturamentoDe || filtroFaturamentoAte) {
+      const dataFat = pedido.nf_data_upload ? pedido.nf_data_upload.split('T')[0] : '';
+      if (dataFat) {
+        if (filtroFaturamentoDe && dataFat < filtroFaturamentoDe) matchesFaturamento = false;
+        if (filtroFaturamentoAte && dataFat > filtroFaturamentoAte) matchesFaturamento = false;
+      } else {
+        matchesFaturamento = false;
+      }
+    }
+
+    // Filtro por data de vencimento (parcelas na carteira)
+    let matchesVencimento = true;
+    if (filtroVencimentoDe || filtroVencimentoAte) {
+      const parcelasDoPedido = carteira.filter(t => t.pedido_id === pedido.id && t.parcela_numero);
+      if (parcelasDoPedido.length > 0) {
+        // Pedido passa se alguma parcela estiver no range de vencimento
+        matchesVencimento = parcelasDoPedido.some(p => {
+          if (filtroVencimentoDe && p.data_vencimento < filtroVencimentoDe) return false;
+          if (filtroVencimentoAte && p.data_vencimento > filtroVencimentoAte) return false;
+          return true;
+        });
+      } else {
+        matchesVencimento = false;
+      }
+    }
+
+    return matchesSearch && matchesStatus && matchesEmissao && matchesFaturamento && matchesVencimento;
   });
 
   // Calcular totais financeiros
@@ -481,7 +553,7 @@ export default function MeusPedidos() {
               className="flex-1 rounded-xl shadow-neumorphic-inset"
             />
 
-            {(filtrosStatus.length > 0 || searchTerm) && (
+            {(filtrosStatus.length > 0 || searchTerm || hasDateFilters) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -518,6 +590,31 @@ export default function MeusPedidos() {
             </Button>
           </div>
 
+          {/* Filtros por data */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs text-gray-500 font-medium">Emissão do Pedido</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Input type="date" value={filtroEmissaoDe} onChange={(e) => setFiltroEmissaoDe(e.target.value)} title="Emissão De" className="rounded-xl shadow-neumorphic-inset" />
+                <Input type="date" value={filtroEmissaoAte} onChange={(e) => setFiltroEmissaoAte(e.target.value)} title="Emissão Até" className="rounded-xl shadow-neumorphic-inset" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-gray-500 font-medium">Faturamento</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Input type="date" value={filtroFaturamentoDe} onChange={(e) => setFiltroFaturamentoDe(e.target.value)} title="Faturamento De" className="rounded-xl shadow-neumorphic-inset" />
+                <Input type="date" value={filtroFaturamentoAte} onChange={(e) => setFiltroFaturamentoAte(e.target.value)} title="Faturamento Até" className="rounded-xl shadow-neumorphic-inset" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-gray-500 font-medium">Vencimento do Título</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Input type="date" value={filtroVencimentoDe} onChange={(e) => setFiltroVencimentoDe(e.target.value)} title="Vencimento De" className="rounded-xl shadow-neumorphic-inset" />
+                <Input type="date" value={filtroVencimentoAte} onChange={(e) => setFiltroVencimentoAte(e.target.value)} title="Vencimento Até" className="rounded-xl shadow-neumorphic-inset" />
+              </div>
+            </div>
+          </div>
+
           {/* Filtros de Status com dropdown multi-select */}
           <div className="flex flex-wrap items-center gap-2">
             <MultiSelectFilter
@@ -529,6 +626,7 @@ export default function MeusPedidos() {
                 { value: 'em_producao', label: 'Em Produção', color: 'bg-purple-500' },
                 { value: 'faturado', label: 'Faturados', color: 'bg-indigo-500' },
                 { value: 'em_transporte', label: 'Em Transporte', color: 'bg-orange-500' },
+                { value: 'pendente_pagamento', label: 'Aguardando Pagamento', color: 'bg-amber-500' },
                 { value: 'finalizado', label: 'Finalizados', color: 'bg-emerald-500' }
               ]}
               selected={filtrosStatus}
@@ -537,7 +635,7 @@ export default function MeusPedidos() {
             />
 
             {/* Indicador de resultados */}
-            {(filtrosStatus.length > 0 || searchTerm) && (
+            {(filtrosStatus.length > 0 || searchTerm || hasDateFilters) && (
               <span className="text-sm text-gray-500">
                 {filteredPedidos.length} de {pedidos.length} pedidos
               </span>
@@ -646,7 +744,7 @@ export default function MeusPedidos() {
 
                       {/* Alertas e Ações */}
                       <div className="flex flex-wrap gap-2">
-                        {['faturado', 'em_transporte', 'finalizado'].includes(pedido.status) && pedido.nf_url && !pedido.cliente_confirmou_nf && (
+                        {['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && pedido.nf_url && !pedido.cliente_confirmou_nf && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -658,7 +756,7 @@ export default function MeusPedidos() {
                           </Button>
                         )}
 
-                        {['faturado', 'em_transporte', 'finalizado'].includes(pedido.status) && pedido.boleto_url && !pedido.cliente_confirmou_boleto && (
+                        {['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && pedido.boleto_url && !pedido.cliente_confirmou_boleto && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -670,7 +768,7 @@ export default function MeusPedidos() {
                           </Button>
                         )}
 
-                        {['em_transporte', 'finalizado'].includes(pedido.status) && !pedido.cliente_confirmou_recebimento && (
+                        {['em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && !pedido.cliente_confirmou_recebimento && (
                           <Button
                             size="sm"
                             variant="outline"

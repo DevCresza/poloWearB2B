@@ -79,7 +79,7 @@ export default function GestaoMetas() {
 
       // Filtrar pedidos com status de venda confirmada (não apenas finalizados)
       pedidos = pedidos.filter(p =>
-        ['finalizado', 'faturado', 'em_transporte', 'em_producao'].includes(p.status) &&
+        ['finalizado', 'faturado', 'em_transporte', 'em_producao', 'pendente_pagamento'].includes(p.status) &&
         p.status !== 'cancelado'
       );
 

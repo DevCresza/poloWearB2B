@@ -243,7 +243,7 @@ export default function DashboardAdmin() {
 
   const generateChartData = (pedidosList, fornecedoresList, clientesList) => {
     // Status considerados para faturamento
-    const statusFaturamento = ['finalizado', 'faturado', 'em_transporte'];
+    const statusFaturamento = ['finalizado', 'faturado', 'em_transporte', 'pendente_pagamento'];
 
     // Faturamento Mensal (últimos 12 meses)
     const faturamentoMensal = [];
@@ -276,6 +276,7 @@ export default function DashboardAdmin() {
       'Em Produção': pedidosList.filter(p => p.status === 'em_producao').length,
       'Faturados': pedidosList.filter(p => p.status === 'faturado').length,
       'Em Transporte': pedidosList.filter(p => p.status === 'em_transporte').length,
+      'Aguardando Pagamento': pedidosList.filter(p => p.status === 'pendente_pagamento').length,
       'Finalizados': pedidosList.filter(p => p.status === 'finalizado').length
     };
 

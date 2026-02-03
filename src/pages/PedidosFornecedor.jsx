@@ -557,6 +557,15 @@ export default function PedidosFornecedor() {
         updateData.data_pagamento = new Date().toISOString().split('T')[0];
       }
 
+      // Transição automática: pendente_pagamento → finalizado quando pagamento confirmado
+      if (novoStatusPagamento === 'pago' && selectedPedido.status === 'pendente_pagamento') {
+        updateData.status = 'finalizado';
+      }
+      // Reversão: finalizado → pendente_pagamento quando pagamento volta a pendente
+      if (novoStatusPagamento !== 'pago' && selectedPedido.status === 'finalizado') {
+        updateData.status = 'pendente_pagamento';
+      }
+
       await Pedido.update(selectedPedido.id, updateData);
 
       toast.success('Status de pagamento atualizado!');
@@ -565,6 +574,34 @@ export default function PedidosFornecedor() {
       loadPedidos();
     } catch (error) {
       toast.error('Erro ao atualizar status');
+    }
+  };
+
+  // Handler para marcar pedido como entregue (fornecedor)
+  const handleMarcarEntregue = async (pedido) => {
+    try {
+      // Verificar se todas as parcelas estão pagas (pré-pago)
+      const titulosDoPedido = await Carteira.filter({ pedido_id: pedido.id });
+      const parcelasReais = (titulosDoPedido || []).filter(t => t.parcela_numero);
+      const todasPagas = parcelasReais.length > 0
+        ? parcelasReais.every(t => t.status === 'pago')
+        : pedido.status_pagamento === 'pago';
+
+      const novoStatus = todasPagas ? 'finalizado' : 'pendente_pagamento';
+
+      await Pedido.update(pedido.id, {
+        status: novoStatus,
+        cliente_confirmou_recebimento: true,
+        data_confirmacao_recebimento: new Date().toISOString().split('T')[0]
+      });
+
+      toast.success(novoStatus === 'finalizado'
+        ? 'Pedido entregue e finalizado (todas parcelas pagas)!'
+        : 'Pedido marcado como entregue! Aguardando pagamento.'
+      );
+      loadPedidos();
+    } catch (error) {
+      toast.error('Erro ao marcar pedido como entregue');
     }
   };
 
@@ -703,6 +740,7 @@ export default function PedidosFornecedor() {
     em_producao: 'bg-purple-100 text-purple-800',
     faturado: 'bg-indigo-100 text-indigo-800',
     em_transporte: 'bg-orange-100 text-orange-800',
+    pendente_pagamento: 'bg-amber-100 text-amber-800',
     finalizado: 'bg-green-100 text-green-800',
     cancelado: 'bg-gray-100 text-gray-800',
   };
@@ -712,6 +750,7 @@ export default function PedidosFornecedor() {
     em_producao: 'Em Produção',
     faturado: 'Faturado',
     em_transporte: 'Em Transporte',
+    pendente_pagamento: 'Aguardando Pagamento',
     finalizado: 'Finalizado',
     cancelado: 'Cancelado',
   };
@@ -722,6 +761,7 @@ export default function PedidosFornecedor() {
       em_producao: { label: 'Em Produção', color: 'bg-purple-100 text-purple-800' },
       faturado: { label: 'Faturado', color: 'bg-indigo-100 text-indigo-800' },
       em_transporte: { label: 'Em Transporte', color: 'bg-orange-100 text-orange-800' },
+      pendente_pagamento: { label: 'Aguardando Pagamento', color: 'bg-amber-100 text-amber-800' },
       finalizado: { label: 'Finalizado', color: 'bg-green-100 text-green-800' },
       cancelado: { label: 'Cancelado', color: 'bg-gray-100 text-gray-800' }
     };
@@ -861,6 +901,7 @@ export default function PedidosFornecedor() {
                 <SelectItem value="em_producao">Em Produção</SelectItem>
                 <SelectItem value="faturado">Faturados</SelectItem>
                 <SelectItem value="em_transporte">Em Transporte</SelectItem>
+                <SelectItem value="pendente_pagamento">Aguardando Pagamento</SelectItem>
                 <SelectItem value="finalizado">Finalizados</SelectItem>
                 <SelectItem value="cancelado">Cancelados</SelectItem>
               </SelectContent>
@@ -1148,8 +1189,18 @@ export default function PedidosFornecedor() {
                         </Button>
                       )}
 
+                      {pedido.status === 'em_transporte' && (
+                        <Button
+                          onClick={() => handleMarcarEntregue(pedido)}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Marcar Entregue
+                        </Button>
+                      )}
+
                       {/* Botão para enviar boleto separadamente */}
-                      {['em_producao', 'faturado', 'em_transporte', 'finalizado'].includes(pedido.status) && (
+                      {['em_producao', 'faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && (
                         <Button
                           variant="outline"
                           onClick={() => {
@@ -1164,7 +1215,7 @@ export default function PedidosFornecedor() {
                       )}
 
                       {/* Botão para alterar status de pagamento */}
-                      {['em_producao', 'faturado', 'em_transporte', 'finalizado'].includes(pedido.status) && (
+                      {['em_producao', 'faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && (
                         <Button
                           variant="outline"
                           onClick={() => {

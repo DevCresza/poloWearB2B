@@ -365,6 +365,11 @@ export default function CarteiraFinanceira() {
               data_pagamento: dataPagamentoConfirmada
             });
           }
+
+          // Transição automática: pendente_pagamento → finalizado quando todas parcelas pagas
+          if (todosPagos && pedido.status === 'pendente_pagamento') {
+            await Pedido.update(pedido.id, { status: 'finalizado' });
+          }
         }
       } catch (e) {
         console.warn('Erro ao atualizar status do pedido:', e);
@@ -430,6 +435,10 @@ export default function CarteiraFinanceira() {
             await Pedido.update(pedido.id, {
               status_pagamento: 'pendente'
             });
+          }
+          // Reversão: finalizado → pendente_pagamento quando comprovante é recusado
+          if (pedido.status === 'finalizado') {
+            await Pedido.update(pedido.id, { status: 'pendente_pagamento' });
           }
         }
       } catch (e) {

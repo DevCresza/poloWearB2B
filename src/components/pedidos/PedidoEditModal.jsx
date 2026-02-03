@@ -116,6 +116,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
                 <SelectItem value="em_producao">Em Produção</SelectItem>
                 <SelectItem value="faturado">Faturado</SelectItem>
                 <SelectItem value="em_transporte">Em Transporte</SelectItem>
+                <SelectItem value="pendente_pagamento">Aguardando Pagamento</SelectItem>
                 <SelectItem value="finalizado">Finalizado</SelectItem>
                 <SelectItem value="cancelado">Cancelado</SelectItem>
               </SelectContent>
@@ -175,7 +176,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
           )}
 
           {/* Informações de Transporte */}
-          {(formData.status === 'em_transporte' || formData.status === 'finalizado') && (
+          {(formData.status === 'em_transporte' || formData.status === 'pendente_pagamento' || formData.status === 'finalizado') && (
             <>
               <div className="space-y-2">
                 <Label htmlFor="transportadora">Transportadora *</Label>

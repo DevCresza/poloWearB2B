@@ -18,7 +18,7 @@ import { Pedido } from '@/api/entities';
 import { Carteira } from '@/api/entities';
 import { User as UserEntity } from '@/api/entities';
 import { UploadFile, SendEmail } from '@/api/integrations';
-import { formatDateTime } from '@/utils/exportUtils';
+import { formatDateTime, formatCurrency } from '@/utils/exportUtils';
 
 export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentUser, userMap, fornecedorMap }) {
   const [confirmando, setConfirmando] = useState(false);
@@ -26,6 +26,11 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   const [boletoFile, setBoletoFile] = useState(null);
   const [nfFile, setNfFile] = useState(null);
   const [nfNumero, setNfNumero] = useState(pedido.nf_numero || '');
+  const [nfDataEmissao, setNfDataEmissao] = useState('');
+
+  // Estados para configuração de parcelas do boleto (aba Documentos)
+  const [qtdParcelasBoleto, setQtdParcelasBoleto] = useState(1);
+  const [parcelasBoletoConfig, setParcelasBoletoConfig] = useState([{ dataVencimento: '' }]);
 
   // Estados para parcelas/títulos
   const [parcelas, setParcelas] = useState([]);
@@ -99,10 +104,32 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     }
   };
 
+  // Helpers para parcelas do boleto
+  const handleQtdParcelasBoletoChange = (value) => {
+    const num = parseInt(value);
+    setQtdParcelasBoleto(num);
+    const novasParcelas = Array.from({ length: num }, (_, i) => ({
+      dataVencimento: parcelasBoletoConfig[i]?.dataVencimento || ''
+    }));
+    setParcelasBoletoConfig(novasParcelas);
+  };
+
+  const handleParcelaBoletoDataChange = (index, value) => {
+    const novas = [...parcelasBoletoConfig];
+    novas[index] = { ...novas[index], dataVencimento: value };
+    setParcelasBoletoConfig(novas);
+  };
+
   // Upload de Boleto
   const handleUploadBoleto = async () => {
     if (!boletoFile) {
       toast.info('Selecione o arquivo do boleto');
+      return;
+    }
+    // Validar datas de vencimento se houver parcelas configuradas
+    const temParcelasConfiguradas = parcelasBoletoConfig.some(p => p.dataVencimento);
+    if (temParcelasConfiguradas && parcelasBoletoConfig.some(p => !p.dataVencimento)) {
+      toast.info('Preencha todas as datas de vencimento das parcelas');
       return;
     }
     setUploading(true);
@@ -112,8 +139,43 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
         boleto_url: result.file_url,
         boleto_data_upload: new Date().toISOString()
       });
+
+      // Criar/atualizar parcelas na Carteira se datas de vencimento foram preenchidas
+      if (temParcelasConfiguradas) {
+        // Remover parcelas antigas deste pedido
+        const parcelasAntigas = await Carteira.filter({ pedido_id: pedido.id });
+        const parcelasReaisAntigas = (parcelasAntigas || []).filter(t => t.parcela_numero);
+        for (const p of parcelasReaisAntigas) {
+          await Carteira.delete(p.id);
+        }
+
+        // Criar novas parcelas
+        const valorBase = pedido.valor_final || pedido.valor_total || 0;
+        const valorParcela = valorBase / qtdParcelasBoleto;
+        for (let i = 0; i < qtdParcelasBoleto; i++) {
+          await Carteira.create({
+            pedido_id: pedido.id,
+            cliente_user_id: pedido.comprador_user_id,
+            fornecedor_id: pedido.fornecedor_id,
+            tipo: 'a_receber',
+            valor: valorParcela,
+            data_vencimento: parcelasBoletoConfig[i].dataVencimento,
+            status: 'pendente',
+            parcela_numero: i + 1,
+            total_parcelas: qtdParcelasBoleto,
+            boleto_url: result.file_url,
+            descricao: qtdParcelasBoleto > 1
+              ? `Parcela ${i + 1}/${qtdParcelasBoleto} - Pedido #${pedido.id.slice(-8).toUpperCase()}`
+              : `Pedido #${pedido.id.slice(-8).toUpperCase()}`
+          });
+        }
+      }
+
       toast.success('Boleto enviado com sucesso!');
       setBoletoFile(null);
+      setQtdParcelasBoleto(1);
+      setParcelasBoletoConfig([{ dataVencimento: '' }]);
+      await reloadParcelas();
       onUpdate();
     } catch (_error) {
       toast.error('Erro ao enviar boleto');
@@ -128,17 +190,22 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       toast.info('Selecione o arquivo da nota fiscal');
       return;
     }
+    if (!nfNumero) {
+      toast.info('Informe o número da nota fiscal');
+      return;
+    }
     setUploading(true);
     try {
       const result = await UploadFile({ file: nfFile });
       await Pedido.update(pedido.id, {
         nf_url: result.file_url,
         nf_numero: nfNumero,
-        nf_data_upload: new Date().toISOString(),
+        nf_data_upload: nfDataEmissao ? nfDataEmissao + 'T00:00:00' : new Date().toISOString(),
         status: pedido.status === 'em_producao' ? 'faturado' : pedido.status
       });
       toast.success('Nota Fiscal enviada com sucesso!');
       setNfFile(null);
+      setNfDataEmissao('');
       onUpdate();
     } catch (_error) {
       toast.error('Erro ao enviar nota fiscal');
@@ -185,6 +252,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       em_producao: { label: 'Em Produção', color: 'bg-purple-100 text-purple-800', icon: Package },
       faturado: { label: 'Faturado', color: 'bg-indigo-100 text-indigo-800', icon: FileText },
       em_transporte: { label: 'Em Transporte', color: 'bg-orange-100 text-orange-800', icon: Truck },
+      pendente_pagamento: { label: 'Aguardando Pagamento', color: 'bg-amber-100 text-amber-800', icon: Clock },
       finalizado: { label: 'Finalizado', color: 'bg-green-100 text-green-800', icon: CheckCircle },
       cancelado: { label: 'Cancelado', color: 'bg-gray-100 text-gray-800', icon: Clock }
     };
@@ -200,7 +268,19 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       const updateData = {};
       if (tipo === 'boleto') updateData.cliente_confirmou_boleto = true;
       if (tipo === 'nf') updateData.cliente_confirmou_nf = true;
-      if (tipo === 'produto') updateData.cliente_confirmou_recebimento = true;
+      if (tipo === 'produto') {
+        updateData.cliente_confirmou_recebimento = true;
+
+        // Transição de status: em_transporte → pendente_pagamento ou finalizado
+        if (pedido.status === 'em_transporte') {
+          const titulosDoPedido = await Carteira.filter({ pedido_id: pedido.id });
+          const parcelasReais = (titulosDoPedido || []).filter(t => t.parcela_numero);
+          const todasPagas = parcelasReais.length > 0
+            ? parcelasReais.every(t => t.status === 'pago')
+            : pedido.status_pagamento === 'pago';
+          updateData.status = todasPagas ? 'finalizado' : 'pendente_pagamento';
+        }
+      }
 
       await Pedido.update(pedido.id, updateData);
       onUpdate();
@@ -258,6 +338,10 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
         if (todosPagos && pedido.status_pagamento !== 'pago') {
           await Pedido.update(pedido.id, { status_pagamento: 'pago', data_pagamento: dataPagamentoConfirmada });
         }
+        // Transição automática: pendente_pagamento → finalizado quando todas parcelas pagas
+        if (todosPagos && pedido.status === 'pendente_pagamento') {
+          await Pedido.update(pedido.id, { status: 'finalizado' });
+        }
       } catch (e) { console.warn('Erro status pedido:', e); }
 
       toast.success('Comprovante aprovado!');
@@ -295,6 +379,10 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       try {
         if (pedido.status_pagamento === 'em_analise' || pedido.status_pagamento === 'pago') {
           await Pedido.update(pedido.id, { status_pagamento: 'pendente' });
+        }
+        // Reversão: finalizado → pendente_pagamento quando parcela é recusada
+        if (pedido.status === 'finalizado') {
+          await Pedido.update(pedido.id, { status: 'pendente_pagamento' });
         }
       } catch (e) { console.warn('Erro status pedido:', e); }
 
@@ -342,11 +430,20 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       try {
         const titulosDoPedido = await Carteira.filter({ pedido_id: pedido.id });
         const parcelasReais = titulosDoPedido.filter(t => t.parcela_numero);
-        const todosPagos = parcelasReais.every(t => t.status === 'pago' || t.id === parcela.id && novoStatus === 'pago');
+        const todosPagos = parcelasReais.every(t => t.status === 'pago' || (t.id === parcela.id && novoStatus === 'pago'));
         if (todosPagos && pedido.status_pagamento !== 'pago') {
           await Pedido.update(pedido.id, { status_pagamento: 'pago', data_pagamento: new Date().toISOString().split('T')[0] });
         } else if (!todosPagos && pedido.status_pagamento === 'pago') {
           await Pedido.update(pedido.id, { status_pagamento: 'pendente' });
+        }
+
+        // Transição automática: pendente_pagamento → finalizado quando todas parcelas pagas
+        if (todosPagos && pedido.status === 'pendente_pagamento') {
+          await Pedido.update(pedido.id, { status: 'finalizado' });
+        }
+        // Reversão: finalizado → pendente_pagamento quando parcela volta a pendente
+        if (!todosPagos && pedido.status === 'finalizado') {
+          await Pedido.update(pedido.id, { status: 'pendente_pagamento' });
         }
       } catch (e) { console.warn('Erro status pedido:', e); }
 
@@ -741,7 +838,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
               )}
 
               {/* Confirmações do cliente */}
-              {(pedido.status === 'faturado' || pedido.status === 'em_transporte' || pedido.status === 'finalizado') && (
+              {(pedido.status === 'faturado' || pedido.status === 'em_transporte' || pedido.status === 'pendente_pagamento' || pedido.status === 'finalizado') && (
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <h4 className="font-semibold mb-3">Confirmações de Recebimento</h4>
                   <div className="space-y-2">
@@ -772,7 +869,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       </div>
                     )}
                     {/* Produto */}
-                    {(pedido.status === 'em_transporte' || pedido.status === 'finalizado') && (
+                    {(pedido.status === 'em_transporte' || pedido.status === 'pendente_pagamento' || pedido.status === 'finalizado') && (
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-600">Produto:</span>
                         {pedido.cliente_confirmou_recebimento ? (
@@ -1148,24 +1245,69 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                   </div>
                   {/* Permitir atualizar o boleto se for fornecedor/admin */}
                   {canUpload && (
-                    <div className="mt-4 pt-4 border-t border-blue-200">
-                      <p className="text-sm text-gray-600 mb-2">Atualizar Boleto:</p>
-                      <div className="flex gap-2">
+                    <div className="mt-4 pt-4 border-t border-blue-200 space-y-3">
+                      <p className="text-sm font-semibold text-blue-800">Atualizar Boleto:</p>
+
+                      {/* Configuração de Parcelas */}
+                      <div className="bg-blue-100/50 p-3 rounded-lg space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-xs">Quantidade de Parcelas</Label>
+                            <Select value={String(qtdParcelasBoleto)} onValueChange={handleQtdParcelasBoletoChange}>
+                              <SelectTrigger className="h-9">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
+                                  <SelectItem key={n} value={String(n)}>{n}x</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex items-end">
+                            <div className="text-xs text-blue-800">
+                              <p><strong>Valor total:</strong> {formatCurrency(pedido.valor_final || pedido.valor_total)}</p>
+                              <p><strong>Por parcela:</strong> {formatCurrency((pedido.valor_final || pedido.valor_total) / qtdParcelasBoleto)}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Datas de vencimento */}
+                        <div className="space-y-2">
+                          <Label className="text-xs">Datas de Vencimento</Label>
+                          {parcelasBoletoConfig.map((parcela, index) => (
+                            <div key={index} className="flex items-center gap-2 bg-white p-2 rounded border border-blue-200">
+                              <Badge variant="outline" className="text-xs shrink-0">{index + 1}/{qtdParcelasBoleto}</Badge>
+                              <span className="text-xs text-gray-500 shrink-0">{formatCurrency((pedido.valor_final || pedido.valor_total) / qtdParcelasBoleto)}</span>
+                              <Input
+                                type="date"
+                                value={parcela.dataVencimento}
+                                onChange={(e) => handleParcelaBoletoDataChange(index, e.target.value)}
+                                className="h-8 text-sm"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label className="text-xs">Arquivo do Boleto</Label>
                         <Input
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png,.crm"
                           onChange={(e) => setBoletoFile(e.target.files[0])}
-                          className="flex-1"
                         />
-                        <Button
-                          onClick={handleUploadBoleto}
-                          disabled={uploading || !boletoFile}
-                          size="sm"
-                        >
-                          {uploading ? 'Enviando...' : 'Atualizar'}
-                        </Button>
+                        <p className="text-xs text-gray-500 mt-1"><strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM</p>
                       </div>
-                      <p className="text-xs text-gray-500 mt-1"><strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM</p>
+                      <Button
+                        onClick={handleUploadBoleto}
+                        disabled={uploading || !boletoFile}
+                        size="sm"
+                        className="w-full bg-blue-600 hover:bg-blue-700"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {uploading ? 'Enviando...' : 'Atualizar Boleto'}
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -1177,13 +1319,58 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                   </div>
                   {canUpload ? (
                     <div className="space-y-3">
-                      <p className="text-sm text-gray-500">Nenhum boleto anexado. Faça o upload:</p>
-                      <Input
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png,.crm"
-                        onChange={(e) => setBoletoFile(e.target.files[0])}
-                      />
-                      <p className="text-xs text-gray-500"><strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM</p>
+                      <p className="text-sm text-gray-500">Nenhum boleto anexado. Configure as parcelas e faça o upload:</p>
+
+                      {/* Configuração de Parcelas */}
+                      <div className="bg-blue-50 p-3 rounded-lg space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-xs">Quantidade de Parcelas</Label>
+                            <Select value={String(qtdParcelasBoleto)} onValueChange={handleQtdParcelasBoletoChange}>
+                              <SelectTrigger className="h-9">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
+                                  <SelectItem key={n} value={String(n)}>{n}x</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex items-end">
+                            <div className="text-xs text-blue-800">
+                              <p><strong>Valor total:</strong> {formatCurrency(pedido.valor_final || pedido.valor_total)}</p>
+                              <p><strong>Por parcela:</strong> {formatCurrency((pedido.valor_final || pedido.valor_total) / qtdParcelasBoleto)}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs">Datas de Vencimento *</Label>
+                          {parcelasBoletoConfig.map((parcela, index) => (
+                            <div key={index} className="flex items-center gap-2 bg-white p-2 rounded border border-blue-200">
+                              <Badge variant="outline" className="text-xs shrink-0">{index + 1}/{qtdParcelasBoleto}</Badge>
+                              <span className="text-xs text-gray-500 shrink-0">{formatCurrency((pedido.valor_final || pedido.valor_total) / qtdParcelasBoleto)}</span>
+                              <Input
+                                type="date"
+                                value={parcela.dataVencimento}
+                                onChange={(e) => handleParcelaBoletoDataChange(index, e.target.value)}
+                                className="h-8 text-sm"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label className="text-xs">Arquivo do Boleto *</Label>
+                        <Input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png,.crm"
+                          onChange={(e) => setBoletoFile(e.target.files[0])}
+                        />
+                        <p className="text-xs text-gray-500 mt-1"><strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM</p>
+                      </div>
                       <Button
                         onClick={handleUploadBoleto}
                         disabled={uploading || !boletoFile}
@@ -1245,24 +1432,49 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                   </div>
                   {/* Permitir atualizar a NF se for fornecedor/admin */}
                   {canUpload && (
-                    <div className="mt-4 pt-4 border-t border-green-200">
-                      <p className="text-sm text-gray-600 mb-2">Atualizar Nota Fiscal:</p>
-                      <div className="flex gap-2">
+                    <div className="mt-4 pt-4 border-t border-green-200 space-y-3">
+                      <p className="text-sm font-semibold text-green-800">Atualizar Nota Fiscal:</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs" htmlFor="nfNumeroUpdate">Número da NF *</Label>
+                          <Input
+                            id="nfNumeroUpdate"
+                            type="text"
+                            placeholder="Ex: 12345"
+                            value={nfNumero}
+                            onChange={(e) => setNfNumero(e.target.value)}
+                            className="h-9"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs" htmlFor="nfDataEmissaoUpdate">Data de Emissão</Label>
+                          <Input
+                            id="nfDataEmissaoUpdate"
+                            type="date"
+                            value={nfDataEmissao}
+                            onChange={(e) => setNfDataEmissao(e.target.value)}
+                            className="h-9"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Arquivo da NF *</Label>
                         <Input
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png,.crm"
                           onChange={(e) => setNfFile(e.target.files[0])}
-                          className="flex-1"
                         />
-                        <Button
-                          onClick={handleUploadNF}
-                          disabled={uploading || !nfFile}
-                          size="sm"
-                        >
-                          {uploading ? 'Enviando...' : 'Atualizar'}
-                        </Button>
+                        <p className="text-xs text-gray-500 mt-1"><strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM</p>
                       </div>
-                      <p className="text-xs text-gray-500 mt-1"><strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM</p>
+                      <Button
+                        onClick={handleUploadNF}
+                        disabled={uploading || !nfFile || !nfNumero}
+                        size="sm"
+                        className="w-full bg-green-600 hover:bg-green-700"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {uploading ? 'Enviando...' : 'Atualizar Nota Fiscal'}
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -1274,27 +1486,42 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                   </div>
                   {canUpload ? (
                     <div className="space-y-3">
-                      <p className="text-sm text-gray-500">Nenhuma NF anexada. Faça o upload:</p>
-                      <div>
-                        <Label htmlFor="nfNumeroModal" className="text-sm">Número da NF</Label>
-                        <Input
-                          id="nfNumeroModal"
-                          type="text"
-                          placeholder="Ex: 12345"
-                          value={nfNumero}
-                          onChange={(e) => setNfNumero(e.target.value)}
-                          className="mb-2"
-                        />
+                      <p className="text-sm text-gray-500">Nenhuma NF anexada. Preencha os dados e faça o upload:</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label htmlFor="nfNumeroModal" className="text-xs">Número da NF *</Label>
+                          <Input
+                            id="nfNumeroModal"
+                            type="text"
+                            placeholder="Ex: 12345"
+                            value={nfNumero}
+                            onChange={(e) => setNfNumero(e.target.value)}
+                            className="h-9"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="nfDataEmissaoModal" className="text-xs">Data de Emissão</Label>
+                          <Input
+                            id="nfDataEmissaoModal"
+                            type="date"
+                            value={nfDataEmissao}
+                            onChange={(e) => setNfDataEmissao(e.target.value)}
+                            className="h-9"
+                          />
+                        </div>
                       </div>
-                      <Input
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png,.crm"
-                        onChange={(e) => setNfFile(e.target.files[0])}
-                      />
-                      <p className="text-xs text-gray-500"><strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM</p>
+                      <div>
+                        <Label className="text-xs">Arquivo da NF *</Label>
+                        <Input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png,.crm"
+                          onChange={(e) => setNfFile(e.target.files[0])}
+                        />
+                        <p className="text-xs text-gray-500 mt-1"><strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM</p>
+                      </div>
                       <Button
                         onClick={handleUploadNF}
-                        disabled={uploading || !nfFile}
+                        disabled={uploading || !nfFile || !nfNumero}
                         className="w-full bg-green-600 hover:bg-green-700"
                       >
                         <Upload className="w-4 h-4 mr-2" />
