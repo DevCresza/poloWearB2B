@@ -53,6 +53,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   // Estados para frete FOB
   const [valorFreteFOB, setValorFreteFOB] = useState(pedido.valor_frete_fob || '');
   const [salvandoFrete, setSalvandoFrete] = useState(false);
+  const [marcandoEntregue, setMarcandoEntregue] = useState(false);
 
   // Verificar se é cliente (somente visualização)
   const isCliente = currentUser?.tipo_negocio === 'multimarca' || currentUser?.tipo_negocio === 'franqueado';
@@ -101,6 +102,43 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       toast.error('Erro ao salvar frete');
     } finally {
       setSalvandoFrete(false);
+    }
+  };
+
+  // Marcar pedido como entregue (fornecedor/admin)
+  const handleMarcarEntregue = async () => {
+    setMarcandoEntregue(true);
+    try {
+      let todasPagas = false;
+      try {
+        const titulosDoPedido = await Carteira.filter({ pedido_id: pedido.id });
+        const parcelasReais = (titulosDoPedido || []).filter(t => t.parcela_numero);
+        todasPagas = parcelasReais.length > 0
+          ? parcelasReais.every(t => t.status === 'pago')
+          : pedido.status_pagamento === 'pago';
+      } catch (e) {
+        console.warn('Erro ao verificar parcelas:', e);
+        todasPagas = pedido.status_pagamento === 'pago';
+      }
+
+      const novoStatus = todasPagas ? 'finalizado' : 'pendente_pagamento';
+
+      await Pedido.update(pedido.id, {
+        status: novoStatus,
+        cliente_confirmou_recebimento: true,
+        data_confirmacao_recebimento: new Date().toISOString().split('T')[0]
+      });
+
+      toast.success(novoStatus === 'finalizado'
+        ? 'Pedido entregue e finalizado (todas parcelas pagas)!'
+        : 'Pedido marcado como entregue! Aguardando pagamento.'
+      );
+      onUpdate();
+    } catch (error) {
+      console.error('Erro ao marcar pedido como entregue:', error);
+      toast.error('Erro ao marcar pedido como entregue');
+    } finally {
+      setMarcandoEntregue(false);
     }
   };
 
@@ -834,6 +872,31 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       )}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Marcar Entregue (fornecedor/admin) */}
+              {canUpload && pedido.status === 'em_transporte' && (
+                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-semibold text-green-900 flex items-center gap-2">
+                        <CheckCircle className="w-5 h-5 text-green-600" />
+                        Marcar como Entregue
+                      </h4>
+                      <p className="text-sm text-green-700 mt-1">
+                        Confirme que o pedido foi entregue ao cliente
+                      </p>
+                    </div>
+                    <Button
+                      onClick={handleMarcarEntregue}
+                      disabled={marcandoEntregue}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      {marcandoEntregue ? 'Processando...' : 'Marcar Entregue'}
+                    </Button>
+                  </div>
                 </div>
               )}
 

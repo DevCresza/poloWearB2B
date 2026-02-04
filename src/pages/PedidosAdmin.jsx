@@ -17,7 +17,7 @@ import {
 import PedidoCard from '../components/pedidos/PedidoCard';
 import PedidoDetailsModal from '../components/pedidos/PedidoDetailsModal';
 import PedidoEditModal from '../components/pedidos/PedidoEditModal';
-import { exportToCSV, exportToPDF, formatCurrency, formatDateTime } from '@/utils/exportUtils';
+import { exportToCSV, exportToPDF, formatCurrency, formatDateTime, formatDate } from '@/utils/exportUtils';
 import MultiSelectFilter from '@/components/MultiSelectFilter';
 
 export default function PedidosAdmin() {
@@ -573,7 +573,7 @@ export default function PedidosAdmin() {
                           <td className="p-4">
                             <div>
                               <div className="font-medium">#{pedido.id.slice(-8).toUpperCase()}</div>
-                              <div className="text-sm text-gray-500">{new Date(pedido.created_date).toLocaleDateString()}</div>
+                              <div className="text-sm text-gray-500">{formatDate(pedido.created_date)}</div>
                             </div>
                           </td>
                           <td className="p-4">{userMap.get(pedido.comprador_user_id) || 'N/A'}</td>

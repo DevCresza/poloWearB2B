@@ -50,7 +50,6 @@ export default function PedidosFornecedor() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showBoletoModal, setShowBoletoModal] = useState(false);
   const [showAtualizarNFModal, setShowAtualizarNFModal] = useState(false);
-  const [showStatusPagamentoModal, setShowStatusPagamentoModal] = useState(false);
   const [showCancelarModal, setShowCancelarModal] = useState(false);
   
   // Forms
@@ -67,7 +66,6 @@ export default function PedidosFornecedor() {
   const [dataEnvio, setDataEnvio] = useState('');
   
   const [uploading, setUploading] = useState(false);
-  const [novoStatusPagamento, setNovoStatusPagamento] = useState('');
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
   const [valorFreteFOB, setValorFreteFOB] = useState('');
   const [tipoFrete, setTipoFrete] = useState('CIF');
@@ -419,36 +417,42 @@ export default function PedidosFornecedor() {
         }
       }
 
-      // Notificar cliente
-      const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
-      const freteEmailHtml = tipoFrete === 'FOB' ? `
-                <p><strong>Tipo de Frete:</strong> FOB (por conta do cliente)</p>
-                <p><strong>Valor do Frete:</strong> R$ ${valorFrete.toFixed(2).replace('.', ',')}</p>
-                ${freteInclusoBoleto ? '<p><em>Frete incluso no boleto</em></p>' : '<p><em>Frete cobrado separadamente</em></p>'}
-      ` : `<p><strong>Tipo de Frete:</strong> CIF (por conta do fornecedor)</p>`;
+      // Notificar cliente (não bloquear o fluxo se o email falhar)
+      try {
+        const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
+        if (cliente?.email) {
+          const freteEmailHtml = tipoFrete === 'FOB' ? `
+                    <p><strong>Tipo de Frete:</strong> FOB (por conta do cliente)</p>
+                    <p><strong>Valor do Frete:</strong> R$ ${valorFrete.toFixed(2).replace('.', ',')}</p>
+                    ${freteInclusoBoleto ? '<p><em>Frete incluso no boleto</em></p>' : '<p><em>Frete cobrado separadamente</em></p>'}
+          ` : `<p><strong>Tipo de Frete:</strong> CIF (por conta do fornecedor)</p>`;
 
-      await SendEmail({
-        from_name: 'POLO B2B',
-        to: cliente?.email,
-        subject: `Pedido Enviado - #${selectedPedido.id.slice(-8).toUpperCase()}`,
-        body: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 30px; text-align: center;">
-              <h1 style="color: white; margin: 0;">Pedido em Transporte</h1>
-            </div>
-            <div style="padding: 30px; background: white;">
-              <p>Seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi enviado!</p>
-              <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <p><strong>Transportadora:</strong> ${transportadora}</p>
-                ${codigoRastreio ? `<p><strong>Codigo de Rastreio:</strong> ${codigoRastreio}</p>` : ''}
-                <p><strong>Data de Envio:</strong> ${new Date(dataEnvio).toLocaleDateString('pt-BR')}</p>
-                ${freteEmailHtml}
+          await SendEmail({
+            from_name: 'POLO B2B',
+            to: cliente.email,
+            subject: `Pedido Enviado - #${selectedPedido.id.slice(-8).toUpperCase()}`,
+            body: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 30px; text-align: center;">
+                  <h1 style="color: white; margin: 0;">Pedido em Transporte</h1>
+                </div>
+                <div style="padding: 30px; background: white;">
+                  <p>Seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi enviado!</p>
+                  <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                    <p><strong>Transportadora:</strong> ${transportadora}</p>
+                    ${codigoRastreio ? `<p><strong>Codigo de Rastreio:</strong> ${codigoRastreio}</p>` : ''}
+                    <p><strong>Data de Envio:</strong> ${new Date(dataEnvio + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
+                    ${freteEmailHtml}
+                  </div>
+                  <p>Acompanhe seu pedido no sistema!</p>
+                </div>
               </div>
-              <p>Acompanhe seu pedido no sistema!</p>
-            </div>
-          </div>
-        `
-      });
+            `
+          });
+        }
+      } catch (emailError) {
+        console.warn('Erro ao enviar email de notificação de envio:', emailError);
+      }
 
       toast.info('Informacoes de envio salvas!');
       setShowEnvioModal(false);
@@ -670,71 +674,6 @@ export default function PedidosFornecedor() {
       toast.error('Erro ao enviar boleto');
     } finally {
       setUploading(false);
-    }
-  };
-
-  // Handler para alterar status de pagamento
-  const handleAlterarStatusPagamento = async () => {
-    if (!novoStatusPagamento) {
-      toast.info('Selecione o novo status');
-      return;
-    }
-
-    try {
-      const updateData = {
-        status_pagamento: novoStatusPagamento
-      };
-
-      // Se marcou como pago, registrar data de pagamento
-      if (novoStatusPagamento === 'pago') {
-        updateData.data_pagamento = new Date().toISOString().split('T')[0];
-      }
-
-      // Transição automática: pendente_pagamento → finalizado quando pagamento confirmado
-      if (novoStatusPagamento === 'pago' && selectedPedido.status === 'pendente_pagamento') {
-        updateData.status = 'finalizado';
-      }
-      // Reversão: finalizado → pendente_pagamento quando pagamento volta a pendente
-      if (novoStatusPagamento !== 'pago' && selectedPedido.status === 'finalizado') {
-        updateData.status = 'pendente_pagamento';
-      }
-
-      await Pedido.update(selectedPedido.id, updateData);
-
-      toast.success('Status de pagamento atualizado!');
-      setShowStatusPagamentoModal(false);
-      setNovoStatusPagamento('');
-      loadPedidos();
-    } catch (error) {
-      toast.error('Erro ao atualizar status');
-    }
-  };
-
-  // Handler para marcar pedido como entregue (fornecedor)
-  const handleMarcarEntregue = async (pedido) => {
-    try {
-      // Verificar se todas as parcelas estão pagas (pré-pago)
-      const titulosDoPedido = await Carteira.filter({ pedido_id: pedido.id });
-      const parcelasReais = (titulosDoPedido || []).filter(t => t.parcela_numero);
-      const todasPagas = parcelasReais.length > 0
-        ? parcelasReais.every(t => t.status === 'pago')
-        : pedido.status_pagamento === 'pago';
-
-      const novoStatus = todasPagas ? 'finalizado' : 'pendente_pagamento';
-
-      await Pedido.update(pedido.id, {
-        status: novoStatus,
-        cliente_confirmou_recebimento: true,
-        data_confirmacao_recebimento: new Date().toISOString().split('T')[0]
-      });
-
-      toast.success(novoStatus === 'finalizado'
-        ? 'Pedido entregue e finalizado (todas parcelas pagas)!'
-        : 'Pedido marcado como entregue! Aguardando pagamento.'
-      );
-      loadPedidos();
-    } catch (error) {
-      toast.error('Erro ao marcar pedido como entregue');
     }
   };
 
@@ -1390,16 +1329,6 @@ export default function PedidosFornecedor() {
                         </Button>
                       )}
 
-                      {pedido.status === 'em_transporte' && (
-                        <Button
-                          onClick={() => handleMarcarEntregue(pedido)}
-                          className="bg-green-600 hover:bg-green-700"
-                        >
-                          <CheckCircle className="w-4 h-4 mr-2" />
-                          Marcar Entregue
-                        </Button>
-                      )}
-
                       {/* Botão para atualizar NF separadamente */}
                       {['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && pedido.nf_url && (
                         <Button
@@ -1430,21 +1359,6 @@ export default function PedidosFornecedor() {
                         >
                           <Upload className="w-4 h-4 mr-2" />
                           {pedido.boleto_url ? 'Atualizar Boleto' : 'Enviar Boleto'}
-                        </Button>
-                      )}
-
-                      {/* Botão para alterar status de pagamento */}
-                      {['em_producao', 'faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && (
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedPedido(pedido);
-                            setNovoStatusPagamento(pedido.status_pagamento || 'pendente');
-                            setShowStatusPagamentoModal(true);
-                          }}
-                        >
-                          <DollarSign className="w-4 h-4 mr-2" />
-                          Status Pagamento
                         </Button>
                       )}
 
@@ -2060,65 +1974,6 @@ export default function PedidosFornecedor() {
                 className="bg-indigo-600 hover:bg-indigo-700"
               >
                 {uploading ? 'Enviando...' : 'Atualizar Nota Fiscal'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal de Status de Pagamento */}
-      <Dialog open={showStatusPagamentoModal} onOpenChange={setShowStatusPagamentoModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Alterar Status de Pagamento</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            {selectedPedido && (
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <p className="text-sm text-gray-600">Pedido #{selectedPedido.id.slice(-8).toUpperCase()}</p>
-                <p className="font-semibold text-lg">{formatCurrency(selectedPedido.valor_total)}</p>
-                {selectedPedido.comprovante_pagamento_url && (
-                  <Button
-                    variant="link"
-                    className="p-0 h-auto text-blue-600"
-                    onClick={() => window.open(selectedPedido.comprovante_pagamento_url, '_blank')}
-                  >
-                    Ver comprovante enviado pelo cliente
-                  </Button>
-                )}
-              </div>
-            )}
-
-            <div>
-              <Label htmlFor="statusPagamento">Status de Pagamento *</Label>
-              <Select value={novoStatusPagamento} onValueChange={setNovoStatusPagamento}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pendente">Pendente</SelectItem>
-                  <SelectItem value="em_analise">Em Análise (comprovante recebido)</SelectItem>
-                  <SelectItem value="pago">Pago / Confirmado</SelectItem>
-                  <SelectItem value="atrasado">Atrasado</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-gray-500 mt-1">
-                Para cancelar o pedido, use o botão "Cancelar Pedido" na lista.
-              </p>
-            </div>
-
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => {
-                setShowStatusPagamentoModal(false);
-                setNovoStatusPagamento('');
-              }}>
-                Voltar
-              </Button>
-              <Button
-                onClick={handleAlterarStatusPagamento}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                Salvar Status
               </Button>
             </div>
           </div>

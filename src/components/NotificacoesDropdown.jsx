@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { Notificacao, Carteira, Pedido, Produto } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Bell,
   Package,
@@ -560,7 +559,7 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
           </div>
 
           {/* Lista de Notificações */}
-          <ScrollArea className="max-h-96">
+          <div className="max-h-96 overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center py-8">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
@@ -619,7 +618,7 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
                 ))}
               </div>
             )}
-          </ScrollArea>
+          </div>
 
           {/* Footer */}
           {notificacoes.length > 0 && (

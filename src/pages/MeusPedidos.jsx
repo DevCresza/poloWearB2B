@@ -19,7 +19,7 @@ import {
   Download, CreditCard, Calendar, MapPin, Receipt, Upload,
   AlertTriangle, ArrowUpCircle, DollarSign
 } from 'lucide-react';
-import { formatCurrency, exportToCSV, exportToPDF, formatDate } from '@/utils/exportUtils';
+import { formatCurrency, exportToCSV, exportToPDF, formatDate, toBrasiliaDateString } from '@/utils/exportUtils';
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
 import MultiSelectFilter from '@/components/MultiSelectFilter';
 
@@ -417,7 +417,7 @@ export default function MeusPedidos() {
     // Filtro por data de emissão do pedido (created_date)
     let matchesEmissao = true;
     if (filtroEmissaoDe || filtroEmissaoAte) {
-      const dataEmissao = pedido.created_date ? pedido.created_date.split('T')[0] : '';
+      const dataEmissao = toBrasiliaDateString(pedido.created_date);
       if (dataEmissao) {
         if (filtroEmissaoDe && dataEmissao < filtroEmissaoDe) matchesEmissao = false;
         if (filtroEmissaoAte && dataEmissao > filtroEmissaoAte) matchesEmissao = false;
@@ -429,7 +429,7 @@ export default function MeusPedidos() {
     // Filtro por data de faturamento (nf_data_upload)
     let matchesFaturamento = true;
     if (filtroFaturamentoDe || filtroFaturamentoAte) {
-      const dataFat = pedido.nf_data_upload ? pedido.nf_data_upload.split('T')[0] : '';
+      const dataFat = toBrasiliaDateString(pedido.nf_data_upload);
       if (dataFat) {
         if (filtroFaturamentoDe && dataFat < filtroFaturamentoDe) matchesFaturamento = false;
         if (filtroFaturamentoAte && dataFat > filtroFaturamentoAte) matchesFaturamento = false;
@@ -595,22 +595,40 @@ export default function MeusPedidos() {
             <div className="space-y-2">
               <Label className="text-xs text-gray-500 font-medium">Emissão do Pedido</Label>
               <div className="grid grid-cols-2 gap-2">
-                <Input type="date" value={filtroEmissaoDe} onChange={(e) => setFiltroEmissaoDe(e.target.value)} title="Emissão De" className="rounded-xl shadow-neumorphic-inset" />
-                <Input type="date" value={filtroEmissaoAte} onChange={(e) => setFiltroEmissaoAte(e.target.value)} title="Emissão Até" className="rounded-xl shadow-neumorphic-inset" />
+                <div className="relative">
+                  <Label className="text-[10px] text-gray-400 absolute -top-1.5 left-2 bg-slate-100 px-1 z-10">De</Label>
+                  <Input type="date" value={filtroEmissaoDe} onChange={(e) => setFiltroEmissaoDe(e.target.value)} title="Emissão De" className="rounded-xl shadow-neumorphic-inset" />
+                </div>
+                <div className="relative">
+                  <Label className="text-[10px] text-gray-400 absolute -top-1.5 left-2 bg-slate-100 px-1 z-10">Até</Label>
+                  <Input type="date" value={filtroEmissaoAte} onChange={(e) => setFiltroEmissaoAte(e.target.value)} title="Emissão Até" className="rounded-xl shadow-neumorphic-inset" />
+                </div>
               </div>
             </div>
             <div className="space-y-2">
               <Label className="text-xs text-gray-500 font-medium">Faturamento</Label>
               <div className="grid grid-cols-2 gap-2">
-                <Input type="date" value={filtroFaturamentoDe} onChange={(e) => setFiltroFaturamentoDe(e.target.value)} title="Faturamento De" className="rounded-xl shadow-neumorphic-inset" />
-                <Input type="date" value={filtroFaturamentoAte} onChange={(e) => setFiltroFaturamentoAte(e.target.value)} title="Faturamento Até" className="rounded-xl shadow-neumorphic-inset" />
+                <div className="relative">
+                  <Label className="text-[10px] text-gray-400 absolute -top-1.5 left-2 bg-slate-100 px-1 z-10">De</Label>
+                  <Input type="date" value={filtroFaturamentoDe} onChange={(e) => setFiltroFaturamentoDe(e.target.value)} title="Faturamento De" className="rounded-xl shadow-neumorphic-inset" />
+                </div>
+                <div className="relative">
+                  <Label className="text-[10px] text-gray-400 absolute -top-1.5 left-2 bg-slate-100 px-1 z-10">Até</Label>
+                  <Input type="date" value={filtroFaturamentoAte} onChange={(e) => setFiltroFaturamentoAte(e.target.value)} title="Faturamento Até" className="rounded-xl shadow-neumorphic-inset" />
+                </div>
               </div>
             </div>
             <div className="space-y-2">
               <Label className="text-xs text-gray-500 font-medium">Vencimento do Título</Label>
               <div className="grid grid-cols-2 gap-2">
-                <Input type="date" value={filtroVencimentoDe} onChange={(e) => setFiltroVencimentoDe(e.target.value)} title="Vencimento De" className="rounded-xl shadow-neumorphic-inset" />
-                <Input type="date" value={filtroVencimentoAte} onChange={(e) => setFiltroVencimentoAte(e.target.value)} title="Vencimento Até" className="rounded-xl shadow-neumorphic-inset" />
+                <div className="relative">
+                  <Label className="text-[10px] text-gray-400 absolute -top-1.5 left-2 bg-slate-100 px-1 z-10">De</Label>
+                  <Input type="date" value={filtroVencimentoDe} onChange={(e) => setFiltroVencimentoDe(e.target.value)} title="Vencimento De" className="rounded-xl shadow-neumorphic-inset" />
+                </div>
+                <div className="relative">
+                  <Label className="text-[10px] text-gray-400 absolute -top-1.5 left-2 bg-slate-100 px-1 z-10">Até</Label>
+                  <Input type="date" value={filtroVencimentoAte} onChange={(e) => setFiltroVencimentoAte(e.target.value)} title="Vencimento Até" className="rounded-xl shadow-neumorphic-inset" />
+                </div>
               </div>
             </div>
           </div>
@@ -680,7 +698,7 @@ export default function MeusPedidos() {
                             {getFornecedorNome(pedido.fornecedor_id)}
                           </p>
                           <p className="text-xs text-gray-500 mt-1">
-                            Realizado em {new Date(pedido.created_date).toLocaleDateString('pt-BR')}
+                            Realizado em {formatDate(pedido.created_date)}
                           </p>
                         </div>
                         

@@ -16,7 +16,7 @@ import { toast } from 'sonner';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Target, TrendingUp, TrendingDown, Plus, Edit, Calendar,
-  DollarSign, Package, AlertTriangle, CheckCircle
+  DollarSign, Package, AlertTriangle, CheckCircle, Trash2
 } from 'lucide-react';
 
 export default function GestaoMetas() {
@@ -257,6 +257,20 @@ export default function GestaoMetas() {
     setShowForm(true);
   };
 
+  const handleDelete = async (meta) => {
+    if (!window.confirm(`Deseja realmente excluir a meta "${getNomeEntidade(meta)}" de ${meses[meta.mes - 1]}/${meta.ano}?`)) {
+      return;
+    }
+    try {
+      await Meta.delete(meta.id);
+      toast.success('Meta excluída com sucesso!');
+      loadData();
+    } catch (error) {
+      console.error('Erro ao excluir meta:', error);
+      toast.error('Erro ao excluir meta');
+    }
+  };
+
   const getStatusColor = (status) => {
     const colors = {
       abaixo: 'bg-red-100 text-red-800',
@@ -373,6 +387,9 @@ export default function GestaoMetas() {
                   </Badge>
                   <Button variant="ghost" size="icon" onClick={() => handleEdit(meta)}>
                     <Edit className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => handleDelete(meta)} className="text-red-500 hover:text-red-700 hover:bg-red-50">
+                    <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
               </div>

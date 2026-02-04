@@ -186,6 +186,17 @@ export const formatDateTime = (date) => {
 };
 
 /**
+ * Retorna string YYYY-MM-DD no fuso de São Paulo (para comparações de filtro)
+ */
+export const toBrasiliaDateString = (date) => {
+  if (!date) return '';
+  const d = new Date(date);
+  // Formatar componentes individuais no fuso de São Paulo
+  const parts = d.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); // en-CA retorna YYYY-MM-DD
+  return parts;
+};
+
+/**
  * Retorna data/hora atual no fuso de São Paulo formatada
  */
 export const formatNow = () => {
