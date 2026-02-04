@@ -13,10 +13,12 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { 
-  ShoppingCart, Trash2, Plus, Minus, Package, AlertTriangle, 
-  CheckCircle, CreditCard, ArrowRight, Building, ArrowLeft
+import {
+  ShoppingCart, Trash2, Plus, Minus, Package, AlertTriangle,
+  CheckCircle, CreditCard, ArrowRight, Building, ArrowLeft,
+  XCircle, DollarSign
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -33,6 +35,8 @@ export default function Carrinho() {
   const [finalizando, setFinalizando] = useState({});
   const [metodoPagamento, setMetodoPagamento] = useState({});
   const [observacoes, setObservacoes] = useState({});
+  const [showBloqueioModal, setShowBloqueioModal] = useState(false);
+  const [dadosInadimplencia, setDadosInadimplencia] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -52,6 +56,42 @@ export default function Carrinho() {
 
       setFornecedores(fornecedoresList || []);
       setProdutos(produtosList || []);
+
+      // Verificar inadimplência automaticamente
+      if (currentUser.tipo_negocio === 'multimarca') {
+        try {
+          const titulosCliente = await Carteira.filter({ cliente_user_id: currentUser.id });
+          const hoje = new Date();
+          hoje.setHours(0, 0, 0, 0);
+
+          const titulosVencidos = (titulosCliente || []).filter(t => {
+            if (t.status !== 'pendente') return false;
+            const dv = new Date(t.data_vencimento + 'T00:00:00');
+            return dv < hoje;
+          });
+
+          const totalVencido = titulosVencidos.reduce((sum, t) => sum + (t.valor || 0), 0);
+
+          if (titulosVencidos.length > 0 && totalVencido > 0) {
+            if (!currentUser.bloqueado) {
+              await User.update(currentUser.id, {
+                bloqueado: true,
+                motivo_bloqueio: `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`,
+                data_bloqueio: new Date().toISOString(),
+                total_vencido: totalVencido
+              });
+              currentUser.bloqueado = true;
+              currentUser.motivo_bloqueio = `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`;
+            }
+
+            setDadosInadimplencia({ titulosVencidos, totalVencido });
+            setShowBloqueioModal(true);
+            setUser({ ...currentUser });
+          }
+        } catch (e) {
+          console.warn('Erro ao verificar inadimplência:', e);
+        }
+      }
     } catch (_error) {
     } finally {
       setLoading(false);
@@ -226,6 +266,11 @@ export default function Carrinho() {
 
     if (!metodoPagamento[fornecedorId]) {
       toast.info('Por favor, selecione um método de pagamento para este fornecedor.');
+      return;
+    }
+
+    if (user.bloqueado) {
+      toast.error(`Sua conta está bloqueada. ${user.motivo_bloqueio ? `Motivo: ${user.motivo_bloqueio}.` : ''} Regularize seus pagamentos para fazer novos pedidos.`);
       return;
     }
 
@@ -449,6 +494,16 @@ export default function Carrinho() {
           </Card>
         ) : (
           <div className="space-y-6 sm:space-y-8">
+            {/* Alerta de bloqueio */}
+            {user?.bloqueado && (
+              <Alert className="bg-red-50 border-red-300">
+                <AlertTriangle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-800 text-sm sm:text-base">
+                  <strong>Conta bloqueada.</strong> {user.motivo_bloqueio ? `Motivo: ${user.motivo_bloqueio}.` : ''} Regularize seus pagamentos para fazer novos pedidos.
+                </AlertDescription>
+              </Alert>
+            )}
+
             {/* Alerta sobre endereço */}
             {(!user?.endereco_completo || !user?.cep || !user?.cidade || !user?.estado) && (
               <Alert className="bg-yellow-50 border-yellow-200">
@@ -775,8 +830,10 @@ export default function Carrinho() {
                           !user?.endereco_completo ||
                           !user?.cep ||
                           !user?.cidade ||
-                          !user?.estado
+                          !user?.estado ||
+                          user?.bloqueado
                         }
+                        title={user?.bloqueado ? 'Sua conta está bloqueada. Regularize seus pagamentos.' : ''}
                         className="w-full h-12 sm:h-14 bg-green-600 hover:bg-green-700 text-base sm:text-lg font-semibold"
                       >
                         {finalizando[grupo.fornecedor_id] ? (
@@ -802,6 +859,79 @@ export default function Carrinho() {
           </div>
         )}
       </div>
+
+      {/* Modal de Bloqueio por Inadimplência */}
+      <Dialog open={showBloqueioModal} onOpenChange={setShowBloqueioModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl flex items-center gap-2 text-red-600">
+              <XCircle className="w-8 h-8" />
+              Conta Bloqueada por Inadimplência
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            <Alert className="border-red-200 bg-red-50">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+              <AlertDescription className="text-red-800">
+                <strong>Sua conta foi bloqueada automaticamente devido a títulos vencidos.</strong>
+                <p className="mt-2">Você não poderá realizar novos pedidos até regularizar sua situação financeira.</p>
+              </AlertDescription>
+            </Alert>
+
+            {dadosInadimplencia && (
+              <>
+                <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                  <h4 className="font-semibold text-gray-900">Títulos Vencidos:</h4>
+                  <div className="max-h-48 overflow-y-auto space-y-2">
+                    {dadosInadimplencia.titulosVencidos.map((titulo, idx) => (
+                      <div key={idx} className="flex justify-between items-center bg-white p-3 rounded border border-red-100">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {titulo.descricao || `Título ${titulo.pedido_id ? '#' + titulo.pedido_id.substring(0, 8) : ''}`}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Vencimento: {new Date(titulo.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}
+                          </p>
+                        </div>
+                        <span className="text-red-600 font-bold">{formatCurrency(titulo.valor)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <Separator />
+                  <div className="flex justify-between items-center pt-2">
+                    <span className="font-semibold text-gray-700">Total Vencido:</span>
+                    <span className="text-red-600 font-bold text-xl">{formatCurrency(dadosInadimplencia.totalVencido)}</span>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                  <p className="text-blue-800 text-sm">
+                    Regularize seus pagamentos pendentes para desbloquear sua conta e voltar a fazer pedidos.
+                    Acesse a Carteira Financeira para visualizar seus débitos e enviar comprovantes.
+                  </p>
+                </div>
+              </>
+            )}
+
+            <div className="flex gap-3 justify-end pt-4 border-t">
+              <Button variant="outline" onClick={() => setShowBloqueioModal(false)}>
+                Fechar
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowBloqueioModal(false);
+                  navigate(createPageUrl('CarteiraFinanceira'));
+                }}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <DollarSign className="w-4 h-4 mr-2" />
+                Ver Meus Débitos
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

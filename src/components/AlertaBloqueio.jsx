@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User } from '@/api/entities';
+import { Carteira } from '@/api/entities';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -19,8 +20,40 @@ export default function AlertaBloqueio() {
   const checkUser = async () => {
     try {
       const currentUser = await User.me();
+
+      // Verificar inadimplência automaticamente para clientes multimarca
+      if (currentUser.tipo_negocio === 'multimarca' && !currentUser.bloqueado) {
+        try {
+          const titulosCliente = await Carteira.filter({ cliente_user_id: currentUser.id });
+          const hoje = new Date();
+          hoje.setHours(0, 0, 0, 0);
+
+          const titulosVencidos = (titulosCliente || []).filter(t => {
+            if (t.status !== 'pendente') return false;
+            const dv = new Date(t.data_vencimento + 'T00:00:00');
+            return dv < hoje;
+          });
+
+          const totalVencido = titulosVencidos.reduce((sum, t) => sum + (t.valor || 0), 0);
+
+          if (titulosVencidos.length > 0 && totalVencido > 0) {
+            await User.update(currentUser.id, {
+              bloqueado: true,
+              motivo_bloqueio: `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`,
+              data_bloqueio: new Date().toISOString(),
+              total_vencido: totalVencido
+            });
+            currentUser.bloqueado = true;
+            currentUser.motivo_bloqueio = `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`;
+            currentUser.total_vencido = totalVencido;
+          }
+        } catch (e) {
+          console.warn('Erro ao verificar inadimplência:', e);
+        }
+      }
+
       setUser(currentUser);
-      
+
       // Mostrar modal se bloqueado e é primeira vez que vê
       if (currentUser.bloqueado && !sessionStorage.getItem('bloqueio_visto')) {
         setShowModal(true);
