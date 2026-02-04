@@ -66,6 +66,7 @@ export default function Carrinho() {
 
           const titulosVencidos = (titulosCliente || []).filter(t => {
             if (t.status !== 'pendente') return false;
+            if (!t.data_vencimento) return false;
             const dv = new Date(t.data_vencimento + 'T00:00:00');
             return dv < hoje;
           });
@@ -272,6 +273,48 @@ export default function Carrinho() {
     if (user.bloqueado) {
       toast.error(`Sua conta está bloqueada. ${user.motivo_bloqueio ? `Motivo: ${user.motivo_bloqueio}.` : ''} Regularize seus pagamentos para fazer novos pedidos.`);
       return;
+    }
+
+    // Verificação em tempo real de inadimplência antes de finalizar
+    if (user.tipo_negocio === 'multimarca') {
+      try {
+        const freshUser = await User.me();
+        if (freshUser.bloqueado) {
+          setUser(freshUser);
+          toast.error(`Sua conta está bloqueada. ${freshUser.motivo_bloqueio ? `Motivo: ${freshUser.motivo_bloqueio}.` : ''} Regularize seus pagamentos para fazer novos pedidos.`);
+          return;
+        }
+
+        const titulosCliente = await Carteira.filter({ cliente_user_id: freshUser.id });
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+
+        const titulosVencidos = (titulosCliente || []).filter(t => {
+          if (t.status !== 'pendente') return false;
+          if (!t.data_vencimento) return false;
+          const dv = new Date(t.data_vencimento + 'T00:00:00');
+          return dv < hoje;
+        });
+
+        const totalVencido = titulosVencidos.reduce((sum, t) => sum + (t.valor || 0), 0);
+
+        if (titulosVencidos.length > 0 && totalVencido > 0) {
+          await User.update(freshUser.id, {
+            bloqueado: true,
+            motivo_bloqueio: `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`,
+            data_bloqueio: new Date().toISOString(),
+            total_vencido: totalVencido
+          });
+          freshUser.bloqueado = true;
+          freshUser.motivo_bloqueio = `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`;
+          setUser({ ...freshUser });
+          setDadosInadimplencia({ titulosVencidos, totalVencido });
+          setShowBloqueioModal(true);
+          return;
+        }
+      } catch (e) {
+        console.warn('Erro na verificação em tempo real de inadimplência:', e);
+      }
     }
 
     setFinalizando(prev => ({ ...prev, [fornecedorId]: true }));

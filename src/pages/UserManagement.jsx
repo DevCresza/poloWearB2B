@@ -10,7 +10,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Shield, LogIn, Users as UsersIcon, Plus, Edit, ExternalLink, Copy, CheckCircle, Clock, UserCheck, Eye, Settings, Trash2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Shield, LogIn, Users as UsersIcon, Plus, Edit, ExternalLink, Copy, CheckCircle, Clock, UserCheck, Eye, Settings, Trash2, Ban, ShieldCheck } from 'lucide-react';
 import UserCreationWizard from '../components/admin/UserCreationWizard';
 import PendingUserDetails from '../components/admin/PendingUserDetails';
 import { toast } from 'sonner';
@@ -29,8 +31,11 @@ export default function UserManagement() {
   const [showNewUserForm, setShowNewUserForm] = useState(false);
   const [showPendingDetails, setShowPendingDetails] = useState(false);
   const [selectedPendingUser, setSelectedPendingUser] = useState(null);
-  const [editingUser, setEditingUser] = useState(null); // New state for user being edited
-  const [showEditForm, setShowEditForm] = useState(false); // New state to control edit form visibility
+  const [editingUser, setEditingUser] = useState(null);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [showBloqueioModal, setShowBloqueioModal] = useState(false);
+  const [bloqueioTarget, setBloqueioTarget] = useState(null);
+  const [motivoBloqueio, setMotivoBloqueio] = useState('');
 
   const getStatusBadge = (status) => {
     const statusMap = {
@@ -160,6 +165,48 @@ export default function UserManagement() {
     }
   };
 
+  const handleBloquear = (user) => {
+    setBloqueioTarget(user);
+    setMotivoBloqueio('');
+    setShowBloqueioModal(true);
+  };
+
+  const confirmarBloqueio = async () => {
+    if (!motivoBloqueio.trim()) {
+      toast.info('Informe o motivo do bloqueio.');
+      return;
+    }
+    try {
+      await User.update(bloqueioTarget.id, {
+        bloqueado: true,
+        motivo_bloqueio: motivoBloqueio.trim(),
+        data_bloqueio: new Date().toISOString()
+      });
+      toast.success(`Usuário "${bloqueioTarget.full_name}" bloqueado com sucesso.`);
+      setShowBloqueioModal(false);
+      setBloqueioTarget(null);
+      setMotivoBloqueio('');
+      await loadData();
+    } catch (_error) {
+      toast.error('Falha ao bloquear o usuário. Tente novamente.');
+    }
+  };
+
+  const handleDesbloquear = async (user) => {
+    if (!window.confirm(`Deseja desbloquear o usuário "${user.full_name}"?`)) return;
+    try {
+      await User.update(user.id, {
+        bloqueado: false,
+        motivo_bloqueio: '',
+        data_bloqueio: null
+      });
+      toast.success(`Usuário "${user.full_name}" desbloqueado com sucesso.`);
+      await loadData();
+    } catch (_error) {
+      toast.error('Falha ao desbloquear o usuário. Tente novamente.');
+    }
+  };
+
   if (loading && !users.length) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -284,12 +331,15 @@ export default function UserManagement() {
                       <TableHead>Email</TableHead>
                       <TableHead>Empresa / Fornecedor</TableHead>
                       <TableHead>Tipo</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead>Função</TableHead>
                       <TableHead>Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {users.map(user => (
+                    {users.map(user => {
+                      const isCliente = user.tipo_negocio === 'multimarca' || user.tipo_negocio === 'franqueado' || user.categoria_cliente === 'franqueado';
+                      return (
                       <TableRow key={user.id}>
                         <TableCell>{user.full_name}</TableCell>
                         <TableCell>{user.email}</TableCell>
@@ -306,6 +356,19 @@ export default function UserManagement() {
                               : user.role === 'admin' ? 'Admin'
                               : user.tipo_negocio || 'Usuário'}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {user.bloqueado ? (
+                            <Badge className="bg-red-100 text-red-800">
+                              <Ban className="w-3 h-3 mr-1" />
+                              Bloqueado
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-green-100 text-green-800">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Ativo
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Select
@@ -326,11 +389,33 @@ export default function UserManagement() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 flex-wrap">
                             <Button variant="outline" size="sm" onClick={() => handleEdit(user)}>
                               <Edit className="w-4 h-4 mr-1" />
                               Editar
                             </Button>
+                            {isCliente && !user.bloqueado && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-red-600 border-red-200 hover:bg-red-50"
+                                onClick={() => handleBloquear(user)}
+                              >
+                                <Ban className="w-4 h-4 mr-1" />
+                                Bloquear
+                              </Button>
+                            )}
+                            {isCliente && user.bloqueado && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-green-600 border-green-200 hover:bg-green-50"
+                                onClick={() => handleDesbloquear(user)}
+                              >
+                                <ShieldCheck className="w-4 h-4 mr-1" />
+                                Desbloquear
+                              </Button>
+                            )}
                             <Button
                               variant="destructive"
                               size="sm"
@@ -343,7 +428,8 @@ export default function UserManagement() {
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -448,6 +534,54 @@ export default function UserManagement() {
           fornecedorMap={fornecedorMap}
         />
       )}
+
+      {/* Modal de Bloqueio */}
+      <Dialog open={showBloqueioModal} onOpenChange={(open) => {
+        if (!open) {
+          setShowBloqueioModal(false);
+          setBloqueioTarget(null);
+          setMotivoBloqueio('');
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Ban className="w-5 h-5" />
+              Bloquear Usuário
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-gray-600">
+              Você está bloqueando <strong>{bloqueioTarget?.full_name}</strong> ({bloqueioTarget?.email}).
+              O usuário não poderá finalizar novos pedidos enquanto estiver bloqueado.
+            </p>
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">
+                Motivo do bloqueio *
+              </label>
+              <Textarea
+                value={motivoBloqueio}
+                onChange={(e) => setMotivoBloqueio(e.target.value)}
+                placeholder="Ex: Inadimplência - 3 boletos vencidos há mais de 30 dias"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowBloqueioModal(false);
+              setBloqueioTarget(null);
+              setMotivoBloqueio('');
+            }}>
+              Cancelar
+            </Button>
+            <Button className="bg-red-600 hover:bg-red-700" onClick={confirmarBloqueio}>
+              <Ban className="w-4 h-4 mr-2" />
+              Confirmar Bloqueio
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

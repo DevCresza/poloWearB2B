@@ -30,6 +30,7 @@ export default function AlertaBloqueio() {
 
           const titulosVencidos = (titulosCliente || []).filter(t => {
             if (t.status !== 'pendente') return false;
+            if (!t.data_vencimento) return false;
             const dv = new Date(t.data_vencimento + 'T00:00:00');
             return dv < hoje;
           });
