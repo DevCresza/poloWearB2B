@@ -742,28 +742,40 @@ export default function MeuPerfil() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">Minhas Lojas</h3>
-                    <p className="text-sm text-gray-500">Gerencie as lojas vinculadas à sua conta</p>
+                    <p className="text-sm text-gray-500">
+                      {user.role === 'admin'
+                        ? 'Gerencie as lojas vinculadas à sua conta'
+                        : 'Visualize as lojas vinculadas à sua conta'}
+                    </p>
                   </div>
-                  <Button onClick={() => abrirModalLoja()} className="bg-blue-600 hover:bg-blue-700">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Adicionar Loja
-                  </Button>
+                  {user.role === 'admin' && (
+                    <Button onClick={() => abrirModalLoja()} className="bg-blue-600 hover:bg-blue-700">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Adicionar Loja
+                    </Button>
+                  )}
                 </div>
 
                 {lojas.length === 0 ? (
                   <div className="text-center py-12 bg-gray-50 rounded-lg">
                     <Store className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                     <p className="text-gray-600 mb-2">Nenhuma loja cadastrada</p>
-                    <p className="text-sm text-gray-500 mb-4">Cadastre suas lojas para gerenciar pedidos e financeiro por unidade</p>
-                    <Button onClick={() => abrirModalLoja()} variant="outline">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Cadastrar primeira loja
-                    </Button>
+                    <p className="text-sm text-gray-500 mb-4">
+                      {user.role === 'admin'
+                        ? 'Cadastre suas lojas para gerenciar pedidos e financeiro por unidade'
+                        : 'Entre em contato com o administrador para cadastrar lojas'}
+                    </p>
+                    {user.role === 'admin' && (
+                      <Button onClick={() => abrirModalLoja()} variant="outline">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Cadastrar primeira loja
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {lojas.map(loja => (
-                      <Card key={loja.id} className={`${!loja.ativa ? 'opacity-60' : ''}`}>
+                      <Card key={loja.id} className={`${!loja.ativa ? 'opacity-60' : ''} ${loja.bloqueada ? 'border-red-300' : ''}`}>
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between mb-2">
                             <div>
@@ -775,20 +787,22 @@ export default function MeuPerfil() {
                                 <p className="text-xs text-gray-500">{loja.nome}</p>
                               )}
                             </div>
-                            <div className="flex gap-1">
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => abrirModalLoja(loja)}>
-                                <Pencil className="w-3.5 h-3.5" />
-                              </Button>
-                              {loja.ativa ? (
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700" onClick={() => handleDesativarLoja(loja)}>
-                                  <Power className="w-3.5 h-3.5" />
+                            {user.role === 'admin' && (
+                              <div className="flex gap-1">
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => abrirModalLoja(loja)}>
+                                  <Pencil className="w-3.5 h-3.5" />
                                 </Button>
-                              ) : (
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500 hover:text-green-700" onClick={() => handleReativarLoja(loja)}>
-                                  <Power className="w-3.5 h-3.5" />
-                                </Button>
-                              )}
-                            </div>
+                                {loja.ativa ? (
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700" onClick={() => handleDesativarLoja(loja)}>
+                                    <Power className="w-3.5 h-3.5" />
+                                  </Button>
+                                ) : (
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500 hover:text-green-700" onClick={() => handleReativarLoja(loja)}>
+                                    <Power className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
+                              </div>
+                            )}
                           </div>
                           <div className="space-y-1 text-sm text-gray-600">
                             {loja.cnpj && <p><span className="text-gray-400">CNPJ:</span> {loja.cnpj}</p>}
@@ -801,8 +815,16 @@ export default function MeuPerfil() {
                             )}
                             {loja.telefone && <p><span className="text-gray-400">Tel:</span> {loja.telefone}</p>}
                           </div>
-                          {!loja.ativa && (
-                            <Badge className="mt-2 bg-red-100 text-red-800">Desativada</Badge>
+                          <div className="flex gap-2 mt-2">
+                            {!loja.ativa && (
+                              <Badge className="bg-gray-200 text-gray-700">Desativada</Badge>
+                            )}
+                            {loja.bloqueada && (
+                              <Badge className="bg-red-100 text-red-800">Bloqueada</Badge>
+                            )}
+                          </div>
+                          {loja.bloqueada && loja.motivo_bloqueio && (
+                            <p className="text-xs text-red-600 mt-1">{loja.motivo_bloqueio}</p>
                           )}
                         </CardContent>
                       </Card>

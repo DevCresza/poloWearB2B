@@ -61,8 +61,8 @@ export function LojaProvider({ children, user }) {
   // Helper: returns loja_id filter value (or undefined if "todas")
   const lojaFilterId = lojaSelecionada?.id || null;
 
-  // Helper: returns the cart localStorage key based on current loja
-  const carrinhoKey = lojaSelecionada ? `carrinho_${lojaSelecionada.id}` : 'carrinho';
+  // Cart is always global (store selection happens at checkout time)
+  const carrinhoKey = 'carrinho';
 
   return (
     <LojaContext.Provider value={{
@@ -76,6 +76,7 @@ export function LojaProvider({ children, user }) {
       hasMultipleLojas: lojas.length > 1,
       hasSingleLoja: lojas.length === 1,
       hasNoLojas: lojas.length === 0,
+      isLojaBloqueada: lojaSelecionada?.bloqueada === true,
     }}>
       {children}
     </LojaContext.Provider>
@@ -97,6 +98,7 @@ export function useLojaContext() {
       hasMultipleLojas: false,
       hasSingleLoja: false,
       hasNoLojas: true,
+      isLojaBloqueada: false,
     };
   }
   return ctx;

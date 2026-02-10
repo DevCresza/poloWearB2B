@@ -17,18 +17,19 @@ import { toast } from 'sonner';
 import {
   ShoppingCart, Trash2, Plus, Minus, Package, AlertTriangle,
   CheckCircle, CreditCard, ArrowRight, Building, ArrowLeft,
-  XCircle, DollarSign, Copy
+  XCircle, DollarSign
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { formatCurrency } from '@/utils/exportUtils';
 import { useLojaContext } from '@/contexts/LojaContext';
 import { Store } from 'lucide-react';
+import { Loja } from '@/api/entities';
 import ReplicarPedidoModal from '@/components/pedidos/ReplicarPedidoModal';
 
 export default function Carrinho() {
   const navigate = useNavigate();
-  const { lojaSelecionada, lojas, carrinhoKey, hasMultipleLojas, hasNoLojas } = useLojaContext();
+  const { lojas, carrinhoKey, hasNoLojas } = useLojaContext();
   const [user, setUser] = useState(null);
   const [carrinho, setCarrinho] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
@@ -41,6 +42,9 @@ export default function Carrinho() {
   const [dadosInadimplencia, setDadosInadimplencia] = useState(null);
   const [replicarModalOpen, setReplicarModalOpen] = useState(false);
   const [replicarGrupo, setReplicarGrupo] = useState(null);
+  const [replicarPreSelectedIds, setReplicarPreSelectedIds] = useState([]);
+  // Per-supplier-group selected lojas: { fornecedor_id: Set<loja_id> }
+  const [selectedLojasMap, setSelectedLojasMap] = useState({});
 
   useEffect(() => {
     loadData();
@@ -423,11 +427,6 @@ export default function Carrinho() {
     });
   };
 
-  const abrirReplicarModal = (grupo) => {
-    setReplicarGrupo(grupo);
-    setReplicarModalOpen(true);
-  };
-
   const handleReplicarSuccess = (fornecedorId) => {
     // Limpar carrinho deste fornecedor após replicação bem-sucedida
     const novoCarrinho = removerItensFornecedorDoCarrinho(fornecedorId);
@@ -437,18 +436,42 @@ export default function Carrinho() {
     }
   };
 
-  const finalizarCompraPorFornecedor = async (fornecedorId) => {
-    // Se o user tem lojas mas nenhuma selecionada, exigir seleção
-    if (!hasNoLojas && !lojaSelecionada) {
-      toast.info('Selecione uma loja no seletor do cabeçalho antes de finalizar o pedido.');
-      return;
-    }
+  // Toggle a single loja selection for a specific supplier group
+  const toggleLojaForGroup = (fornecedorId, lojaId) => {
+    setSelectedLojasMap(prev => {
+      const current = new Set(prev[fornecedorId] || []);
+      if (current.has(lojaId)) {
+        current.delete(lojaId);
+      } else {
+        current.add(lojaId);
+      }
+      return { ...prev, [fornecedorId]: current };
+    });
+  };
 
-    // Determinar dados de endereço: da loja (se selecionada) ou do user (legado)
-    const enderecoSource = lojaSelecionada || user;
+  const getSelectedLojasForGroup = (fornecedorId) => {
+    return selectedLojasMap[fornecedorId] || new Set();
+  };
+
+  // Open multi-store modal for a supplier group
+  const abrirMultiLojaModal = (grupo, selectedIds) => {
+    setReplicarGrupo(grupo);
+    setReplicarPreSelectedIds(Array.from(selectedIds));
+    setReplicarModalOpen(true);
+  };
+
+  const finalizarCompraPorFornecedor = async (fornecedorId) => {
+    // Determine which loja to use
+    const selectedIds = getSelectedLojasForGroup(fornecedorId);
+    const targetLoja = selectedIds.size === 1
+      ? lojas.find(l => l.id === Array.from(selectedIds)[0]) || null
+      : null; // No lojas = legacy (user address)
+
+    // Validate address source
+    const enderecoSource = targetLoja || user;
     if (!enderecoSource.endereco_completo || !enderecoSource.cep || !enderecoSource.cidade || !enderecoSource.estado) {
-      const msg = lojaSelecionada
-        ? 'Complete o endereço da loja selecionada em Meu Perfil > Minhas Lojas antes de finalizar.'
+      const msg = targetLoja
+        ? `Complete o endereço da loja "${targetLoja.nome_fantasia || targetLoja.nome}" para finalizar.`
         : 'Por favor, cadastre seu endereço de entrega completo no seu perfil antes de finalizar o pedido.';
       toast.info(msg);
       return;
@@ -464,8 +487,20 @@ export default function Carrinho() {
       return;
     }
 
+    // Verificar bloqueio da loja em tempo real
+    if (targetLoja) {
+      try {
+        const freshLoja = await Loja.get(targetLoja.id);
+        if (freshLoja.bloqueada) {
+          toast.error(`A loja "${freshLoja.nome_fantasia || freshLoja.nome}" está bloqueada. ${freshLoja.motivo_bloqueio ? `Motivo: ${freshLoja.motivo_bloqueio}.` : ''} Regularize a situação para fazer pedidos.`);
+          return;
+        }
+      } catch (e) {
+        console.warn('Erro ao verificar bloqueio da loja:', e);
+      }
+    }
+
     // Verificação em tempo real de inadimplência antes de finalizar
-    // Se loja selecionada, verificar apenas títulos dessa loja
     if (user.tipo_negocio === 'multimarca' || user.tipo_negocio === 'franqueado') {
       try {
         const freshUser = await User.me();
@@ -475,10 +510,9 @@ export default function Carrinho() {
           return;
         }
 
-        // Filtro por loja quando selecionada
         const filtroCarteira = { cliente_user_id: freshUser.id };
-        if (lojaSelecionada) {
-          filtroCarteira.loja_id = lojaSelecionada.id;
+        if (targetLoja) {
+          filtroCarteira.loja_id = targetLoja.id;
         }
         const titulosCliente = await Carteira.filter(filtroCarteira);
         const hoje = new Date();
@@ -494,13 +528,11 @@ export default function Carrinho() {
         const totalVencido = titulosVencidos.reduce((sum, t) => sum + (t.valor || 0), 0);
 
         if (titulosVencidos.length > 0 && totalVencido > 0) {
-          if (lojaSelecionada) {
-            // Bloqueio POR LOJA - apenas impede a compra nesta loja
+          if (targetLoja) {
             setDadosInadimplencia({ titulosVencidos, totalVencido });
             setShowBloqueioModal(true);
             return;
           }
-          // Bloqueio global (legado sem lojas)
           await User.update(freshUser.id, {
             bloqueado: true,
             motivo_bloqueio: `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`,
@@ -541,7 +573,7 @@ export default function Carrinho() {
 
       const result = await criarPedidoParaLoja(
         grupo,
-        lojaSelecionada,
+        targetLoja,
         metodoPagamento[fornecedorId],
         observacoes[fornecedorId] || ''
       );
@@ -552,25 +584,14 @@ export default function Carrinho() {
         return;
       }
 
-      // Remover itens do carrinho deste fornecedor
       const novoCarrinho = removerItensFornecedorDoCarrinho(fornecedorId);
       salvarCarrinho(novoCarrinho);
 
-      // Mensagem de sucesso
+      const fornecedorNome = fornecedor?.nome_marca || 'Fornecedor';
       if (grupo.temCapsula) {
-        const fornecedorNome = fornecedor?.nome_marca || 'Fornecedor';
         toast.success(`Pedido para ${fornecedorNome} (incluindo cápsula) criado com sucesso!`);
       } else {
-        const fornecedorNome = fornecedor?.nome_marca || 'Fornecedor';
-        const contatoFornecedor = fornecedor?.contato_envio_whatsapp || fornecedor?.contato_comercial_whatsapp || 'Não disponível';
-        const emailFornecedor = fornecedor?.contato_envio_email || fornecedor?.contato_comercial_email || 'Não disponível';
-
-        toast.success(
-          `Pedido para ${fornecedorNome} criado com sucesso!\n\n` +
-          `Email: ${emailFornecedor}\n` +
-          `WhatsApp: ${contatoFornecedor}\n\n` +
-          `O fornecedor foi notificado automaticamente e entrará em contato em breve.`
-        );
+        toast.success(`Pedido para ${fornecedorNome} criado com sucesso!`);
       }
 
       if (novoCarrinho.length === 0) {
@@ -642,7 +663,7 @@ export default function Carrinho() {
           </Card>
         ) : (
           <div className="space-y-6 sm:space-y-8">
-            {/* Alerta de bloqueio */}
+            {/* Alerta de bloqueio global */}
             {user?.bloqueado && (
               <Alert className="bg-red-50 border-red-300">
                 <AlertTriangle className="h-4 w-4 text-red-600" />
@@ -652,19 +673,16 @@ export default function Carrinho() {
               </Alert>
             )}
 
-            {/* Alerta sobre endereço */}
-            {(() => {
-              const src = lojaSelecionada || user;
-              const semEndereco = !src?.endereco_completo || !src?.cep || !src?.cidade || !src?.estado;
+
+            {/* Alerta sobre endereço (apenas para users sem lojas) */}
+            {hasNoLojas && (() => {
+              const semEndereco = !user?.endereco_completo || !user?.cep || !user?.cidade || !user?.estado;
               if (!semEndereco) return null;
-              const msg = lojaSelecionada
-                ? 'Complete o endereço da loja selecionada em Meu Perfil > Minhas Lojas antes de finalizar os pedidos.'
-                : 'Você precisa cadastrar seu endereço de entrega completo no seu perfil antes de finalizar os pedidos.';
               return (
                 <Alert className="bg-yellow-50 border-yellow-200">
                   <AlertTriangle className="h-4 w-4 text-yellow-600" />
                   <AlertDescription className="text-yellow-800 text-sm sm:text-base">
-                    <strong>Atenção:</strong> {msg}
+                    <strong>Atenção:</strong> Você precisa cadastrar seu endereço de entrega completo no seu perfil antes de finalizar os pedidos.
                   </AlertDescription>
                 </Alert>
               );
@@ -676,8 +694,18 @@ export default function Carrinho() {
               const valorMinimo = fornecedor?.pedido_minimo_valor || 0;
               const atingiuMinimo = grupo.total >= valorMinimo;
               const metodosPagamento = getMetodosPagamentoDisponiveis(grupo.fornecedor_id);
-              const enderecoSource = lojaSelecionada || user;
-              const enderecoIncompleto = !enderecoSource?.endereco_completo || !enderecoSource?.cep || !enderecoSource?.cidade || !enderecoSource?.estado;
+              const selectedLojas = getSelectedLojasForGroup(grupo.fornecedor_id);
+              const selectedCount = selectedLojas.size;
+              const lojasAtivas = lojas.filter(l => l.ativa !== false && !l.bloqueada);
+
+              // Determine endereco source based on selection
+              const singleSelectedLoja = selectedCount === 1
+                ? lojas.find(l => l.id === Array.from(selectedLojas)[0])
+                : null;
+              const enderecoSource = singleSelectedLoja || (hasNoLojas ? user : null);
+              const enderecoIncompleto = enderecoSource
+                ? !enderecoSource.endereco_completo || !enderecoSource.cep || !enderecoSource.cidade || !enderecoSource.estado
+                : selectedCount === 0 && !hasNoLojas; // No store selected = incomplete
 
               return (
                 <Card key={grupo.fornecedor_id} className="overflow-hidden">
@@ -935,26 +963,6 @@ export default function Carrinho() {
 
                     {/* Total e Checkout por Fornecedor */}
                     <div className="space-y-4 bg-blue-50 p-4 sm:p-6 rounded-lg border border-blue-200">
-                      {/* Loja selecionada */}
-                      {lojaSelecionada && (
-                        <div className="flex items-center gap-2 text-sm bg-white px-3 py-2 rounded-lg border border-blue-100">
-                          <Store className="w-4 h-4 text-blue-600" />
-                          <span className="text-gray-600">Comprando para:</span>
-                          <span className="font-semibold text-blue-700">
-                            {lojaSelecionada.nome_fantasia || lojaSelecionada.nome}
-                            {lojaSelecionada.cidade ? ` - ${lojaSelecionada.cidade}` : ''}
-                          </span>
-                        </div>
-                      )}
-                      {!hasNoLojas && !lojaSelecionada && (
-                        <Alert className="border-yellow-200 bg-yellow-50">
-                          <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                          <AlertDescription className="text-yellow-800 text-sm">
-                            Selecione uma loja no seletor do cabeçalho antes de finalizar o pedido.
-                          </AlertDescription>
-                        </Alert>
-                      )}
-
                       <div className="flex justify-between items-center">
                         <span className="font-semibold text-lg">Total:</span>
                         <span className="text-2xl sm:text-3xl font-bold text-green-600">
@@ -962,75 +970,151 @@ export default function Carrinho() {
                         </span>
                       </div>
 
-                      <div>
-                        <Label className="flex items-center gap-2 mb-2">
-                          <CreditCard className="w-4 h-4" />
-                          Método de Pagamento *
-                        </Label>
-                        <Select 
-                          value={metodoPagamento[grupo.fornecedor_id] || ''} 
-                          onValueChange={(value) => setMetodoPagamento(prev => ({ ...prev, [grupo.fornecedor_id]: value }))}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {metodosPagamento.map(metodo => (
-                              <SelectItem key={metodo.value} value={metodo.value}>
-                                {metodo.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {metodosPagamento.length === 2 && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            Opção Boleto Faturado não disponível para sua conta
-                          </p>
-                        )}
-                      </div>
+                      {/* Seleção de Lojas (quando tem lojas cadastradas) */}
+                      {!hasNoLojas && (
+                        <div>
+                          <Label className="flex items-center gap-2 mb-2">
+                            <Store className="w-4 h-4" />
+                            Selecione a(s) loja(s) de entrega *
+                          </Label>
+                          <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {lojas.filter(l => l.ativa !== false).map(loja => {
+                              const isSelected = selectedLojas.has(loja.id);
+                              const isBloqueada = loja.bloqueada === true;
+                              return (
+                                <div
+                                  key={loja.id}
+                                  className={`flex items-center gap-3 p-2.5 rounded-lg border transition-colors ${
+                                    isBloqueada
+                                      ? 'border-red-200 bg-red-50 opacity-60 cursor-not-allowed'
+                                      : isSelected
+                                        ? 'border-blue-300 bg-white cursor-pointer'
+                                        : 'border-gray-200 bg-white hover:bg-gray-50 cursor-pointer'
+                                  }`}
+                                  onClick={() => !isBloqueada && toggleLojaForGroup(grupo.fornecedor_id, loja.id)}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    disabled={isBloqueada}
+                                    readOnly
+                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 pointer-events-none"
+                                  />
+                                  <Store className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <span className="text-sm font-medium truncate block">
+                                      {loja.nome_fantasia || loja.nome}
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      {loja.cidade ? `${loja.cidade}/${loja.estado}` : ''}
+                                      {loja.cnpj ? ` - ${loja.cnpj}` : ''}
+                                    </span>
+                                  </div>
+                                  {isBloqueada && (
+                                    <Badge className="bg-red-100 text-red-700 text-[10px] flex-shrink-0">Bloqueada</Badge>
+                                  )}
+                                  {!isBloqueada && (!loja.endereco_completo || !loja.cep || !loja.cidade || !loja.estado) && (
+                                    <Badge variant="outline" className="text-yellow-700 border-yellow-300 bg-yellow-50 text-[10px] flex-shrink-0">
+                                      Sem endereço
+                                    </Badge>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {selectedCount === 0 && (
+                            <p className="text-xs text-yellow-700 mt-1">Selecione ao menos uma loja para finalizar.</p>
+                          )}
+                        </div>
+                      )}
 
-                      <div>
-                        <Label className="mb-2 block">Observações (Opcional)</Label>
-                        <Textarea
-                          value={observacoes[grupo.fornecedor_id] || ''}
-                          onChange={(e) => setObservacoes(prev => ({ ...prev, [grupo.fornecedor_id]: e.target.value }))}
-                          placeholder="Adicione observações sobre seu pedido..."
-                          rows={3}
-                        />
-                      </div>
+                      {/* Pagamento (para 1 loja ou sem lojas) */}
+                      {(hasNoLojas || selectedCount === 1) && (
+                        <div>
+                          <Label className="flex items-center gap-2 mb-2">
+                            <CreditCard className="w-4 h-4" />
+                            Método de Pagamento *
+                          </Label>
+                          <Select
+                            value={metodoPagamento[grupo.fornecedor_id] || ''}
+                            onValueChange={(value) => setMetodoPagamento(prev => ({ ...prev, [grupo.fornecedor_id]: value }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {metodosPagamento.map(metodo => (
+                                <SelectItem key={metodo.value} value={metodo.value}>
+                                  {metodo.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {metodosPagamento.length === 2 && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Opção Boleto Faturado não disponível para sua conta
+                            </p>
+                          )}
+                        </div>
+                      )}
 
-                      <Button
-                        onClick={() => finalizarCompraPorFornecedor(grupo.fornecedor_id)}
-                        disabled={
-                          finalizando[grupo.fornecedor_id] ||
-                          replicarModalOpen ||
-                          !atingiuMinimo ||
-                          !metodoPagamento[grupo.fornecedor_id] ||
-                          enderecoIncompleto ||
-                          user?.bloqueado
-                        }
-                        title={user?.bloqueado ? 'Sua conta está bloqueada. Regularize seus pagamentos.' : ''}
-                        className="w-full h-12 sm:h-14 bg-green-600 hover:bg-green-700 text-base sm:text-lg font-semibold"
-                      >
-                        {finalizando[grupo.fornecedor_id] ? (
-                          <>Processando...</>
-                        ) : (
-                          <>
-                            Finalizar Pedido - {fornecedor?.nome_marca}
-                            <ArrowRight className="w-5 h-5 ml-2" />
-                          </>
-                        )}
-                      </Button>
+                      {(hasNoLojas || selectedCount === 1) && (
+                        <div>
+                          <Label className="mb-2 block">Observações (Opcional)</Label>
+                          <Textarea
+                            value={observacoes[grupo.fornecedor_id] || ''}
+                            onChange={(e) => setObservacoes(prev => ({ ...prev, [grupo.fornecedor_id]: e.target.value }))}
+                            placeholder="Adicione observações sobre seu pedido..."
+                            rows={3}
+                          />
+                        </div>
+                      )}
 
-                      {hasMultipleLojas && lojaSelecionada && (
+                      {/* Botão: 0 lojas selecionadas ou sem lojas → Finalizar direto */}
+                      {(hasNoLojas || selectedCount === 1) && (
                         <Button
-                          variant="outline"
-                          onClick={() => abrirReplicarModal(grupo)}
-                          disabled={finalizando[grupo.fornecedor_id] || user?.bloqueado}
-                          className="w-full h-10 border-blue-300 text-blue-700 hover:bg-blue-50"
+                          onClick={() => finalizarCompraPorFornecedor(grupo.fornecedor_id)}
+                          disabled={
+                            finalizando[grupo.fornecedor_id] ||
+                            replicarModalOpen ||
+                            !atingiuMinimo ||
+                            !metodoPagamento[grupo.fornecedor_id] ||
+                            enderecoIncompleto ||
+                            user?.bloqueado
+                          }
+                          title={user?.bloqueado ? 'Sua conta está bloqueada.' : ''}
+                          className="w-full h-12 sm:h-14 bg-green-600 hover:bg-green-700 text-base sm:text-lg font-semibold"
                         >
-                          <Copy className="w-4 h-4 mr-2" />
-                          Replicar para Outras Lojas
+                          {finalizando[grupo.fornecedor_id] ? (
+                            <>Processando...</>
+                          ) : (
+                            <>
+                              Finalizar Pedido{singleSelectedLoja ? ` - ${singleSelectedLoja.nome_fantasia || singleSelectedLoja.nome}` : ''}
+                              <ArrowRight className="w-5 h-5 ml-2" />
+                            </>
+                          )}
+                        </Button>
+                      )}
+
+                      {/* Botão: 2+ lojas → Abrir validador multi-loja */}
+                      {!hasNoLojas && selectedCount >= 2 && (
+                        <Button
+                          onClick={() => abrirMultiLojaModal(grupo, selectedLojas)}
+                          disabled={finalizando[grupo.fornecedor_id] || !atingiuMinimo || user?.bloqueado}
+                          className="w-full h-12 sm:h-14 bg-green-600 hover:bg-green-700 text-base sm:text-lg font-semibold"
+                        >
+                          Finalizar para {selectedCount} Lojas
+                          <ArrowRight className="w-5 h-5 ml-2" />
+                        </Button>
+                      )}
+
+                      {/* Sem seleção e tem lojas */}
+                      {!hasNoLojas && selectedCount === 0 && (
+                        <Button
+                          disabled
+                          className="w-full h-12 sm:h-14 bg-gray-400 text-base sm:text-lg font-semibold cursor-not-allowed"
+                        >
+                          Selecione uma loja para finalizar
                         </Button>
                       )}
 
@@ -1128,7 +1212,7 @@ export default function Carrinho() {
           onOpenChange={setReplicarModalOpen}
           grupo={replicarGrupo}
           lojas={lojas}
-          lojaSelecionada={lojaSelecionada}
+          preSelectedLojaIds={replicarPreSelectedIds}
           fornecedores={fornecedores}
           criarPedidoParaLoja={criarPedidoParaLoja}
           getMetodosPagamentoDisponiveis={getMetodosPagamentoDisponiveis}

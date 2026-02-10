@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import {
   Package, MapPin, DollarSign, Calendar, FileText,
   Download, CheckCircle, Clock, Truck, User, Building,
-  Phone, Mail, CreditCard, Upload, AlertTriangle
+  Phone, Mail, CreditCard, Upload, AlertTriangle, Pencil, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { Pedido } from '@/api/entities';
 import { Carteira } from '@/api/entities';
@@ -43,6 +43,15 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   const [comprovanteParcelaFile, setComprovanteParcelaFile] = useState(null);
   const [dataPagamentoParcela, setDataPagamentoParcela] = useState('');
   const [uploadingParcela, setUploadingParcela] = useState(false);
+
+  // Toggle para formulários de atualização na aba Documentos
+  const [showEditBoleto, setShowEditBoleto] = useState(false);
+  const [showEditNF, setShowEditNF] = useState(false);
+
+  // Modal para confirmar data de pagamento ao marcar parcela como "Pago" manualmente
+  const [showConfirmarPagoModal, setShowConfirmarPagoModal] = useState(false);
+  const [parcelaParaMarcarPago, setParcelaParaMarcarPago] = useState(null);
+  const [dataPagamentoManual, setDataPagamentoManual] = useState('');
 
   // Estados para aprovação/recusa de comprovante por parcela
   const [showAprovacaoParcelaModal, setShowAprovacaoParcelaModal] = useState(false);
@@ -170,13 +179,30 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     setParcelasBoletoConfig(novas);
   };
 
-  // Upload de Boleto
+  // Verificações de parcelas pagas para controle de edição do boleto
+  const todasParcelasPagas = parcelas.length > 0 && parcelas.every(p => p.status === 'pago');
+  const temParcelaPaga = parcelas.some(p => p.status === 'pago');
+
+  // Abrir edição do boleto com dados pré-preenchidos das parcelas existentes
+  const handleOpenEditBoleto = () => {
+    if (parcelas.length > 0) {
+      setQtdParcelasBoleto(parcelas.length);
+      setParcelasBoletoConfig(parcelas.map(p => ({
+        dataVencimento: p.data_vencimento || '',
+        parcelaId: p.id,
+        isPago: p.status === 'pago'
+      })));
+    }
+    setBoletoFile(null);
+    setShowEditBoleto(true);
+  };
+
+  // Upload de Boleto (primeiro envio - cria parcelas)
   const handleUploadBoleto = async () => {
     if (!boletoFile) {
       toast.info('Selecione o arquivo do boleto');
       return;
     }
-    // Validar datas de vencimento se houver parcelas configuradas
     const temParcelasConfiguradas = parcelasBoletoConfig.some(p => p.dataVencimento);
     if (temParcelasConfiguradas && parcelasBoletoConfig.some(p => !p.dataVencimento)) {
       toast.info('Preencha todas as datas de vencimento das parcelas');
@@ -190,16 +216,13 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
         boleto_data_upload: new Date().toISOString()
       });
 
-      // Criar/atualizar parcelas na Carteira se datas de vencimento foram preenchidas
       if (temParcelasConfiguradas) {
-        // Remover parcelas antigas deste pedido
         const parcelasAntigas = await Carteira.filter({ pedido_id: pedido.id });
         const parcelasReaisAntigas = (parcelasAntigas || []).filter(t => t.parcela_numero);
         for (const p of parcelasReaisAntigas) {
           await Carteira.delete(p.id);
         }
 
-        // Criar novas parcelas
         const valorBase = pedido.valor_final || pedido.valor_total || 0;
         const valorParcela = valorBase / qtdParcelasBoleto;
         for (let i = 0; i < qtdParcelasBoleto; i++) {
@@ -229,6 +252,46 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       onUpdate();
     } catch (_error) {
       toast.error('Erro ao enviar boleto');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Editar boleto existente (atualiza arquivo e/ou datas de parcelas não pagas)
+  const handleEditBoleto = async () => {
+    const parcelasEditaveis = parcelasBoletoConfig.filter(p => !p.isPago);
+    if (parcelasEditaveis.some(p => !p.dataVencimento)) {
+      toast.info('Preencha todas as datas de vencimento das parcelas pendentes');
+      return;
+    }
+    setUploading(true);
+    try {
+      let novaUrl = pedido.boleto_url;
+      if (boletoFile) {
+        const result = await UploadFile({ file: boletoFile });
+        novaUrl = result.file_url;
+        await Pedido.update(pedido.id, {
+          boleto_url: novaUrl,
+          boleto_data_upload: new Date().toISOString()
+        });
+      }
+
+      // Atualizar apenas parcelas não pagas (editar in-place)
+      for (const config of parcelasBoletoConfig) {
+        if (config.isPago || !config.parcelaId) continue;
+        await Carteira.update(config.parcelaId, {
+          data_vencimento: config.dataVencimento,
+          boleto_url: novaUrl
+        });
+      }
+
+      toast.success('Boleto atualizado com sucesso!');
+      setBoletoFile(null);
+      setShowEditBoleto(false);
+      await reloadParcelas();
+      onUpdate();
+    } catch (_error) {
+      toast.error('Erro ao atualizar boleto');
     } finally {
       setUploading(false);
     }
@@ -450,12 +513,12 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   };
 
   // Alterar status de uma parcela individual
-  const handleAlterarStatusParcela = async (parcela, novoStatus) => {
+  const handleAlterarStatusParcela = async (parcela, novoStatus, dataPagamento = null) => {
     try {
       const updateData = { status: novoStatus };
 
       if (novoStatus === 'pago') {
-        updateData.data_pagamento = new Date().toISOString().split('T')[0];
+        updateData.data_pagamento = dataPagamento || new Date().toISOString().split('T')[0];
       }
 
       if (novoStatus === 'pendente') {
@@ -482,7 +545,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
         const parcelasReais = titulosDoPedido.filter(t => t.parcela_numero);
         const todosPagos = parcelasReais.every(t => t.status === 'pago' || (t.id === parcela.id && novoStatus === 'pago'));
         if (todosPagos && pedido.status_pagamento !== 'pago') {
-          await Pedido.update(pedido.id, { status_pagamento: 'pago', data_pagamento: new Date().toISOString().split('T')[0] });
+          await Pedido.update(pedido.id, { status_pagamento: 'pago', data_pagamento: dataPagamento || new Date().toISOString().split('T')[0] });
         } else if (!todosPagos && pedido.status_pagamento === 'pago') {
           await Pedido.update(pedido.id, { status_pagamento: 'pendente' });
         }
@@ -882,10 +945,23 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                     <Truck className="w-5 h-5 text-orange-600" />
                     <h4 className="font-semibold">Informações de Transporte:</h4>
                   </div>
-                  <p className="text-gray-700">Transportadora: <strong>{pedido.transportadora}</strong></p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                    <p className="text-gray-700">Transportadora: <strong>{pedido.transportadora}</strong></p>
+                    {pedido.data_envio_real && (
+                      <p className="text-gray-700">Data de Envio: <strong>{new Date(pedido.data_envio_real + 'T12:00:00').toLocaleDateString('pt-BR')}</strong></p>
+                    )}
+                    {pedido.tipo_frete && (
+                      <p className="text-gray-700">Tipo de Frete: <strong>{pedido.tipo_frete === 'FOB' ? 'FOB (cliente)' : 'CIF (fornecedor)'}</strong></p>
+                    )}
+                    {pedido.tipo_frete === 'FOB' && pedido.valor_frete_fob > 0 && (
+                      <p className="text-gray-700">Valor do Frete: <strong>R$ {Number(pedido.valor_frete_fob).toFixed(2).replace('.', ',')}</strong>
+                        {pedido.frete_incluso_boleto && <span className="text-xs text-blue-600 ml-1">(incluso no boleto)</span>}
+                      </p>
+                    )}
+                  </div>
                   {pedido.codigo_rastreio && (
                     <div className="mt-2">
-                      <p className="text-gray-700">Código de Rastreio: <strong>{pedido.codigo_rastreio}</strong></p>
+                      <p className="text-gray-700 text-sm">Código de Rastreio: <strong>{pedido.codigo_rastreio}</strong></p>
                       {pedido.link_rastreio ? (
                         <Button
                           variant="outline"
@@ -1143,7 +1219,15 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                               {!isCliente && (
                                 <Select
                                   value={parcela.status || 'pendente'}
-                                  onValueChange={(value) => handleAlterarStatusParcela(parcela, value)}
+                                  onValueChange={(value) => {
+                                    if (value === 'pago') {
+                                      setParcelaParaMarcarPago(parcela);
+                                      setDataPagamentoManual(new Date().toISOString().split('T')[0]);
+                                      setShowConfirmarPagoModal(true);
+                                    } else {
+                                      handleAlterarStatusParcela(parcela, value);
+                                    }
+                                  }}
                                 >
                                   <SelectTrigger className="w-[160px] h-8 text-xs">
                                     <SelectValue placeholder="Status" />
@@ -1334,70 +1418,99 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       )}
                     </div>
                   </div>
-                  {/* Permitir atualizar o boleto se for fornecedor/admin */}
-                  {canUpload && (
+                  {/* Permitir atualizar o boleto se for fornecedor/admin e nem todas parcelas pagas */}
+                  {canUpload && !showEditBoleto && !todasParcelasPagas && (
+                    <div className="mt-4 pt-4 border-t border-blue-200">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleOpenEditBoleto}
+                        className="w-full text-blue-700 border-blue-300 hover:bg-blue-100"
+                      >
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Atualizar Boleto
+                      </Button>
+                    </div>
+                  )}
+                  {canUpload && todasParcelasPagas && (
+                    <div className="mt-4 pt-4 border-t border-blue-200">
+                      <Badge className="bg-green-100 text-green-800">
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        Todas as parcelas pagas - boleto não editável
+                      </Badge>
+                    </div>
+                  )}
+                  {canUpload && showEditBoleto && (
                     <div className="mt-4 pt-4 border-t border-blue-200 space-y-3">
-                      <p className="text-sm font-semibold text-blue-800">Atualizar Boleto:</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-blue-800">Editar Boleto:</p>
+                        <Button variant="ghost" size="sm" onClick={() => setShowEditBoleto(false)} className="text-xs text-gray-500">
+                          <ChevronUp className="w-4 h-4 mr-1" /> Fechar
+                        </Button>
+                      </div>
 
-                      {/* Configuração de Parcelas */}
+                      {/* Parcelas existentes */}
                       <div className="bg-blue-100/50 p-3 rounded-lg space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Label className="text-xs">Quantidade de Parcelas</Label>
-                            <Select value={String(qtdParcelasBoleto)} onValueChange={handleQtdParcelasBoletoChange}>
-                              <SelectTrigger className="h-9">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
-                                  <SelectItem key={n} value={String(n)}>{n}x</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                        <div className="flex items-end justify-between">
+                          <div className="text-xs text-blue-800">
+                            <p><strong>{qtdParcelasBoleto} parcela(s)</strong></p>
+                            <p><strong>Valor total:</strong> {formatCurrency(pedido.valor_final || pedido.valor_total)}</p>
                           </div>
-                          <div className="flex items-end">
-                            <div className="text-xs text-blue-800">
-                              <p><strong>Valor total:</strong> {formatCurrency(pedido.valor_final || pedido.valor_total)}</p>
-                              <p><strong>Por parcela:</strong> {formatCurrency((pedido.valor_final || pedido.valor_total) / qtdParcelasBoleto)}</p>
-                            </div>
-                          </div>
+                          {temParcelaPaga && (
+                            <Badge className="bg-amber-100 text-amber-800 text-xs">
+                              <AlertTriangle className="w-3 h-3 mr-1" />
+                              Parcelas pagas não editáveis
+                            </Badge>
+                          )}
                         </div>
 
                         {/* Datas de vencimento */}
                         <div className="space-y-2">
                           <Label className="text-xs">Datas de Vencimento</Label>
                           {parcelasBoletoConfig.map((parcela, index) => (
-                            <div key={index} className="flex items-center gap-2 bg-white p-2 rounded border border-blue-200">
+                            <div key={index} className={`flex items-center gap-2 p-2 rounded border ${parcela.isPago ? 'bg-green-50 border-green-200' : 'bg-white border-blue-200'}`}>
                               <Badge variant="outline" className="text-xs shrink-0">{index + 1}/{qtdParcelasBoleto}</Badge>
-                              <span className="text-xs text-gray-500 shrink-0">{formatCurrency((pedido.valor_final || pedido.valor_total) / qtdParcelasBoleto)}</span>
-                              <Input
-                                type="date"
-                                value={parcela.dataVencimento}
-                                onChange={(e) => handleParcelaBoletoDataChange(index, e.target.value)}
-                                className="h-8 text-sm"
-                              />
+                              <span className="text-xs text-gray-500 shrink-0">{formatCurrency(parcelas[index]?.valor || (pedido.valor_final || pedido.valor_total) / qtdParcelasBoleto)}</span>
+                              {parcela.isPago ? (
+                                <>
+                                  <span className="text-sm text-gray-600 flex-1">
+                                    {parcela.dataVencimento ? new Date(parcela.dataVencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}
+                                  </span>
+                                  <Badge className="bg-green-100 text-green-800 text-xs shrink-0">
+                                    <CheckCircle className="w-3 h-3 mr-1" />
+                                    Pago
+                                  </Badge>
+                                </>
+                              ) : (
+                                <Input
+                                  type="date"
+                                  value={parcela.dataVencimento}
+                                  onChange={(e) => handleParcelaBoletoDataChange(index, e.target.value)}
+                                  className="h-8 text-sm"
+                                />
+                              )}
                             </div>
                           ))}
                         </div>
                       </div>
 
                       <div>
-                        <Label className="text-xs">Arquivo do Boleto</Label>
+                        <Label className="text-xs">Novo arquivo do boleto (opcional)</Label>
                         <Input
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png,.crm"
                           onChange={(e) => setBoletoFile(e.target.files[0])}
                         />
-                        <p className="text-xs text-gray-500 mt-1"><strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM</p>
+                        <p className="text-xs text-gray-500 mt-1">Deixe em branco para manter o arquivo atual</p>
                       </div>
                       <Button
-                        onClick={handleUploadBoleto}
-                        disabled={uploading || !boletoFile}
+                        onClick={handleEditBoleto}
+                        disabled={uploading}
                         size="sm"
                         className="w-full bg-blue-600 hover:bg-blue-700"
                       >
-                        <Upload className="w-4 h-4 mr-2" />
-                        {uploading ? 'Enviando...' : 'Atualizar Boleto'}
+                        <Pencil className="w-4 h-4 mr-2" />
+                        {uploading ? 'Salvando...' : 'Salvar Alterações'}
                       </Button>
                     </div>
                   )}
@@ -1522,9 +1635,27 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                     </div>
                   </div>
                   {/* Permitir atualizar a NF se for fornecedor/admin */}
-                  {canUpload && (
+                  {canUpload && !showEditNF && (
+                    <div className="mt-4 pt-4 border-t border-green-200">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowEditNF(true)}
+                        className="w-full text-green-700 border-green-300 hover:bg-green-100"
+                      >
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Atualizar Nota Fiscal
+                      </Button>
+                    </div>
+                  )}
+                  {canUpload && showEditNF && (
                     <div className="mt-4 pt-4 border-t border-green-200 space-y-3">
-                      <p className="text-sm font-semibold text-green-800">Atualizar Nota Fiscal:</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-green-800">Atualizar Nota Fiscal:</p>
+                        <Button variant="ghost" size="sm" onClick={() => setShowEditNF(false)} className="text-xs text-gray-500">
+                          <ChevronUp className="w-4 h-4 mr-1" /> Fechar
+                        </Button>
+                      </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <Label className="text-xs" htmlFor="nfNumeroUpdate">Número da NF *</Label>
@@ -1854,6 +1985,64 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                 </Button>
                 <Button onClick={handleRecusarParcela} disabled={!motivoRecusa.trim() || processandoAprovacao} variant="destructive">
                   {processandoAprovacao ? 'Processando...' : 'Confirmar Recusa'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+      {/* Modal: Confirmar data de pagamento ao marcar parcela como Pago */}
+      {showConfirmarPagoModal && parcelaParaMarcarPago && (
+        <Dialog open={showConfirmarPagoModal} onOpenChange={(open) => {
+          if (!open) {
+            setShowConfirmarPagoModal(false);
+            setParcelaParaMarcarPago(null);
+          }
+        }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+                Confirmar Pagamento
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="bg-green-50 p-3 rounded-lg text-sm">
+                <p className="text-gray-700">
+                  Parcela {parcelaParaMarcarPago.parcela_numero}/{parcelaParaMarcarPago.total_parcelas} -
+                  <strong> {formatCurrency(parcelaParaMarcarPago.valor)}</strong>
+                </p>
+                {parcelaParaMarcarPago.data_vencimento && (
+                  <p className="text-gray-500 text-xs mt-1">
+                    Vencimento: {new Date(parcelaParaMarcarPago.data_vencimento + 'T12:00:00').toLocaleDateString('pt-BR')}
+                  </p>
+                )}
+              </div>
+              <div>
+                <Label htmlFor="dataPagamentoManual">Data do Pagamento *</Label>
+                <Input
+                  id="dataPagamentoManual"
+                  type="date"
+                  value={dataPagamentoManual}
+                  onChange={(e) => setDataPagamentoManual(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="outline" onClick={() => { setShowConfirmarPagoModal(false); setParcelaParaMarcarPago(null); }}>
+                  Cancelar
+                </Button>
+                <Button
+                  disabled={!dataPagamentoManual}
+                  className="bg-green-600 hover:bg-green-700"
+                  onClick={async () => {
+                    await handleAlterarStatusParcela(parcelaParaMarcarPago, 'pago', dataPagamentoManual);
+                    setShowConfirmarPagoModal(false);
+                    setParcelaParaMarcarPago(null);
+                  }}
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Confirmar Pagamento
                 </Button>
               </div>
             </div>

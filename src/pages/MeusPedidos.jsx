@@ -384,6 +384,7 @@ export default function MeusPedidos() {
         numero_pedido: `#${pedido.id.slice(-8).toUpperCase()}`,
         fornecedor: getFornecedorNome(pedido.fornecedor_id),
         data_pedido: formatDate(pedido.created_date),
+        data_faturamento: pedido.nf_data_upload ? formatDate(pedido.nf_data_upload) : '-',
         status: statusInfo.label,
         status_pagamento: paymentInfo.label,
         quantidade_itens: totalItens,
@@ -394,7 +395,8 @@ export default function MeusPedidos() {
     const columns = [
       { key: 'numero_pedido', label: 'Nº Pedido' },
       { key: 'fornecedor', label: 'Fornecedor' },
-      { key: 'data_pedido', label: 'Data' },
+      { key: 'data_pedido', label: 'Data Pedido' },
+      { key: 'data_faturamento', label: 'Faturamento' },
       { key: 'status', label: 'Status' },
       { key: 'status_pagamento', label: 'Pagamento' },
       { key: 'quantidade_itens', label: 'Qtd.' },

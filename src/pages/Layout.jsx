@@ -323,14 +323,14 @@ export default function Layout({ children, currentPageName }) {
       </div>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex w-64 bg-slate-100 flex-col p-4">
-        <div className="h-16 flex items-center justify-center font-bold text-2xl text-blue-600 mb-4">
+      <aside className="hidden lg:flex w-64 bg-slate-100 flex-col p-4 sticky top-0 h-screen">
+        <div className="h-16 flex items-center justify-center font-bold text-2xl text-blue-600 mb-4 flex-shrink-0">
           POLO B2B
         </div>
-        <nav className="flex-1 space-y-1 overflow-y-auto">
+        <nav className="flex-1 space-y-1 overflow-y-auto min-h-0">
           <NavLinks />
         </nav>
-        <div className="p-4">
+        <div className="pt-4 flex-shrink-0">
           <Button onClick={handleLogout} variant="ghost" className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg">
             <LogOut className="w-5 h-5 mr-3" />
             Sair

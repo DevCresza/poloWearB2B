@@ -204,44 +204,55 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
           }
         }
 
-        // Notificação de NF e Boleto disponíveis - solicitar confirmação de recebimento
+        // Notificação de NF e Boleto disponíveis/atualizados
+        // ID inclui data de upload para que re-uploads gerem novas notificações
         try {
           const pedidosCliente = await Pedido.filter({ comprador_user_id: userId }, '-updated_at', 20);
           const seteDiasAtrasDoc = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
 
           pedidosCliente.forEach(pedido => {
-            const dataAtualizacao = new Date(pedido.updated_at || pedido.created_date);
-            if (dataAtualizacao < seteDiasAtrasDoc) return;
             const idPedido = pedido.id.slice(-8).toUpperCase();
 
-            // NF disponível mas não confirmada
-            if (pedido.nf_url && !pedido.cliente_confirmou_nf) {
-              notificacoesAuto.push({
-                id: `nf-disponivel-${pedido.id}`,
-                tipo: 'aviso',
-                titulo: 'Nota Fiscal Disponível',
-                mensagem: `A NF do pedido #${idPedido} foi emitida. Confirme o recebimento.`,
-                icone: 'dinheiro',
-                lida: false,
-                data: pedido.nf_data_upload || pedido.updated_at,
-                link: '/MeusPedidos',
-                autogerada: true
-              });
+            // NF disponível ou atualizada
+            if (pedido.nf_url && pedido.nf_data_upload) {
+              const nfUploadDate = new Date(pedido.nf_data_upload);
+              if (nfUploadDate >= seteDiasAtrasDoc) {
+                const uploadKey = pedido.nf_data_upload.slice(0, 16); // YYYY-MM-DDTHH:MM
+                notificacoesAuto.push({
+                  id: `nf-disponivel-${pedido.id}-${uploadKey}`,
+                  tipo: 'aviso',
+                  titulo: pedido.cliente_confirmou_nf ? 'Nota Fiscal Atualizada' : 'Nota Fiscal Disponível',
+                  mensagem: pedido.cliente_confirmou_nf
+                    ? `A NF do pedido #${idPedido} foi atualizada pelo fornecedor.`
+                    : `A NF do pedido #${idPedido} foi emitida. Confirme o recebimento.`,
+                  icone: 'dinheiro',
+                  lida: false,
+                  data: pedido.nf_data_upload,
+                  link: '/MeusPedidos',
+                  autogerada: true
+                });
+              }
             }
 
-            // Boleto disponível mas não confirmado
-            if (pedido.boleto_url && !pedido.cliente_confirmou_boleto) {
-              notificacoesAuto.push({
-                id: `boleto-disponivel-${pedido.id}`,
-                tipo: 'aviso',
-                titulo: 'Boleto Disponível',
-                mensagem: `O boleto do pedido #${idPedido} foi emitido. Confirme o recebimento.`,
-                icone: 'dinheiro',
-                lida: false,
-                data: pedido.boleto_data_upload || pedido.updated_at,
-                link: '/MeusPedidos',
-                autogerada: true
-              });
+            // Boleto disponível ou atualizado
+            if (pedido.boleto_url && pedido.boleto_data_upload) {
+              const boletoUploadDate = new Date(pedido.boleto_data_upload);
+              if (boletoUploadDate >= seteDiasAtrasDoc) {
+                const uploadKey = pedido.boleto_data_upload.slice(0, 16);
+                notificacoesAuto.push({
+                  id: `boleto-disponivel-${pedido.id}-${uploadKey}`,
+                  tipo: 'aviso',
+                  titulo: pedido.cliente_confirmou_boleto ? 'Boleto Atualizado' : 'Boleto Disponível',
+                  mensagem: pedido.cliente_confirmou_boleto
+                    ? `O boleto do pedido #${idPedido} foi atualizado pelo fornecedor.`
+                    : `O boleto do pedido #${idPedido} foi emitido. Confirme o recebimento.`,
+                  icone: 'dinheiro',
+                  lida: false,
+                  data: pedido.boleto_data_upload,
+                  link: '/MeusPedidos',
+                  autogerada: true
+                });
+              }
             }
           });
         } catch (e) {
@@ -416,23 +427,26 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
         }
       }
 
-      // Para admin e fornecedor: verificar comprovantes pendentes de análise
+      // Para admin e fornecedor: verificar comprovantes pendentes de análise (individual por título)
       if (userRole === 'admin' || userTipoNegocio === 'fornecedor') {
         try {
-          const comprovantesPendentes = await Carteira.filter({ status: 'em_analise' }, '-created_at', 10);
-          if (comprovantesPendentes.length > 0) {
+          const comprovantesPendentes = await Carteira.filter({ status: 'em_analise' }, '-created_at', 15);
+          comprovantesPendentes.forEach(titulo => {
+            const uploadKey = titulo.comprovante_data_upload ? titulo.comprovante_data_upload.slice(0, 16) : '';
+            const valorStr = titulo.valor ? `R$ ${titulo.valor.toFixed(2)}` : '';
+            const pedidoRef = titulo.pedido_id ? `#${titulo.pedido_id.slice(-8).toUpperCase()}` : '';
             notificacoesAuto.push({
-              id: `comprovantes-pendentes`,
+              id: `comprovante-recebido-${titulo.id}-${uploadKey}`,
               tipo: 'aviso',
-              titulo: 'Comprovantes Recebidos',
-              mensagem: `${comprovantesPendentes.length} comprovante(s) enviado(s) por clientes aguardando análise`,
+              titulo: 'Comprovante de Pagamento Recebido',
+              mensagem: `Cliente enviou comprovante${pedidoRef ? ` do pedido ${pedidoRef}` : ''}${valorStr ? ` (${valorStr})` : ''}. Aguardando análise.`,
               icone: 'dinheiro',
               lida: false,
-              data: comprovantesPendentes[0]?.created_at || new Date().toISOString(),
+              data: titulo.comprovante_data_upload || titulo.updated_at || new Date().toISOString(),
               link: '/CarteiraFinanceira',
               autogerada: true
             });
-          }
+          });
         } catch (e) {
           // Ignora erro
         }

@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Search, Users, Plus, Edit, UserCheck, MessageSquare, Trash2, Store } from 'lucide-react';
 import ClientForm from '../components/admin/ClientForm';
+import AdminLojaManager from '../components/admin/AdminLojaManager';
 import WhatsappModal from '../components/crm/WhatsappModal';
 import { toast } from 'sonner';
 import { Loja } from '@/api/entities';
@@ -24,6 +25,8 @@ export default function GestaoClientes() {
   const [filterTipoNegocio, setFilterTipoNegocio] = useState('all');
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [showWhatsappModal, setShowWhatsappModal] = useState(false);
+  const [lojaManagerUser, setLojaManagerUser] = useState(null);
+  const [lojasBloqueadasMap, setLojasBloqueadasMap] = useState({});
 
   useEffect(() => {
     loadUsers();
@@ -62,12 +65,17 @@ export default function GestaoClientes() {
 
       // Build count map: user_id → number of lojas
       const countMap = {};
+      const bloqueadasMap = {};
       (lojasList || []).forEach(l => {
         if (l.user_id) {
           countMap[l.user_id] = (countMap[l.user_id] || 0) + 1;
+          if (l.bloqueada) {
+            bloqueadasMap[l.user_id] = (bloqueadasMap[l.user_id] || 0) + 1;
+          }
         }
       });
       setLojasCountMap(countMap);
+      setLojasBloqueadasMap(bloqueadasMap);
     } catch (_error) {
     } finally {
       setLoading(false);
@@ -216,18 +224,29 @@ export default function GestaoClientes() {
                       </TableCell>
                       <TableCell><Badge className={getTipoNegocioColor(user.tipo_negocio)}>{user.tipo_negocio}</Badge></TableCell>
                       <TableCell>
-                        {lojasCountMap[user.id] ? (
-                          <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                            <Store className="w-3 h-3 mr-1" />
-                            {lojasCountMap[user.id]} {lojasCountMap[user.id] === 1 ? 'loja' : 'lojas'}
-                          </Badge>
-                        ) : (
-                          <span className="text-sm text-gray-400">-</span>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {lojasCountMap[user.id] ? (
+                            <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                              <Store className="w-3 h-3 mr-1" />
+                              {lojasCountMap[user.id]} {lojasCountMap[user.id] === 1 ? 'loja' : 'lojas'}
+                            </Badge>
+                          ) : (
+                            <span className="text-sm text-gray-400">-</span>
+                          )}
+                          {lojasBloqueadasMap[user.id] > 0 && (
+                            <Badge className="bg-red-100 text-red-700 text-[10px]">
+                              {lojasBloqueadasMap[user.id]} bloq.
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell><div className="text-sm">{user.cidade && user.estado ? `${user.cidade}/${user.estado}` : '-'}</div></TableCell>
                       <TableCell>
                         <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => setLojaManagerUser(user)} title="Gerenciar Lojas">
+                            <Store className="w-4 h-4 mr-1" />
+                            Lojas
+                          </Button>
                           <Button variant="outline" size="sm" onClick={() => handleEdit(user)}>
                             <Edit className="w-4 h-4 mr-1" />
                             Editar
@@ -245,6 +264,16 @@ export default function GestaoClientes() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {lojaManagerUser && (
+        <AdminLojaManager
+          open={!!lojaManagerUser}
+          onOpenChange={(open) => { if (!open) setLojaManagerUser(null); }}
+          userId={lojaManagerUser.id}
+          userName={lojaManagerUser.full_name}
+          onLojasChanged={loadUsers}
+        />
       )}
 
       {showWhatsappModal && (

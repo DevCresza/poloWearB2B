@@ -14,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/utils/exportUtils';
 import {
-  Store, Check, Copy, Minus, Plus, Trash2, AlertTriangle,
+  Store, Check, Minus, Plus, Trash2, AlertTriangle,
   CheckCircle, XCircle, Loader2, CreditCard, ArrowRight, ArrowLeft
 } from 'lucide-react';
 
@@ -59,14 +59,19 @@ export default function ReplicarPedidoModal({
   onOpenChange,
   grupo,
   lojas,
-  lojaSelecionada,
+  preSelectedLojaIds: preSelectedProp,
   fornecedores,
   criarPedidoParaLoja,
   getMetodosPagamentoDisponiveis,
   onSuccess
 }) {
+  const initialIds = () => {
+    if (preSelectedProp && preSelectedProp.length > 0) return new Set(preSelectedProp);
+    return new Set();
+  };
+
   const [step, setStep] = useState(1);
-  const [selectedLojaIds, setSelectedLojaIds] = useState(new Set(lojaSelecionada ? [lojaSelecionada.id] : []));
+  const [selectedLojaIds, setSelectedLojaIds] = useState(initialIds);
   const [pedidosConfig, setPedidosConfig] = useState({});
   const [processando, setProcessando] = useState(false);
   const [resultados, setResultados] = useState([]);
@@ -82,6 +87,11 @@ export default function ReplicarPedidoModal({
     [lojas]
   );
 
+  const lojasDisponiveis = useMemo(() =>
+    outrasLojas.filter(l => !l.bloqueada),
+    [outrasLojas]
+  );
+
   // Reset state when modal opens/closes
   const handleOpenChange = (isOpen) => {
     // Bloquear fechamento durante processamento
@@ -92,7 +102,7 @@ export default function ReplicarPedidoModal({
       const hadSuccess = resultados.some(r => r.success);
 
       setStep(1);
-      setSelectedLojaIds(new Set(lojaSelecionada ? [lojaSelecionada.id] : []));
+      setSelectedLojaIds(initialIds());
       setPedidosConfig({});
       setProcessando(false);
       setResultados([]);
@@ -111,8 +121,9 @@ export default function ReplicarPedidoModal({
 
   // --- STEP 1: Selecionar Lojas ---
   const toggleLoja = (lojaId) => {
-    // Loja atual não pode ser removida
-    if (lojaSelecionada && lojaId === lojaSelecionada.id) return;
+    // Lojas bloqueadas não podem ser selecionadas
+    const loja = outrasLojas.find(l => l.id === lojaId);
+    if (loja?.bloqueada) return;
     setSelectedLojaIds(prev => {
       const next = new Set(prev);
       if (next.has(lojaId)) {
@@ -125,15 +136,14 @@ export default function ReplicarPedidoModal({
   };
 
   const selecionarTodas = () => {
-    setSelectedLojaIds(new Set(outrasLojas.map(l => l.id)));
+    setSelectedLojaIds(new Set(lojasDisponiveis.map(l => l.id)));
   };
 
   const desmarcarTodas = () => {
-    // Manter apenas a loja atual
-    setSelectedLojaIds(new Set(lojaSelecionada ? [lojaSelecionada.id] : []));
+    setSelectedLojaIds(new Set());
   };
 
-  const todasSelecionadas = outrasLojas.every(l => selectedLojaIds.has(l.id));
+  const todasSelecionadas = lojasDisponiveis.length > 0 && lojasDisponiveis.every(l => selectedLojaIds.has(l.id));
 
   const avancarParaStep2 = () => {
     // Inicializar config para cada loja
@@ -287,8 +297,8 @@ export default function ReplicarPedidoModal({
       <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
-            <Copy className="w-5 h-5 text-blue-600" />
-            Replicar Pedido para Múltiplas Lojas
+            <Store className="w-5 h-5 text-blue-600" />
+            Finalizar Pedido para Múltiplas Lojas
           </DialogTitle>
         </DialogHeader>
 
@@ -319,23 +329,25 @@ export default function ReplicarPedidoModal({
 
               <div className="space-y-2">
                 {outrasLojas.map(loja => {
-                  const isAtual = lojaSelecionada && loja.id === lojaSelecionada.id;
                   const isSelected = selectedLojaIds.has(loja.id);
                   const temEndereco = enderecoCompleto(loja);
+                  const isBloqueada = loja.bloqueada === true;
 
                   return (
                     <div
                       key={loja.id}
-                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                        isSelected
-                          ? 'border-blue-300 bg-blue-50'
-                          : 'border-gray-200 hover:bg-gray-50'
-                      } ${isAtual ? 'ring-2 ring-blue-400' : ''}`}
-                      onClick={() => !isAtual && toggleLoja(loja.id)}
+                      className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                        isBloqueada
+                          ? 'border-red-200 bg-red-50 opacity-70 cursor-not-allowed'
+                          : isSelected
+                            ? 'border-blue-300 bg-blue-50 cursor-pointer'
+                            : 'border-gray-200 hover:bg-gray-50 cursor-pointer'
+                      }`}
+                      onClick={() => !isBloqueada && toggleLoja(loja.id)}
                     >
                       <Checkbox
                         checked={isSelected}
-                        disabled={isAtual}
+                        disabled={isBloqueada}
                         className="pointer-events-none"
                       />
                       <Store className="w-4 h-4 text-gray-500 flex-shrink-0" />
@@ -344,8 +356,8 @@ export default function ReplicarPedidoModal({
                           <span className="font-medium text-sm truncate">
                             {loja.nome_fantasia || loja.nome}
                           </span>
-                          {isAtual && (
-                            <Badge className="bg-blue-600 text-white text-[10px] px-1.5 py-0">Loja atual</Badge>
+                          {isBloqueada && (
+                            <Badge className="bg-red-100 text-red-800 text-[10px] px-1.5 py-0">Bloqueada</Badge>
                           )}
                         </div>
                         <p className="text-xs text-gray-500 truncate">
@@ -353,7 +365,7 @@ export default function ReplicarPedidoModal({
                           {loja.cnpj ? ` - CNPJ: ${loja.cnpj}` : ''}
                         </p>
                       </div>
-                      {!temEndereco && (
+                      {!temEndereco && !isBloqueada && (
                         <Badge variant="outline" className="text-yellow-700 border-yellow-300 bg-yellow-50 text-[10px] flex-shrink-0">
                           <AlertTriangle className="w-3 h-3 mr-1" />
                           Sem endereço
@@ -364,11 +376,11 @@ export default function ReplicarPedidoModal({
                 })}
               </div>
 
-              {selectedLojaIds.size < 2 && (
+              {selectedLojaIds.size < 1 && (
                 <Alert className="border-yellow-200 bg-yellow-50">
                   <AlertTriangle className="h-4 w-4 text-yellow-600" />
                   <AlertDescription className="text-yellow-800 text-sm">
-                    Selecione ao menos 2 lojas para replicar o pedido.
+                    Selecione ao menos 1 loja para finalizar o pedido.
                   </AlertDescription>
                 </Alert>
               )}
@@ -387,7 +399,6 @@ export default function ReplicarPedidoModal({
                   const totalLoja = calcularTotalLoja(lojaId);
                   const temEndereco = enderecoCompleto(loja);
                   const abaixoMinimo = valorMinimo > 0 && totalLoja < valorMinimo;
-                  const isAtual = lojaSelecionada && loja.id === lojaSelecionada.id;
 
                   return (
                     <AccordionItem key={lojaId} value={lojaId} className="border rounded-lg px-3">
@@ -395,7 +406,6 @@ export default function ReplicarPedidoModal({
                         <div className="flex items-center gap-2 flex-1 min-w-0 text-left">
                           <Store className="w-4 h-4 text-gray-500 flex-shrink-0" />
                           <span className="font-medium text-sm truncate">{loja.nome_fantasia || loja.nome}</span>
-                          {isAtual && <Badge className="bg-blue-600 text-white text-[10px] px-1.5 py-0">Atual</Badge>}
                           <span className="ml-auto text-sm font-bold text-green-600 flex-shrink-0 mr-2">
                             {formatCurrency(totalLoja)}
                           </span>
@@ -639,7 +649,7 @@ export default function ReplicarPedidoModal({
               <Button variant="outline" onClick={() => handleOpenChange(false)}>Cancelar</Button>
               <Button
                 onClick={avancarParaStep2}
-                disabled={selectedLojaIds.size < 2}
+                disabled={selectedLojaIds.size < 1}
                 className="bg-blue-600 hover:bg-blue-700"
               >
                 Próximo: Validar Pedidos
