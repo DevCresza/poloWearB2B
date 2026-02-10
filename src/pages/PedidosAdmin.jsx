@@ -19,11 +19,14 @@ import PedidoDetailsModal from '../components/pedidos/PedidoDetailsModal';
 import PedidoEditModal from '../components/pedidos/PedidoEditModal';
 import { exportToCSV, exportToPDF, formatCurrency, formatDateTime, formatDate } from '@/utils/exportUtils';
 import MultiSelectFilter from '@/components/MultiSelectFilter';
+import { Loja } from '@/api/entities';
+import { Store } from 'lucide-react';
 
 export default function PedidosAdmin() {
   const [pedidos, setPedidos] = useState([]);
   const [users, setUsers] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
+  const [lojasMap, setLojasMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('kanban'); // 'kanban' ou 'list'
   const [selectedPedido, setSelectedPedido] = useState(null);
@@ -43,14 +46,20 @@ export default function PedidosAdmin() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [pedidosList, usersList, fornecedoresList] = await Promise.all([
-        Pedido.list('-created_date'), 
-        User.list(), 
-        Fornecedor.list()
+      const [pedidosList, usersList, fornecedoresList, lojasList] = await Promise.all([
+        Pedido.list('-created_date'),
+        User.list(),
+        Fornecedor.list(),
+        Loja.list()
       ]);
       setPedidos(pedidosList || []);
       setUsers(usersList || []);
       setFornecedores(fornecedoresList || []);
+
+      // Build lojas map
+      const map = {};
+      (lojasList || []).forEach(l => { map[l.id] = l.nome_fantasia || l.nome; });
+      setLojasMap(map);
     } catch (_error) {
     } finally {
       setLoading(false);
@@ -576,7 +585,15 @@ export default function PedidosAdmin() {
                               <div className="text-sm text-gray-500">{formatDate(pedido.created_date)}</div>
                             </div>
                           </td>
-                          <td className="p-4">{userMap.get(pedido.comprador_user_id) || 'N/A'}</td>
+                          <td className="p-4">
+                            <div>{userMap.get(pedido.comprador_user_id) || 'N/A'}</div>
+                            {pedido.loja_id && lojasMap[pedido.loja_id] && (
+                              <div className="flex items-center gap-1 mt-0.5 text-xs text-blue-600">
+                                <Store className="w-3 h-3" />
+                                {lojasMap[pedido.loja_id]}
+                              </div>
+                            )}
+                          </td>
                           <td className="p-4">{fornecedorMap.get(pedido.fornecedor_id) || 'N/A'}</td>
                           <td className="p-4">
                             <span className="font-semibold text-green-600">

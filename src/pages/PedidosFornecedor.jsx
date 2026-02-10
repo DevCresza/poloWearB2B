@@ -25,13 +25,16 @@ import {
 } from 'lucide-react';
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
 import { formatCurrency, exportToPDF, formatDate } from '@/utils/exportUtils';
+import { Loja } from '@/api/entities';
+import { Store } from 'lucide-react';
 
 export default function PedidosFornecedor() {
   const [user, setUser] = useState(null);
   const [fornecedorAtual, setFornecedorAtual] = useState(null); // Fornecedor do usuário logado
   const [pedidos, setPedidos] = useState([]);
   const [clientes, setClientes] = useState([]);
-  const [fornecedores, setFornecedores] = useState([]); // Added new state for suppliers
+  const [fornecedores, setFornecedores] = useState([]);
+  const [lojasMap, setLojasMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('todos');
@@ -138,8 +141,16 @@ export default function PedidosFornecedor() {
       setPedidos(pedidosList || []);
       setClientes(clientesList || []);
 
-      const fornecedoresList = await Fornecedor.list(); // Fetch all suppliers
+      const [fornecedoresList, lojasList] = await Promise.all([
+        Fornecedor.list(),
+        Loja.list()
+      ]);
       setFornecedores(fornecedoresList);
+
+      // Build lojas map
+      const map = {};
+      (lojasList || []).forEach(l => { map[l.id] = l; });
+      setLojasMap(map);
     } catch (error) {
     } finally {
       setLoading(false);
@@ -1179,6 +1190,13 @@ export default function PedidosFornecedor() {
                       <p className="text-sm text-gray-600 mt-1">
                         Pedido #{pedido.id.slice(-8).toUpperCase()} • {new Date(pedido.created_date).toLocaleDateString('pt-BR')}
                       </p>
+                      {pedido.loja_id && lojasMap[pedido.loja_id] && (
+                        <p className="text-sm text-blue-600 flex items-center gap-1 mt-0.5">
+                          <Store className="w-3 h-3" />
+                          {lojasMap[pedido.loja_id].nome_fantasia || lojasMap[pedido.loja_id].nome}
+                          {lojasMap[pedido.loja_id].cidade ? ` - ${lojasMap[pedido.loja_id].cidade}/${lojasMap[pedido.loja_id].estado || ''}` : ''}
+                        </p>
+                      )}
                       <p className="text-sm text-gray-600">
                         Fornecedor: {fornecedor?.nome_marca || 'Não identificado'}
                       </p>

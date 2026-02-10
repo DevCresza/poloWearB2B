@@ -14,12 +14,16 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import {
   User as UserIcon, Building, MapPin, Phone, Mail, CreditCard,
-  ShoppingBag, Calendar, Edit, Save, X, Shield, Package, DollarSign, Loader2, Camera, Upload
+  ShoppingBag, Calendar, Edit, Save, X, Shield, Package, DollarSign, Loader2, Camera, Upload,
+  Store, Plus, Pencil, Power
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { consultarCep, formatCepForDisplay } from '@/lib/cepHelpers';
 import { uploadAvatar, updateAvatar, getDefaultAvatar } from '@/lib/avatarHelpers';
 import AvatarEditor from '@/components/AvatarEditor';
 import { formatCurrency } from '@/utils/exportUtils';
+import { Loja } from '@/api/entities';
+import { useLojaContext } from '@/contexts/LojaContext';
 
 export default function MeuPerfil() {
   const [user, setUser] = useState(null);
@@ -34,6 +38,18 @@ export default function MeuPerfil() {
   const [showEditor, setShowEditor] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [formData, setFormData] = useState({});
+
+  // Lojas
+  const [lojas, setLojas] = useState([]);
+  const [showLojaModal, setShowLojaModal] = useState(false);
+  const [lojaEditando, setLojaEditando] = useState(null);
+  const [salvandoLoja, setSalvandoLoja] = useState(false);
+  const [buscandoCepLoja, setBuscandoCepLoja] = useState(false);
+  const [lojaFormData, setLojaFormData] = useState({
+    nome: '', nome_fantasia: '', cnpj: '', codigo_cliente: '',
+    endereco_completo: '', cidade: '', estado: '', cep: '', telefone: ''
+  });
+  const lojaCtx = useLojaContext();
 
   useEffect(() => {
     loadData();
@@ -57,9 +73,13 @@ export default function MeuPerfil() {
         cep: currentUser.cep || ''
       });
 
-      if (currentUser.tipo_negocio === 'multimarca') {
-        const pedidosList = await Pedido.filter({ comprador_user_id: currentUser.id });
+      if (currentUser.tipo_negocio === 'multimarca' || currentUser.tipo_negocio === 'franqueado') {
+        const [pedidosList, lojasList] = await Promise.all([
+          Pedido.filter({ comprador_user_id: currentUser.id }),
+          Loja.filter({ user_id: currentUser.id })
+        ]);
         setPedidos(pedidosList || []);
+        setLojas(lojasList || []);
       } else if (currentUser.tipo_negocio === 'fornecedor') {
         // Carregar dados do fornecedor
         let fornecedorData = null;
@@ -189,6 +209,104 @@ export default function MeuPerfil() {
     }
   };
 
+  // ---- Lojas CRUD ----
+  const abrirModalLoja = (loja = null) => {
+    if (loja) {
+      setLojaEditando(loja);
+      setLojaFormData({
+        nome: loja.nome || '',
+        nome_fantasia: loja.nome_fantasia || '',
+        cnpj: loja.cnpj || '',
+        codigo_cliente: loja.codigo_cliente || '',
+        endereco_completo: loja.endereco_completo || '',
+        cidade: loja.cidade || '',
+        estado: loja.estado || '',
+        cep: loja.cep || '',
+        telefone: loja.telefone || ''
+      });
+    } else {
+      setLojaEditando(null);
+      setLojaFormData({
+        nome: '', nome_fantasia: '', cnpj: '', codigo_cliente: '',
+        endereco_completo: '', cidade: '', estado: '', cep: '', telefone: ''
+      });
+    }
+    setShowLojaModal(true);
+  };
+
+  const handleCepLojaChange = async (cep) => {
+    setLojaFormData(prev => ({ ...prev, cep }));
+    const cleanCep = cep.replace(/\D/g, '');
+    if (cleanCep.length === 8) {
+      setBuscandoCepLoja(true);
+      try {
+        const endereco = await consultarCep(cleanCep);
+        setLojaFormData(prev => ({
+          ...prev,
+          cep: formatCepForDisplay(cleanCep),
+          endereco_completo: endereco.endereco_completo,
+          cidade: endereco.cidade,
+          estado: endereco.estado
+        }));
+      } catch (_err) {
+        toast.error('CEP não encontrado.');
+      } finally {
+        setBuscandoCepLoja(false);
+      }
+    }
+  };
+
+  const handleSalvarLoja = async () => {
+    if (!lojaFormData.nome.trim()) {
+      toast.info('Informe o nome/razão social da loja.');
+      return;
+    }
+    setSalvandoLoja(true);
+    try {
+      if (lojaEditando) {
+        await Loja.update(lojaEditando.id, lojaFormData);
+        toast.success('Loja atualizada com sucesso!');
+      } else {
+        await Loja.create({ ...lojaFormData, user_id: user.id, ativa: true });
+        toast.success('Loja cadastrada com sucesso!');
+      }
+      setShowLojaModal(false);
+      // Reload lojas
+      const lojasList = await Loja.filter({ user_id: user.id });
+      setLojas(lojasList || []);
+      if (lojaCtx.loadLojas) lojaCtx.loadLojas();
+    } catch (_err) {
+      toast.error('Erro ao salvar loja.');
+    } finally {
+      setSalvandoLoja(false);
+    }
+  };
+
+  const handleDesativarLoja = async (loja) => {
+    if (!confirm(`Deseja desativar a loja "${loja.nome_fantasia || loja.nome}"?`)) return;
+    try {
+      await Loja.update(loja.id, { ativa: false });
+      toast.success('Loja desativada.');
+      const lojasList = await Loja.filter({ user_id: user.id });
+      setLojas(lojasList || []);
+      if (lojaCtx.loadLojas) lojaCtx.loadLojas();
+    } catch (_err) {
+      toast.error('Erro ao desativar loja.');
+    }
+  };
+
+  const handleReativarLoja = async (loja) => {
+    try {
+      await Loja.update(loja.id, { ativa: true });
+      toast.success('Loja reativada.');
+      const lojasList = await Loja.filter({ user_id: user.id });
+      setLojas(lojasList || []);
+      if (lojaCtx.loadLojas) lojaCtx.loadLojas();
+    } catch (_err) {
+      toast.error('Erro ao reativar loja.');
+    }
+  };
+
   const calcularEstatisticas = () => {
     const totalPedidos = pedidos.length;
     const valorTotal = pedidos.reduce((sum, p) => sum + (p.valor_total || 0), 0);
@@ -209,6 +327,7 @@ export default function MeuPerfil() {
   }
 
   const stats = calcularEstatisticas();
+  const isCliente = user?.tipo_negocio === 'multimarca' || user?.tipo_negocio === 'franqueado';
 
   return (
     <div className="min-h-screen bg-slate-100 p-4 md:p-6 space-y-6">
@@ -452,10 +571,18 @@ export default function MeuPerfil() {
       <Card className="bg-slate-100 rounded-2xl shadow-neumorphic">
         <Tabs defaultValue="pessoal">
           <CardHeader>
-            <TabsList className={`grid w-full ${user.role === 'admin' ? 'grid-cols-3' : 'grid-cols-2'}`}>
+            <TabsList className={`grid w-full ${
+              isCliente ? 'grid-cols-3' : user.role === 'admin' ? 'grid-cols-3' : 'grid-cols-2'
+            }`}>
               <TabsTrigger value="pessoal">Dados Pessoais</TabsTrigger>
               <TabsTrigger value="empresa">Dados da Empresa</TabsTrigger>
-              {user.role === 'admin' && (
+              {isCliente && (
+                <TabsTrigger value="lojas">
+                  <Store className="w-4 h-4 mr-1" />
+                  Minhas Lojas
+                </TabsTrigger>
+              )}
+              {user.role === 'admin' && !isCliente && (
                 <TabsTrigger value="permissoes">Permissões</TabsTrigger>
               )}
             </TabsList>
@@ -609,6 +736,82 @@ export default function MeuPerfil() {
               </div>
             </TabsContent>
 
+            {/* Minhas Lojas - Para clientes */}
+            {isCliente && (
+              <TabsContent value="lojas" className="space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Minhas Lojas</h3>
+                    <p className="text-sm text-gray-500">Gerencie as lojas vinculadas à sua conta</p>
+                  </div>
+                  <Button onClick={() => abrirModalLoja()} className="bg-blue-600 hover:bg-blue-700">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Adicionar Loja
+                  </Button>
+                </div>
+
+                {lojas.length === 0 ? (
+                  <div className="text-center py-12 bg-gray-50 rounded-lg">
+                    <Store className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-600 mb-2">Nenhuma loja cadastrada</p>
+                    <p className="text-sm text-gray-500 mb-4">Cadastre suas lojas para gerenciar pedidos e financeiro por unidade</p>
+                    <Button onClick={() => abrirModalLoja()} variant="outline">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Cadastrar primeira loja
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {lojas.map(loja => (
+                      <Card key={loja.id} className={`${!loja.ativa ? 'opacity-60' : ''}`}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                                <Store className="w-4 h-4 text-blue-600" />
+                                {loja.nome_fantasia || loja.nome}
+                              </h4>
+                              {loja.nome_fantasia && loja.nome !== loja.nome_fantasia && (
+                                <p className="text-xs text-gray-500">{loja.nome}</p>
+                              )}
+                            </div>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => abrirModalLoja(loja)}>
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                              {loja.ativa ? (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700" onClick={() => handleDesativarLoja(loja)}>
+                                  <Power className="w-3.5 h-3.5" />
+                                </Button>
+                              ) : (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500 hover:text-green-700" onClick={() => handleReativarLoja(loja)}>
+                                  <Power className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                          <div className="space-y-1 text-sm text-gray-600">
+                            {loja.cnpj && <p><span className="text-gray-400">CNPJ:</span> {loja.cnpj}</p>}
+                            {loja.codigo_cliente && <p><span className="text-gray-400">Código:</span> {loja.codigo_cliente}</p>}
+                            {(loja.cidade || loja.estado) && (
+                              <p className="flex items-center gap-1">
+                                <MapPin className="w-3 h-3" />
+                                {loja.cidade}{loja.estado ? `/${loja.estado}` : ''}
+                              </p>
+                            )}
+                            {loja.telefone && <p><span className="text-gray-400">Tel:</span> {loja.telefone}</p>}
+                          </div>
+                          {!loja.ativa && (
+                            <Badge className="mt-2 bg-red-100 text-red-800">Desativada</Badge>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+            )}
+
             {/* Permissões - Apenas para Admin */}
             {user.role === 'admin' && (
               <TabsContent value="permissoes" className="space-y-4">
@@ -673,6 +876,66 @@ export default function MeuPerfil() {
           )}
         </CardContent>
       </Card>
+
+      {/* Modal de Loja */}
+      <Dialog open={showLojaModal} onOpenChange={setShowLojaModal}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Store className="w-5 h-5 text-blue-600" />
+              {lojaEditando ? 'Editar Loja' : 'Nova Loja'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <Label>Razão Social *</Label>
+                <Input value={lojaFormData.nome} onChange={(e) => setLojaFormData({...lojaFormData, nome: e.target.value})} className="mt-1" />
+              </div>
+              <div className="md:col-span-2">
+                <Label>Nome Fantasia</Label>
+                <Input value={lojaFormData.nome_fantasia} onChange={(e) => setLojaFormData({...lojaFormData, nome_fantasia: e.target.value})} className="mt-1" />
+              </div>
+              <div>
+                <Label>CNPJ</Label>
+                <Input value={lojaFormData.cnpj} onChange={(e) => setLojaFormData({...lojaFormData, cnpj: e.target.value})} className="mt-1" />
+              </div>
+              <div>
+                <Label>Código do Cliente</Label>
+                <Input value={lojaFormData.codigo_cliente} onChange={(e) => setLojaFormData({...lojaFormData, codigo_cliente: e.target.value})} className="mt-1" />
+              </div>
+              <div>
+                <Label className="flex items-center gap-2">
+                  CEP {buscandoCepLoja && <Loader2 className="w-3 h-3 animate-spin" />}
+                </Label>
+                <Input value={lojaFormData.cep} onChange={(e) => handleCepLojaChange(e.target.value)} maxLength={9} placeholder="00000-000" className="mt-1" />
+              </div>
+              <div>
+                <Label>Telefone</Label>
+                <Input value={lojaFormData.telefone} onChange={(e) => setLojaFormData({...lojaFormData, telefone: e.target.value})} className="mt-1" />
+              </div>
+              <div className="md:col-span-2">
+                <Label>Endereço Completo</Label>
+                <Textarea value={lojaFormData.endereco_completo} onChange={(e) => setLojaFormData({...lojaFormData, endereco_completo: e.target.value})} rows={2} className="mt-1" />
+              </div>
+              <div>
+                <Label>Cidade</Label>
+                <Input value={lojaFormData.cidade} onChange={(e) => setLojaFormData({...lojaFormData, cidade: e.target.value})} className="mt-1" />
+              </div>
+              <div>
+                <Label>Estado</Label>
+                <Input value={lojaFormData.estado} onChange={(e) => setLojaFormData({...lojaFormData, estado: e.target.value})} className="mt-1" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <Button variant="outline" onClick={() => setShowLojaModal(false)}>Cancelar</Button>
+              <Button onClick={handleSalvarLoja} disabled={salvandoLoja} className="bg-blue-600 hover:bg-blue-700">
+                {salvandoLoja ? 'Salvando...' : lojaEditando ? 'Atualizar' : 'Cadastrar'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Editor de Avatar */}
       {selectedImage && (

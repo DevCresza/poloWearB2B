@@ -17,10 +17,13 @@ import {
 import { Pedido } from '@/api/entities';
 import { Carteira } from '@/api/entities';
 import { User as UserEntity } from '@/api/entities';
+import { Loja } from '@/api/entities';
 import { UploadFile, SendEmail } from '@/api/integrations';
 import { formatDateTime, formatCurrency } from '@/utils/exportUtils';
+import { Store } from 'lucide-react';
 
 export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentUser, userMap, fornecedorMap }) {
+  const [lojaInfo, setLojaInfo] = useState(null);
   const [confirmando, setConfirmando] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [boletoFile, setBoletoFile] = useState(null);
@@ -62,6 +65,15 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   const canUpload = !isCliente && (currentUser?.role === 'admin' || currentUser?.tipo_negocio === 'fornecedor');
 
   // Carregar parcelas do pedido
+  // Load loja info if pedido has loja_id
+  useEffect(() => {
+    if (pedido?.loja_id) {
+      Loja.get(pedido.loja_id).then(setLojaInfo).catch(() => setLojaInfo(null));
+    } else {
+      setLojaInfo(null);
+    }
+  }, [pedido?.loja_id]);
+
   useEffect(() => {
     const loadParcelas = async () => {
       if (!pedido?.id) return;
@@ -738,6 +750,22 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
 
             {/* Tab: Entrega */}
             <TabsContent value="entrega" className="space-y-4">
+              {lojaInfo && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Store className="w-5 h-5 text-blue-600" />
+                    <h4 className="font-semibold text-blue-800">Loja de Destino</h4>
+                  </div>
+                  <div className="space-y-1 text-sm text-gray-700">
+                    <p className="font-medium">{lojaInfo.nome_fantasia || lojaInfo.nome}</p>
+                    {lojaInfo.cnpj && <p><strong>CNPJ:</strong> {lojaInfo.cnpj}</p>}
+                    {lojaInfo.codigo_cliente && <p><strong>Código:</strong> {lojaInfo.codigo_cliente}</p>}
+                    {lojaInfo.endereco_completo && <p>{lojaInfo.endereco_completo}</p>}
+                    {(lojaInfo.cidade || lojaInfo.estado) && <p>{lojaInfo.cidade}{lojaInfo.estado ? `/${lojaInfo.estado}` : ''} {lojaInfo.cep ? `- CEP: ${lojaInfo.cep}` : ''}</p>}
+                    {lojaInfo.telefone && <p><strong>Tel:</strong> {lojaInfo.telefone}</p>}
+                  </div>
+                </div>
+              )}
               {pedido.endereco_entrega && (
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-2 mb-3">

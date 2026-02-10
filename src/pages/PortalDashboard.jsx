@@ -16,8 +16,10 @@ import {
 } from 'lucide-react';
 import AlertasVencimento from '../components/AlertasVencimento';
 import { formatCurrency } from '@/utils/exportUtils';
+import { useLojaContext } from '@/contexts/LojaContext';
 
 export default function PortalDashboard() {
+  const { lojaSelecionada, loading: lojasLoading } = useLojaContext();
   const [user, setUser] = useState(null);
   const [pedidos, setPedidos] = useState([]);
   const [produtos, setProdutos] = useState([]);
@@ -35,8 +37,9 @@ export default function PortalDashboard() {
   });
 
   useEffect(() => {
+    if (lojasLoading) return;
     loadData();
-  }, []);
+  }, [lojaSelecionada?.id, lojasLoading]);
 
   const loadData = async () => {
     setLoading(true);
@@ -48,13 +51,19 @@ export default function PortalDashboard() {
       let produtosList = [];
       let carteiraList = [];
 
-      if (currentUser.tipo_negocio === 'multimarca') {
-        // Dashboard do Cliente
-        pedidosList = await Pedido.filter({ comprador_user_id: currentUser.id }, '-created_date', 10);
-        carteiraList = await Carteira.filter({ cliente_user_id: currentUser.id });
-        
+      if (currentUser.tipo_negocio === 'multimarca' || currentUser.tipo_negocio === 'franqueado') {
+        // Dashboard do Cliente - filter by loja if selected
+        const pedidoFilter = { comprador_user_id: currentUser.id };
+        const carteiraFilter = { cliente_user_id: currentUser.id };
+        if (lojaSelecionada) {
+          pedidoFilter.loja_id = lojaSelecionada.id;
+          carteiraFilter.loja_id = lojaSelecionada.id;
+        }
+        pedidosList = await Pedido.filter(pedidoFilter, '-created_date', 10);
+        carteiraList = await Carteira.filter(carteiraFilter);
+
         // Calcular estatísticas
-        const allPedidos = await Pedido.filter({ comprador_user_id: currentUser.id });
+        const allPedidos = await Pedido.filter(pedidoFilter);
         const totalPedidos = allPedidos.length;
         const pedidosPendentes = allPedidos.filter(p => 
           ['novo_pedido', 'em_analise', 'aprovado', 'em_producao'].includes(p.status)

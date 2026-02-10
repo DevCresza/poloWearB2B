@@ -7,13 +7,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Users, Plus, Edit, UserCheck, MessageSquare, Trash2 } from 'lucide-react';
+import { Search, Users, Plus, Edit, UserCheck, MessageSquare, Trash2, Store } from 'lucide-react';
 import ClientForm from '../components/admin/ClientForm';
 import WhatsappModal from '../components/crm/WhatsappModal';
 import { toast } from 'sonner';
+import { Loja } from '@/api/entities';
 
 export default function GestaoClientes() {
   const [users, setUsers] = useState([]);
+  const [lojasCountMap, setLojasCountMap] = useState({});
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -52,8 +54,20 @@ export default function GestaoClientes() {
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const usersList = await User.list();
+      const [usersList, lojasList] = await Promise.all([
+        User.list(),
+        Loja.list()
+      ]);
       setUsers(usersList);
+
+      // Build count map: user_id → number of lojas
+      const countMap = {};
+      (lojasList || []).forEach(l => {
+        if (l.user_id) {
+          countMap[l.user_id] = (countMap[l.user_id] || 0) + 1;
+        }
+      });
+      setLojasCountMap(countMap);
     } catch (_error) {
     } finally {
       setLoading(false);
@@ -177,6 +191,7 @@ export default function GestaoClientes() {
                     <TableHead>Nome / Empresa</TableHead>
                     <TableHead>Contato</TableHead>
                     <TableHead>Tipo</TableHead>
+                    <TableHead>Lojas</TableHead>
                     <TableHead>Local</TableHead>
                     <TableHead>Ações</TableHead>
                   </TableRow>
@@ -200,6 +215,16 @@ export default function GestaoClientes() {
                         </div>
                       </TableCell>
                       <TableCell><Badge className={getTipoNegocioColor(user.tipo_negocio)}>{user.tipo_negocio}</Badge></TableCell>
+                      <TableCell>
+                        {lojasCountMap[user.id] ? (
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                            <Store className="w-3 h-3 mr-1" />
+                            {lojasCountMap[user.id]} {lojasCountMap[user.id] === 1 ? 'loja' : 'lojas'}
+                          </Badge>
+                        ) : (
+                          <span className="text-sm text-gray-400">-</span>
+                        )}
+                      </TableCell>
                       <TableCell><div className="text-sm">{user.cidade && user.estado ? `${user.cidade}/${user.estado}` : '-'}</div></TableCell>
                       <TableCell>
                         <div className="flex gap-2">

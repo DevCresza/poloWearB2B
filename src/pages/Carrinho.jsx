@@ -6,7 +6,6 @@ import { Carteira } from '@/api/entities';
 import { Produto } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
@@ -18,15 +17,18 @@ import { toast } from 'sonner';
 import {
   ShoppingCart, Trash2, Plus, Minus, Package, AlertTriangle,
   CheckCircle, CreditCard, ArrowRight, Building, ArrowLeft,
-  XCircle, DollarSign
+  XCircle, DollarSign, Copy
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { base44 } from '@/api/base44Client';
 import { formatCurrency } from '@/utils/exportUtils';
+import { useLojaContext } from '@/contexts/LojaContext';
+import { Store } from 'lucide-react';
+import ReplicarPedidoModal from '@/components/pedidos/ReplicarPedidoModal';
 
 export default function Carrinho() {
   const navigate = useNavigate();
+  const { lojaSelecionada, lojas, carrinhoKey, hasMultipleLojas, hasNoLojas } = useLojaContext();
   const [user, setUser] = useState(null);
   const [carrinho, setCarrinho] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
@@ -37,11 +39,16 @@ export default function Carrinho() {
   const [observacoes, setObservacoes] = useState({});
   const [showBloqueioModal, setShowBloqueioModal] = useState(false);
   const [dadosInadimplencia, setDadosInadimplencia] = useState(null);
+  const [replicarModalOpen, setReplicarModalOpen] = useState(false);
+  const [replicarGrupo, setReplicarGrupo] = useState(null);
 
   useEffect(() => {
     loadData();
-    loadCarrinho();
   }, []);
+
+  useEffect(() => {
+    loadCarrinho();
+  }, [carrinhoKey]);
 
   const loadData = async () => {
     setLoading(true);
@@ -100,15 +107,17 @@ export default function Carrinho() {
   };
 
   const loadCarrinho = () => {
-    const carrinhoSalvo = localStorage.getItem('carrinho');
+    const carrinhoSalvo = localStorage.getItem(carrinhoKey);
     if (carrinhoSalvo) {
       setCarrinho(JSON.parse(carrinhoSalvo));
+    } else {
+      setCarrinho([]);
     }
   };
 
   const salvarCarrinho = (novoCarrinho) => {
     setCarrinho(novoCarrinho);
-    localStorage.setItem('carrinho', JSON.stringify(novoCarrinho));
+    localStorage.setItem(carrinhoKey, JSON.stringify(novoCarrinho));
   };
 
   // Helper para parsear fotos do produto (vem como JSON string do banco)
@@ -259,9 +268,189 @@ export default function Carrinho() {
     ];
   };
 
+  // Função reutilizável para criar um pedido para uma loja específica
+  const criarPedidoParaLoja = async (grupoData, loja, metodo, obs) => {
+    try {
+      // Validar endereço da loja
+      const enderecoSource = loja || user;
+      if (!enderecoSource.endereco_completo || !enderecoSource.cep || !enderecoSource.cidade || !enderecoSource.estado) {
+        const msg = loja
+          ? `Loja "${loja.nome_fantasia || loja.nome}" não possui endereço completo.`
+          : 'Endereço de entrega incompleto.';
+        return { success: false, error: msg };
+      }
+
+      // Verificar inadimplência por loja
+      if (user.tipo_negocio === 'multimarca' || user.tipo_negocio === 'franqueado') {
+        const filtroCarteira = { cliente_user_id: user.id };
+        if (loja) filtroCarteira.loja_id = loja.id;
+        const titulosCliente = await Carteira.filter(filtroCarteira);
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+
+        const titulosVencidos = (titulosCliente || []).filter(t => {
+          if (t.status !== 'pendente') return false;
+          if (!t.data_vencimento) return false;
+          const dv = new Date(t.data_vencimento + 'T00:00:00');
+          return dv < hoje;
+        });
+
+        const totalVencido = titulosVencidos.reduce((sum, t) => sum + (t.valor || 0), 0);
+        if (titulosVencidos.length > 0 && totalVencido > 0) {
+          return { success: false, error: `Loja "${loja?.nome_fantasia || loja?.nome || 'Conta'}" possui títulos vencidos (${formatCurrency(totalVencido)}).` };
+        }
+      }
+
+      // Verificar pedido mínimo
+      const fornecedor = fornecedores.find(f => f.id === grupoData.fornecedor_id);
+      if (fornecedor && fornecedor.pedido_minimo_valor > 0) {
+        if (grupoData.total < fornecedor.pedido_minimo_valor) {
+          return { success: false, error: `Valor abaixo do mínimo de ${formatCurrency(fornecedor.pedido_minimo_valor)}.` };
+        }
+      }
+
+      // Mapear itens
+      const itensPedido = grupoData.itens.map(item => {
+        if (item.tipo === 'capsula') {
+          return {
+            tipo: 'capsula',
+            capsula_id: item.capsula_id,
+            produto_id: item.id,
+            nome: item.nome,
+            quantidade: item.quantidade,
+            preco: item.preco_unitario,
+            total: item.preco_unitario * item.quantidade,
+            foto: item.imagem_capa_url,
+            detalhes_produtos: item.detalhes_produtos || [],
+            produto_ids: item.produto_ids || [],
+            produtos_quantidades: item.produtos_quantidades || {}
+          };
+        }
+        return {
+          produto_id: item.id,
+          nome: item.nome,
+          marca: item.marca,
+          referencia: item.referencia_polo || item.referencia_fornecedor || '',
+          tipo_venda: item.tipo_venda,
+          quantidade: item.quantidade,
+          total_pecas_grade: item.total_pecas_grade || 0,
+          preco: item.tipo_venda === 'grade' ? item.preco_grade_completa : item.preco_por_peca,
+          total: (item.tipo_venda === 'grade' ? item.preco_grade_completa : item.preco_por_peca) * item.quantidade,
+          foto: getPrimeiraFoto(item),
+          grade_selecionada: item.grade_configuracao || null,
+          cor_selecionada: item.cor_selecionada || null
+        };
+      });
+
+      // Calcular total com base nos itens (pode ter sido editado no modal)
+      const totalCalculado = itensPedido.reduce((sum, it) => sum + it.total, 0);
+
+      // Endereço de entrega
+      const src = loja || user;
+      const enderecoEntrega = {
+        endereco: src.endereco_completo,
+        cep: src.cep,
+        cidade: src.cidade,
+        estado: src.estado,
+        destinatario: loja ? (loja.nome_fantasia || loja.nome) : user.full_name,
+        telefone: loja?.telefone || user.telefone || user.whatsapp
+      };
+
+      const fornecedorId = grupoData.fornecedor_id;
+      const pedidoData = {
+        comprador_user_id: user.id,
+        fornecedor_id: fornecedorId === 'capsula' ? null : fornecedorId,
+        loja_id: loja?.id || null,
+        itens: itensPedido,
+        valor_total: totalCalculado,
+        valor_final: totalCalculado,
+        status: 'novo_pedido',
+        status_pagamento: 'pendente',
+        metodo_pagamento: metodo,
+        endereco_entrega: enderecoEntrega,
+        observacoes: obs || '',
+        observacoes_comprador: obs || ''
+      };
+
+      const pedido = await Pedido.create(pedidoData);
+
+      const dataVencimento = new Date();
+      dataVencimento.setDate(dataVencimento.getDate() + 30);
+
+      const descricaoCarteira = fornecedorId === 'capsula'
+        ? `Pedido #${pedido.id.substring(0, 8)} - Cápsula`
+        : `Pedido #${pedido.id.substring(0, 8)} - ${fornecedor?.nome_fantasia || fornecedor?.nome_marca}`;
+
+      await Carteira.create({
+        pedido_id: pedido.id,
+        cliente_user_id: user.id,
+        loja_id: loja?.id || null,
+        tipo: 'a_pagar',
+        descricao: descricaoCarteira,
+        valor: totalCalculado,
+        data_vencimento: dataVencimento.toISOString().split('T')[0],
+        status: 'pendente',
+        categoria: 'Pedido'
+      });
+
+      return { success: true, pedidoId: pedido.id };
+    } catch (err) {
+      console.error('Erro ao criar pedido para loja:', err);
+      return { success: false, error: err.message || 'Erro desconhecido ao criar pedido.' };
+    }
+  };
+
+  // Helper para remover itens de um fornecedor do carrinho
+  const removerItensFornecedorDoCarrinho = (fornecedorId) => {
+    return carrinho.filter(item => {
+      if (item.tipo === 'capsula') {
+        const produtoIds = item.produto_ids || [];
+        let fornecedorCapsula = null;
+        if (produtoIds.length > 0 && produtos.length > 0) {
+          const primeiroProduto = produtos.find(p => produtoIds.includes(p.id));
+          if (primeiroProduto) fornecedorCapsula = primeiroProduto.fornecedor_id;
+        }
+        if (!fornecedorCapsula && item.detalhes_produtos && item.detalhes_produtos.length > 0) {
+          const detalhe = item.detalhes_produtos[0];
+          if (detalhe.id && produtos.length > 0) {
+            const prod = produtos.find(p => p.id === detalhe.id);
+            if (prod) fornecedorCapsula = prod.fornecedor_id;
+          }
+        }
+        return fornecedorCapsula !== fornecedorId;
+      }
+      return item.fornecedor_id !== fornecedorId;
+    });
+  };
+
+  const abrirReplicarModal = (grupo) => {
+    setReplicarGrupo(grupo);
+    setReplicarModalOpen(true);
+  };
+
+  const handleReplicarSuccess = (fornecedorId) => {
+    // Limpar carrinho deste fornecedor após replicação bem-sucedida
+    const novoCarrinho = removerItensFornecedorDoCarrinho(fornecedorId);
+    salvarCarrinho(novoCarrinho);
+    if (novoCarrinho.length === 0) {
+      navigate(createPageUrl('MeusPedidos'));
+    }
+  };
+
   const finalizarCompraPorFornecedor = async (fornecedorId) => {
-    if (!user.endereco_completo || !user.cep || !user.cidade || !user.estado) {
-      toast.info('Por favor, cadastre seu endereço de entrega completo no seu perfil antes de finalizar o pedido.');
+    // Se o user tem lojas mas nenhuma selecionada, exigir seleção
+    if (!hasNoLojas && !lojaSelecionada) {
+      toast.info('Selecione uma loja no seletor do cabeçalho antes de finalizar o pedido.');
+      return;
+    }
+
+    // Determinar dados de endereço: da loja (se selecionada) ou do user (legado)
+    const enderecoSource = lojaSelecionada || user;
+    if (!enderecoSource.endereco_completo || !enderecoSource.cep || !enderecoSource.cidade || !enderecoSource.estado) {
+      const msg = lojaSelecionada
+        ? 'Complete o endereço da loja selecionada em Meu Perfil > Minhas Lojas antes de finalizar.'
+        : 'Por favor, cadastre seu endereço de entrega completo no seu perfil antes de finalizar o pedido.';
+      toast.info(msg);
       return;
     }
 
@@ -276,7 +465,8 @@ export default function Carrinho() {
     }
 
     // Verificação em tempo real de inadimplência antes de finalizar
-    if (user.tipo_negocio === 'multimarca') {
+    // Se loja selecionada, verificar apenas títulos dessa loja
+    if (user.tipo_negocio === 'multimarca' || user.tipo_negocio === 'franqueado') {
       try {
         const freshUser = await User.me();
         if (freshUser.bloqueado) {
@@ -285,7 +475,12 @@ export default function Carrinho() {
           return;
         }
 
-        const titulosCliente = await Carteira.filter({ cliente_user_id: freshUser.id });
+        // Filtro por loja quando selecionada
+        const filtroCarteira = { cliente_user_id: freshUser.id };
+        if (lojaSelecionada) {
+          filtroCarteira.loja_id = lojaSelecionada.id;
+        }
+        const titulosCliente = await Carteira.filter(filtroCarteira);
         const hoje = new Date();
         hoje.setHours(0, 0, 0, 0);
 
@@ -299,6 +494,13 @@ export default function Carrinho() {
         const totalVencido = titulosVencidos.reduce((sum, t) => sum + (t.valor || 0), 0);
 
         if (titulosVencidos.length > 0 && totalVencido > 0) {
+          if (lojaSelecionada) {
+            // Bloqueio POR LOJA - apenas impede a compra nesta loja
+            setDadosInadimplencia({ titulosVencidos, totalVencido });
+            setShowBloqueioModal(true);
+            return;
+          }
+          // Bloqueio global (legado sem lojas)
           await User.update(freshUser.id, {
             bloqueado: true,
             motivo_bloqueio: `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`,
@@ -337,133 +539,36 @@ export default function Carrinho() {
         }
       }
 
-      const itensPedido = grupo.itens.map(item => {
-        // Tratamento especial para cápsulas
-        if (item.tipo === 'capsula') {
-          return {
-            tipo: 'capsula',
-            capsula_id: item.capsula_id,
-            produto_id: item.id, // ID do item no carrinho
-            nome: item.nome,
-            quantidade: item.quantidade,
-            preco: item.preco_unitario,
-            total: item.preco_unitario * item.quantidade,
-            foto: item.imagem_capa_url,
-            detalhes_produtos: item.detalhes_produtos || [],
-            produto_ids: item.produto_ids || [],
-            produtos_quantidades: item.produtos_quantidades || {}
-          };
-        }
+      const result = await criarPedidoParaLoja(
+        grupo,
+        lojaSelecionada,
+        metodoPagamento[fornecedorId],
+        observacoes[fornecedorId] || ''
+      );
 
-        // Tratamento normal para produtos
-        return {
-          produto_id: item.id,
-          nome: item.nome,
-          marca: item.marca,
-          referencia: item.referencia_polo || item.referencia_fornecedor || '',
-          tipo_venda: item.tipo_venda,
-          quantidade: item.quantidade,
-          total_pecas_grade: item.total_pecas_grade || 0,
-          preco: item.tipo_venda === 'grade' ? item.preco_grade_completa : item.preco_por_peca,
-          total: (item.tipo_venda === 'grade' ? item.preco_grade_completa : item.preco_por_peca) * item.quantidade,
-          foto: getPrimeiraFoto(item),
-          grade_selecionada: item.grade_configuracao || null,
-          cor_selecionada: item.cor_selecionada || null
-        };
-      });
+      if (!result.success) {
+        toast.error(result.error || 'Erro ao processar o pedido.');
+        setFinalizando(prev => ({ ...prev, [fornecedorId]: false }));
+        return;
+      }
 
-      // Construir objeto de endereço a partir dos campos do usuário
-      const enderecoEntrega = {
-        endereco: user.endereco_completo,
-        cep: user.cep,
-        cidade: user.cidade,
-        estado: user.estado,
-        destinatario: user.full_name,
-        telefone: user.telefone || user.whatsapp
-      };
-
-      const pedidoData = {
-        comprador_user_id: user.id,
-        fornecedor_id: fornecedorId === 'capsula' ? null : fornecedorId, // NULL para cápsulas
-        itens: itensPedido,
-        valor_total: grupo.total,
-        valor_final: grupo.total,
-        status: 'novo_pedido',
-        status_pagamento: 'pendente',
-        metodo_pagamento: metodoPagamento[fornecedorId],
-        endereco_entrega: enderecoEntrega,
-        observacoes: observacoes[fornecedorId] || '',
-        observacoes_comprador: observacoes[fornecedorId] || ''
-      };
-
-      const pedido = await Pedido.create(pedidoData);
-
-      const dataVencimento = new Date();
-      dataVencimento.setDate(dataVencimento.getDate() + 30);
-
-      const descricaoCarteira = fornecedorId === 'capsula'
-        ? `Pedido #${pedido.id.substring(0, 8)} - Cápsula`
-        : `Pedido #${pedido.id.substring(0, 8)} - ${fornecedor?.nome_fantasia || fornecedor?.nome_marca}`;
-
-      await Carteira.create({
-        pedido_id: pedido.id,
-        cliente_user_id: user.id,
-        tipo: 'a_pagar', // Cliente vai pagar
-        descricao: descricaoCarteira,
-        valor: grupo.total,
-        data_vencimento: dataVencimento.toISOString().split('T')[0],
-        status: 'pendente',
-        categoria: 'Pedido'
-      });
-
-      // Notificação ao fornecedor é feita via SendEmail após criação do pedido
-
-      // Remover itens do carrinho
-      const novoCarrinho = carrinho.filter(item => {
-        if (item.tipo === 'capsula') {
-          // Para cápsulas, verificar se pertence a este fornecedor
-          const produtoIds = item.produto_ids || [];
-          let fornecedorCapsula = null;
-
-          if (produtoIds.length > 0 && produtos.length > 0) {
-            const primeiroProduto = produtos.find(p => produtoIds.includes(p.id));
-            if (primeiroProduto) {
-              fornecedorCapsula = primeiroProduto.fornecedor_id;
-            }
-          }
-
-          if (!fornecedorCapsula && item.detalhes_produtos && item.detalhes_produtos.length > 0) {
-            const detalhe = item.detalhes_produtos[0];
-            if (detalhe.id && produtos.length > 0) {
-              const prod = produtos.find(p => p.id === detalhe.id);
-              if (prod) {
-                fornecedorCapsula = prod.fornecedor_id;
-              }
-            }
-          }
-
-          // Manter no carrinho se for de outro fornecedor
-          return fornecedorCapsula !== fornecedorId;
-        }
-        // Se for produto normal, comparar fornecedor_id
-        return item.fornecedor_id !== fornecedorId;
-      });
+      // Remover itens do carrinho deste fornecedor
+      const novoCarrinho = removerItensFornecedorDoCarrinho(fornecedorId);
       salvarCarrinho(novoCarrinho);
 
       // Mensagem de sucesso
-      const temCapsula = grupo.temCapsula;
-      if (temCapsula) {
+      if (grupo.temCapsula) {
         const fornecedorNome = fornecedor?.nome_marca || 'Fornecedor';
-        toast.success(`✅ Pedido para ${fornecedorNome} (incluindo cápsula) criado com sucesso!`);
+        toast.success(`Pedido para ${fornecedorNome} (incluindo cápsula) criado com sucesso!`);
       } else {
         const fornecedorNome = fornecedor?.nome_marca || 'Fornecedor';
         const contatoFornecedor = fornecedor?.contato_envio_whatsapp || fornecedor?.contato_comercial_whatsapp || 'Não disponível';
         const emailFornecedor = fornecedor?.contato_envio_email || fornecedor?.contato_comercial_email || 'Não disponível';
 
         toast.success(
-          `✅ Pedido para ${fornecedorNome} criado com sucesso!\n\n` +
-          `📧 Email: ${emailFornecedor}\n` +
-          `📱 WhatsApp: ${contatoFornecedor}\n\n` +
+          `Pedido para ${fornecedorNome} criado com sucesso!\n\n` +
+          `Email: ${emailFornecedor}\n` +
+          `WhatsApp: ${contatoFornecedor}\n\n` +
           `O fornecedor foi notificado automaticamente e entrará em contato em breve.`
         );
       }
@@ -548,24 +653,34 @@ export default function Carrinho() {
             )}
 
             {/* Alerta sobre endereço */}
-            {(!user?.endereco_completo || !user?.cep || !user?.cidade || !user?.estado) && (
-              <Alert className="bg-yellow-50 border-yellow-200">
-                <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                <AlertDescription className="text-yellow-800 text-sm sm:text-base">
-                  <strong>Atenção:</strong> Você precisa cadastrar seu endereço de entrega completo no seu perfil antes de finalizar os pedidos.
-                </AlertDescription>
-              </Alert>
-            )}
+            {(() => {
+              const src = lojaSelecionada || user;
+              const semEndereco = !src?.endereco_completo || !src?.cep || !src?.cidade || !src?.estado;
+              if (!semEndereco) return null;
+              const msg = lojaSelecionada
+                ? 'Complete o endereço da loja selecionada em Meu Perfil > Minhas Lojas antes de finalizar os pedidos.'
+                : 'Você precisa cadastrar seu endereço de entrega completo no seu perfil antes de finalizar os pedidos.';
+              return (
+                <Alert className="bg-yellow-50 border-yellow-200">
+                  <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                  <AlertDescription className="text-yellow-800 text-sm sm:text-base">
+                    <strong>Atenção:</strong> {msg}
+                  </AlertDescription>
+                </Alert>
+              );
+            })()}
 
             {/* Lista de Produtos por Fornecedor */}
-            {grupos.map((grupo, index) => {
+            {grupos.map((grupo) => {
               const fornecedor = fornecedores.find(f => f.id === grupo.fornecedor_id);
               const valorMinimo = fornecedor?.pedido_minimo_valor || 0;
               const atingiuMinimo = grupo.total >= valorMinimo;
               const metodosPagamento = getMetodosPagamentoDisponiveis(grupo.fornecedor_id);
+              const enderecoSource = lojaSelecionada || user;
+              const enderecoIncompleto = !enderecoSource?.endereco_completo || !enderecoSource?.cep || !enderecoSource?.cidade || !enderecoSource?.estado;
 
               return (
-                <Card key={index} className="overflow-hidden">
+                <Card key={grupo.fornecedor_id} className="overflow-hidden">
                   <CardHeader className="bg-gray-50 border-b">
                     <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
@@ -820,6 +935,26 @@ export default function Carrinho() {
 
                     {/* Total e Checkout por Fornecedor */}
                     <div className="space-y-4 bg-blue-50 p-4 sm:p-6 rounded-lg border border-blue-200">
+                      {/* Loja selecionada */}
+                      {lojaSelecionada && (
+                        <div className="flex items-center gap-2 text-sm bg-white px-3 py-2 rounded-lg border border-blue-100">
+                          <Store className="w-4 h-4 text-blue-600" />
+                          <span className="text-gray-600">Comprando para:</span>
+                          <span className="font-semibold text-blue-700">
+                            {lojaSelecionada.nome_fantasia || lojaSelecionada.nome}
+                            {lojaSelecionada.cidade ? ` - ${lojaSelecionada.cidade}` : ''}
+                          </span>
+                        </div>
+                      )}
+                      {!hasNoLojas && !lojaSelecionada && (
+                        <Alert className="border-yellow-200 bg-yellow-50">
+                          <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                          <AlertDescription className="text-yellow-800 text-sm">
+                            Selecione uma loja no seletor do cabeçalho antes de finalizar o pedido.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
                       <div className="flex justify-between items-center">
                         <span className="font-semibold text-lg">Total:</span>
                         <span className="text-2xl sm:text-3xl font-bold text-green-600">
@@ -868,12 +1003,10 @@ export default function Carrinho() {
                         onClick={() => finalizarCompraPorFornecedor(grupo.fornecedor_id)}
                         disabled={
                           finalizando[grupo.fornecedor_id] ||
+                          replicarModalOpen ||
                           !atingiuMinimo ||
                           !metodoPagamento[grupo.fornecedor_id] ||
-                          !user?.endereco_completo ||
-                          !user?.cep ||
-                          !user?.cidade ||
-                          !user?.estado ||
+                          enderecoIncompleto ||
                           user?.bloqueado
                         }
                         title={user?.bloqueado ? 'Sua conta está bloqueada. Regularize seus pagamentos.' : ''}
@@ -888,6 +1021,18 @@ export default function Carrinho() {
                           </>
                         )}
                       </Button>
+
+                      {hasMultipleLojas && lojaSelecionada && (
+                        <Button
+                          variant="outline"
+                          onClick={() => abrirReplicarModal(grupo)}
+                          disabled={finalizando[grupo.fornecedor_id] || user?.bloqueado}
+                          className="w-full h-10 border-blue-300 text-blue-700 hover:bg-blue-50"
+                        >
+                          <Copy className="w-4 h-4 mr-2" />
+                          Replicar para Outras Lojas
+                        </Button>
+                      )}
 
                       {!atingiuMinimo && (
                         <p className="text-xs text-center text-yellow-700">
@@ -975,6 +1120,21 @@ export default function Carrinho() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Modal Replicar Pedido para Múltiplas Lojas */}
+      {replicarGrupo && (
+        <ReplicarPedidoModal
+          open={replicarModalOpen}
+          onOpenChange={setReplicarModalOpen}
+          grupo={replicarGrupo}
+          lojas={lojas}
+          lojaSelecionada={lojaSelecionada}
+          fornecedores={fornecedores}
+          criarPedidoParaLoja={criarPedidoParaLoja}
+          getMetodosPagamentoDisponiveis={getMetodosPagamentoDisponiveis}
+          onSuccess={handleReplicarSuccess}
+        />
+      )}
     </div>
   );
 }

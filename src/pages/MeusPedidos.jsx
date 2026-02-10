@@ -22,8 +22,13 @@ import {
 import { formatCurrency, exportToCSV, exportToPDF, formatDate, toBrasiliaDateString } from '@/utils/exportUtils';
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
 import MultiSelectFilter from '@/components/MultiSelectFilter';
+import { useLojaContext } from '@/contexts/LojaContext';
+import { Loja } from '@/api/entities';
+import { Store } from 'lucide-react';
 
 export default function MeusPedidos() {
+  const { lojaSelecionada, lojas, loading: lojasLoading } = useLojaContext();
+  const [lojasMap, setLojasMap] = useState({});
   const [pedidos, setPedidos] = useState([]);
   const [carteira, setCarteira] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
@@ -53,18 +58,35 @@ export default function MeusPedidos() {
   const [dataConfirmacao, setDataConfirmacao] = useState('');
 
   useEffect(() => {
+    if (lojasLoading) return;
     loadData();
-  }, []);
+  }, [lojaSelecionada?.id, lojasLoading]);
 
   const loadData = async () => {
     setLoading(true);
     try {
       const currentUser = await User.me();
+
+      // Build filter based on loja selection
+      const pedidoFilter = { comprador_user_id: currentUser.id };
+      const carteiraFilter = { cliente_user_id: currentUser.id };
+      if (lojaSelecionada) {
+        pedidoFilter.loja_id = lojaSelecionada.id;
+        carteiraFilter.loja_id = lojaSelecionada.id;
+      }
+
       const [pedidosList, fornecedoresList, carteiraList] = await Promise.all([
-        Pedido.filter({ comprador_user_id: currentUser.id }, '-created_date'),
+        Pedido.filter(pedidoFilter, '-created_date'),
         Fornecedor.list(),
-        Carteira.filter({ cliente_user_id: currentUser.id })
+        Carteira.filter(carteiraFilter)
       ]);
+
+      // Build lojas map for display
+      if (lojas.length > 0) {
+        const map = {};
+        lojas.forEach(l => { map[l.id] = l.nome_fantasia || l.nome; });
+        setLojasMap(map);
+      }
 
       // Filtrar pedidos para mostrar:
       // - Pedidos em andamento (antes de faturar ou ainda não entregues)
@@ -697,6 +719,12 @@ export default function MeusPedidos() {
                           <p className="text-sm text-gray-600">
                             {getFornecedorNome(pedido.fornecedor_id)}
                           </p>
+                          {pedido.loja_id && lojasMap[pedido.loja_id] && (
+                            <Badge variant="outline" className="mt-1 text-xs bg-blue-50">
+                              <Store className="w-3 h-3 mr-1" />
+                              {lojasMap[pedido.loja_id]}
+                            </Badge>
+                          )}
                           <p className="text-xs text-gray-500 mt-1">
                             Realizado em {formatDate(pedido.created_date)}
                           </p>

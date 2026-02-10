@@ -194,3 +194,4 @@ export const Carteira = createSupabaseEntity('carteira');
 export const Meta = createSupabaseEntity('metas');
 export const UserTable = createSupabaseEntity('users'); // Tabela users (CRUD - diferente de User auth)
 export const Notificacao = createSupabaseEntity('notificacoes');
+export const Loja = createSupabaseEntity('lojas');

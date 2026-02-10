@@ -32,6 +32,50 @@ import {
 import AlertaBloqueio from '../components/AlertaBloqueio';
 import Avatar from '@/components/Avatar';
 import NotificacoesDropdown from '@/components/NotificacoesDropdown';
+import { LojaProvider, useLojaContext } from '@/contexts/LojaContext';
+import { Store, ChevronDown } from 'lucide-react';
+import {
+  Select as SelectUI,
+  SelectContent as SelectContentUI,
+  SelectItem as SelectItemUI,
+  SelectTrigger as SelectTriggerUI,
+  SelectValue as SelectValueUI,
+} from '@/components/ui/select';
+
+function SeletorLoja() {
+  const { lojas, lojaSelecionada, setLojaSelecionada, hasMultipleLojas } = useLojaContext();
+
+  if (!hasMultipleLojas) return null;
+
+  return (
+    <div className="flex items-center gap-2">
+      <Store className="h-4 w-4 text-gray-500 hidden sm:block" />
+      <SelectUI
+        value={lojaSelecionada?.id || 'todas'}
+        onValueChange={(value) => {
+          if (value === 'todas') {
+            setLojaSelecionada(null);
+          } else {
+            const loja = lojas.find(l => l.id === value);
+            setLojaSelecionada(loja);
+          }
+        }}
+      >
+        <SelectTriggerUI className="h-8 w-[180px] text-xs border-gray-300 bg-white">
+          <SelectValueUI placeholder="Selecione a loja" />
+        </SelectTriggerUI>
+        <SelectContentUI>
+          <SelectItemUI value="todas">Todas as Lojas</SelectItemUI>
+          {lojas.map(loja => (
+            <SelectItemUI key={loja.id} value={loja.id}>
+              {loja.nome_fantasia || loja.nome}{loja.cidade ? ` - ${loja.cidade}` : ''}
+            </SelectItemUI>
+          ))}
+        </SelectContentUI>
+      </SelectUI>
+    </div>
+  );
+}
 
 export default function Layout({ children, currentPageName }) {
   const [currentUser, setCurrentUser] = useState(null);
@@ -224,6 +268,7 @@ export default function Layout({ children, currentPageName }) {
   );
 
   return (
+    <LojaProvider user={currentUser}>
     <div className="min-h-screen bg-slate-100 flex flex-col lg:flex-row">
       <style>{`
         .shadow-neumorphic { box-shadow: 8px 8px 16px #d1d9e6, -8px -8px 16px #ffffff; }
@@ -235,6 +280,7 @@ export default function Layout({ children, currentPageName }) {
         <div className="flex items-center justify-between p-4">
           <div className="font-bold text-xl text-blue-600">POLO B2B</div>
           <div className="flex items-center gap-2">
+            {isCliente && <SeletorLoja />}
             {/* Notificações Mobile */}
             <NotificacoesDropdown
               userId={currentUser.id}
@@ -259,12 +305,12 @@ export default function Layout({ children, currentPageName }) {
             <nav className="px-4 space-y-1">
               <NavLinks />
               <div className="pt-4">
-                <Button 
+                <Button
                   onClick={() => {
                     setMobileMenuOpen(false);
                     handleLogout();
-                  }} 
-                  variant="ghost" 
+                  }}
+                  variant="ghost"
                   className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
                 >
                   <LogOut className="w-5 h-5 mr-3" />
@@ -300,6 +346,9 @@ export default function Layout({ children, currentPageName }) {
               {currentPageName.replace(/([A-Z])/g, ' $1').trim()}
             </h1>
             <div className="flex items-center gap-2 lg:gap-4">
+              {/* Seletor de Loja */}
+              {isCliente && <SeletorLoja />}
+
               {/* Sino de Notificações */}
               <NotificacoesDropdown
                 userId={currentUser.id}
@@ -329,6 +378,7 @@ export default function Layout({ children, currentPageName }) {
         </main>
       </div>
     </div>
+    </LojaProvider>
   );
 }
 

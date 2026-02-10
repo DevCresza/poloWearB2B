@@ -21,8 +21,11 @@ import {
 } from 'lucide-react';
 import { exportToCSV, exportToPDF, formatCurrency, formatDate } from '@/utils/exportUtils';
 import MultiSelectFilter from '@/components/MultiSelectFilter';
+import { useLojaContext } from '@/contexts/LojaContext';
+import { Store } from 'lucide-react';
 
 export default function CarteiraFinanceira() {
+  const { lojaSelecionada, lojas, loading: lojasLoading } = useLojaContext();
   const [user, setUser] = useState(null);
   const [titulos, setTitulos] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
@@ -69,8 +72,9 @@ export default function CarteiraFinanceira() {
   const [pedidoSelecionado, setPedidoSelecionado] = useState(null);
 
   useEffect(() => {
+    if (lojasLoading) return;
     loadData();
-  }, []);
+  }, [lojaSelecionada?.id, lojasLoading]);
 
   // Função para sincronizar totais do cliente com base nos títulos reais da carteira
   const sincronizarTotaisCliente = async (clienteId, titulosList) => {
@@ -122,9 +126,11 @@ export default function CarteiraFinanceira() {
 
       if (currentUser.tipo_negocio === 'multimarca' || currentUser.tipo_negocio === 'franqueado') {
         // Cliente vê títulos associados a ele, exceto de pedidos ainda não aprovados
-        const todosOsTitulos = await Carteira.filter({
-          cliente_user_id: currentUser.id
-        }, '-data_vencimento') || [];
+        const carteiraFilter = { cliente_user_id: currentUser.id };
+        if (lojaSelecionada) {
+          carteiraFilter.loja_id = lojaSelecionada.id;
+        }
+        const todosOsTitulos = await Carteira.filter(carteiraFilter, '-data_vencimento') || [];
 
         // Filtrar:
         // 1. Remover placeholders (sem parcela_numero) - criados pelo Carrinho antes do fornecedor preencher dados de pagamento

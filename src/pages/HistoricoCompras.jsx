@@ -21,8 +21,10 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { exportToCSV, exportToPDF, formatCurrency, formatDateTime } from '@/utils/exportUtils';
+import { useLojaContext } from '@/contexts/LojaContext';
 
 export default function HistoricoCompras() {
+  const { lojaSelecionada, loading: lojasLoading } = useLojaContext();
   const [user, setUser] = useState(null);
   const [pedidos, setPedidos] = useState([]);
   const [produtos, setProdutos] = useState([]);
@@ -47,8 +49,9 @@ export default function HistoricoCompras() {
   });
 
   useEffect(() => {
+    if (lojasLoading) return;
     loadData();
-  }, []);
+  }, [lojaSelecionada?.id, lojasLoading]);
 
   const loadData = async () => {
     setLoading(true);
@@ -56,14 +59,18 @@ export default function HistoricoCompras() {
       const currentUser = await User.me();
       setUser(currentUser);
 
+      const pedidoFilter = { comprador_user_id: currentUser.id, status: 'finalizado' };
+      const carteiraFilter = { cliente_user_id: currentUser.id };
+      if (lojaSelecionada) {
+        pedidoFilter.loja_id = lojaSelecionada.id;
+        carteiraFilter.loja_id = lojaSelecionada.id;
+      }
+
       const [pedidosList, produtosList, fornecedoresList, carteiraList] = await Promise.all([
-        Pedido.filter({
-          comprador_user_id: currentUser.id,
-          status: 'finalizado'
-        }, '-created_date'),
+        Pedido.filter(pedidoFilter, '-created_date'),
         Produto.list(),
         Fornecedor.list(),
-        Carteira.filter({ cliente_user_id: currentUser.id })
+        Carteira.filter(carteiraFilter)
       ]);
 
       // Filtrar apenas pedidos finalizados que:

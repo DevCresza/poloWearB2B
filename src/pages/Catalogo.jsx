@@ -19,8 +19,10 @@ import {
 } from 'lucide-react';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { formatCurrency } from '@/utils/exportUtils';
+import { useLojaContext } from '@/contexts/LojaContext';
 
 export default function Catalogo() {
+  const { carrinhoKey } = useLojaContext();
   const [user, setUser] = useState(null);
   const [produtos, setProdutos] = useState([]);
   const [todosProdutos, setTodosProdutos] = useState([]); // Lista completa sem filtros
@@ -59,8 +61,11 @@ export default function Catalogo() {
 
   useEffect(() => {
     checkUserAndLoadData();
-    loadCarrinho();
   }, []);
+
+  useEffect(() => {
+    loadCarrinho();
+  }, [carrinhoKey]);
 
   const checkUserAndLoadData = async () => {
     try {
@@ -121,15 +126,17 @@ export default function Catalogo() {
   };
 
   const loadCarrinho = () => {
-    const carrinhoSalvo = localStorage.getItem('carrinho');
+    const carrinhoSalvo = localStorage.getItem(carrinhoKey);
     if (carrinhoSalvo) {
       setCarrinho(JSON.parse(carrinhoSalvo));
+    } else {
+      setCarrinho([]);
     }
   };
 
   const salvarCarrinho = (novoCarrinho) => {
     setCarrinho(novoCarrinho);
-    localStorage.setItem('carrinho', JSON.stringify(novoCarrinho));
+    localStorage.setItem(carrinhoKey, JSON.stringify(novoCarrinho));
   };
 
   const adicionarAoCarrinho = (produto, quantidade, corVariante = null) => {

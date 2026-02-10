@@ -13,6 +13,7 @@ export { MovimentacaoEstoque } from './supabaseEntities';
 export { Carteira } from './supabaseEntities';
 export { Meta } from './supabaseEntities';
 export { Notificacao } from './supabaseEntities';
+export { Loja } from './supabaseEntities';
 
 // auth sdk - Usando Supabase Auth:
 export { supabaseAuth as User } from './supabaseAuth';
