@@ -126,39 +126,79 @@ export default function AlertaBloqueio() {
   return (
     <>
       {/* Barra de Alerta Fixa */}
-      <div className="fixed top-0 left-0 right-0 z-50 bg-red-600 text-white py-3 px-6 shadow-lg">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {isLojaBlocked ? <Store className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
-            <div>
-              <p className="font-bold">{barMessage}</p>
-              {barDetail && <p className="text-sm opacity-90">{barDetail}</p>}
+      <div className="fixed top-0 left-0 right-0 z-50 bg-red-600 text-white shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
+          {/* Linha principal */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              {isLojaBlocked ? <Store className="w-6 h-6 flex-shrink-0" /> : <AlertTriangle className="w-6 h-6 flex-shrink-0" />}
+              <div className="min-w-0">
+                <p className="font-bold text-sm sm:text-base">{barMessage}</p>
+                {barDetail && <p className="text-xs sm:text-sm text-red-100">{barDetail}</p>}
+              </div>
+            </div>
+            <div className="flex gap-2 flex-shrink-0">
+              <Button
+                size="sm"
+                onClick={() => navigate(createPageUrl('CarteiraFinanceira'))}
+                className="bg-white text-red-600 hover:bg-gray-100"
+              >
+                <DollarSign className="w-4 h-4 mr-1" />
+                Ver Débitos
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setAlertType(isGlobalBlocked ? 'global' : 'loja');
+                  setShowModal(true);
+                }}
+                variant="outline"
+                className="border-white text-white hover:bg-red-700"
+              >
+                Detalhes
+              </Button>
             </div>
           </div>
-          <div className="flex gap-3">
-            <Button
-              onClick={() => navigate(createPageUrl('CarteiraFinanceira'))}
-              className="bg-white text-red-600 hover:bg-gray-100"
-            >
-              <DollarSign className="w-4 h-4 mr-2" />
-              Ver Débitos
-            </Button>
-            <Button
-              onClick={() => {
-                setAlertType(isGlobalBlocked ? 'global' : 'loja');
-                setShowModal(true);
-              }}
-              variant="outline"
-              className="border-white text-white hover:bg-red-700"
-            >
-              Detalhes
-            </Button>
-          </div>
+
+          {/* Detalhes financeiros sempre visíveis */}
+          {isGlobalBlocked && (user.total_vencido > 0 || user.total_em_aberto > 0) && (
+            <div className="flex items-center gap-4 sm:gap-6 mt-2 pt-2 border-t border-red-500/40 text-sm">
+              {user.total_vencido > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <XCircle className="w-4 h-4 text-red-200" />
+                  <span className="text-red-100">Vencido:</span>
+                  <span className="font-bold">R$ {user.total_vencido.toFixed(2)}</span>
+                </div>
+              )}
+              {user.total_em_aberto > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <DollarSign className="w-4 h-4 text-red-200" />
+                  <span className="text-red-100">Em aberto:</span>
+                  <span className="font-bold">R$ {user.total_em_aberto.toFixed(2)}</span>
+                </div>
+              )}
+              {user.data_bloqueio && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-red-100">Bloqueado em:</span>
+                  <span className="font-bold">{new Date(user.data_bloqueio).toLocaleDateString('pt-BR')}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {isLojaBlocked && lojaSelecionada?.data_bloqueio && (
+            <div className="flex items-center gap-4 mt-2 pt-2 border-t border-red-500/40 text-sm">
+              <div className="flex items-center gap-1.5">
+                <span className="text-red-100">Bloqueada em:</span>
+                <span className="font-bold">{new Date(lojaSelecionada.data_bloqueio).toLocaleDateString('pt-BR')}</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Espaçador para não sobrepor conteúdo */}
-      <div className="h-20"></div>
+      <div className="h-24 sm:h-28"></div>
 
       {/* Modal Detalhado */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
