@@ -152,8 +152,7 @@ export default function AlertaBloqueio() {
                   setAlertType(isGlobalBlocked ? 'global' : 'loja');
                   setShowModal(true);
                 }}
-                variant="outline"
-                className="border-white text-white hover:bg-red-700"
+                className="bg-red-800 text-white hover:bg-red-900 border-none"
               >
                 Detalhes
               </Button>
