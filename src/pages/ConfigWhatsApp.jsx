@@ -19,7 +19,7 @@ export default function ConfigWhatsApp() {
   
   const [formData, setFormData] = useState({
     nome: '',
-    titulo: '',
+    assunto: '',
     mensagem: '',
     ativo: true
   });
@@ -31,7 +31,7 @@ export default function ConfigWhatsApp() {
   const loadTemplates = async () => {
     setLoading(true);
     try {
-      const list = await WhatsappTemplate.list('-created_at');
+      const list = await WhatsappTemplate.list({ sort: '-created_at' });
       setTemplates(list || []);
     } catch (_error) {
     } finally {
@@ -49,7 +49,7 @@ export default function ConfigWhatsApp() {
       }
       setShowForm(false);
       setEditingTemplate(null);
-      setFormData({ nome: '', titulo: '', mensagem: '', ativo: true });
+      setFormData({ nome: '', assunto: '', mensagem: '', ativo: true });
       loadTemplates();
     } catch (_error) {
       toast.error('Erro ao salvar template');
@@ -60,7 +60,7 @@ export default function ConfigWhatsApp() {
     setEditingTemplate(template);
     setFormData({
       nome: template.nome,
-      titulo: template.titulo,
+      assunto: template.assunto,
       mensagem: template.mensagem,
       ativo: template.ativo
     });
@@ -174,7 +174,7 @@ export default function ConfigWhatsApp() {
               <div className="space-y-2">
                 <div>
                   <p className="text-sm font-semibold text-gray-700">Título:</p>
-                  <p className="text-sm text-gray-600">{template.titulo}</p>
+                  <p className="text-sm text-gray-600">{template.assunto}</p>
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-gray-700">Mensagem:</p>
@@ -210,8 +210,8 @@ export default function ConfigWhatsApp() {
             <div>
               <Label>Título da Mensagem</Label>
               <Input
-                value={formData.titulo}
-                onChange={(e) => setFormData({...formData, titulo: e.target.value})}
+                value={formData.assunto}
+                onChange={(e) => setFormData({...formData, assunto: e.target.value})}
                 placeholder="Ex: Seu pedido foi aprovado!"
                 required
               />
@@ -243,7 +243,7 @@ export default function ConfigWhatsApp() {
                 onClick={() => {
                   setShowForm(false);
                   setEditingTemplate(null);
-                  setFormData({ nome: '', titulo: '', mensagem: '', ativo: true });
+                  setFormData({ nome: '', assunto: '', mensagem: '', ativo: true });
                 }}
               >
                 Cancelar

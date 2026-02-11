@@ -176,7 +176,7 @@ export default function CarteiraFinanceira() {
         }
       } else if (currentUser.role === 'admin') {
         // Admin vê tudo
-        titulosList = await Carteira.list('-data_vencimento');
+        titulosList = await Carteira.list({ sort: '-data_vencimento' });
       }
 
       fornecedoresList = await Fornecedor.list();

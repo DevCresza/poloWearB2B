@@ -33,6 +33,7 @@ export default function PedidosAdmin() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [updatingPedidoId, setUpdatingPedidoId] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filtrosStatus, setFiltrosStatus] = useState([]); // Array para múltipla seleção de status do pedido
   const [filtrosPagamento, setFiltrosPagamento] = useState([]); // Array para múltipla seleção de status de pagamento
@@ -46,12 +47,14 @@ export default function PedidosAdmin() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [pedidosList, usersList, fornecedoresList, lojasList] = await Promise.all([
-        Pedido.list('-created_date'),
+      const [me, pedidosList, usersList, fornecedoresList, lojasList] = await Promise.all([
+        User.me(),
+        Pedido.list({ sort: '-created_date' }),
         User.list(),
         Fornecedor.list(),
         Loja.list()
       ]);
+      setCurrentUser(me);
       setPedidos(pedidosList || []);
       setUsers(usersList || []);
       setFornecedores(fornecedoresList || []);
@@ -639,14 +642,14 @@ export default function PedidosAdmin() {
       {showDetailsModal && selectedPedido && (
         <PedidoDetailsModal
           pedido={selectedPedido}
+          currentUser={currentUser}
           userMap={userMap}
           fornecedorMap={fornecedorMap}
           onClose={() => {
             setShowDetailsModal(false);
             setSelectedPedido(null);
           }}
-          getStatusInfo={getStatusInfo}
-          getPaymentStatusInfo={getPaymentStatusInfo}
+          onUpdate={loadData}
         />
       )}
 

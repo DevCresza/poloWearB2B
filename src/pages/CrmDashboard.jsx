@@ -30,7 +30,7 @@ export default function CrmDashboard() {
 
   const loadContacts = async () => {
     try {
-      const contactsList = await Contact.list('-created_at');
+      const contactsList = await Contact.list({ sort: '-created_at' });
       setContacts(contactsList || []); // Garantir que sempre seja array
     } catch (_error) {
       setContacts([]); // Definir array vazio em caso de erro

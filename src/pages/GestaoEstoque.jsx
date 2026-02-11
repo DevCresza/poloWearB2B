@@ -80,7 +80,7 @@ export default function GestaoEstoque() {
           const produtoIds = produtosList.map(p => p.id);
           if (produtoIds.length > 0) {
             // Buscar todas movimentações e filtrar localmente por produto_id
-            const todasMovimentacoes = await MovimentacaoEstoque.list('-created_at', 100);
+            const todasMovimentacoes = await MovimentacaoEstoque.list({ sort: '-created_at', limit: 100 });
             movimentacoesList = todasMovimentacoes.filter(m => produtoIds.includes(m.produto_id));
           } else {
             movimentacoesList = [];
@@ -92,9 +92,9 @@ export default function GestaoEstoque() {
         }
       } else if (currentUser.role === 'admin') {
         // Admin vê todos os produtos (removido filtro controla_estoque)
-        produtosList = await Produto.list('-created_at');
+        produtosList = await Produto.list({ sort: '-created_at' });
         fornecedoresList = await Fornecedor.list();
-        movimentacoesList = await MovimentacaoEstoque.list('-created_at', 100);
+        movimentacoesList = await MovimentacaoEstoque.list({ sort: '-created_at', limit: 100 });
       }
 
       setProdutos(produtosList || []);

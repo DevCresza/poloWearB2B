@@ -82,7 +82,7 @@ export default function DashboardAdmin() {
         carteiraList,
         metasList
       ] = await Promise.all([
-        Pedido.list('-created_date'),
+        Pedido.list({ sort: '-created_date' }),
         Produto.list(),
         Fornecedor.list(),
         User.list(),

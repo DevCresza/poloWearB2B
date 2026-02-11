@@ -42,7 +42,7 @@ export default function GestaoCapsulas() {
         capsulasList = await Capsula.filter({ fornecedor_id: currentUser.fornecedor_id }, '-created_at');
       } else if (currentUser?.role === 'admin') {
         // Admin vê todas as cápsulas
-        capsulasList = await Capsula.list('-created_at');
+        capsulasList = await Capsula.list({ sort: '-created_at' });
       } else {
         // Outros usuários não veem cápsulas (ou ajustar conforme necessário)
         capsulasList = [];

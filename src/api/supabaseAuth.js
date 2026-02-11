@@ -338,6 +338,25 @@ export const supabaseAuth = {
     throw new Error('Método não implementado');
   },
 
+  // Get - Buscar usuário por ID
+  async get(id) {
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (error) throw error;
+        return data;
+      } catch (error) {
+        throw new Error(error.message);
+      }
+    }
+    throw new Error('Método não implementado');
+  },
+
   // Delete - Excluir usuário (para admin)
   async delete(userId) {
     if (isSupabaseConfigured()) {

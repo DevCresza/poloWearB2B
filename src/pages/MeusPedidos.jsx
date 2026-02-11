@@ -891,6 +891,7 @@ export default function MeusPedidos() {
             });
           }}
           currentUser={user}
+          userMap={user ? new Map([[user.id, user.empresa || user.full_name || user.email]]) : undefined}
           fornecedorMap={new Map(fornecedores.map(f => [f.id, f.razao_social || f.nome_fantasia || f.nome_marca]))}
         />
       )}

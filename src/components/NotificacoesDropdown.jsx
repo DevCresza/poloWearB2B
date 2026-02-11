@@ -388,7 +388,7 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
           const produtosEstoque = produtos.filter(p => p.disponibilidade === 'pronta_entrega');
 
           const produtosBaixoEstoque = produtosEstoque.filter(p => {
-            const estoqueAtual = p.estoque_atual || 0;
+            const estoqueAtual = p.estoque_atual_grades || 0;
             const estoqueMinimo = p.estoque_minimo || 5;
             return estoqueAtual <= estoqueMinimo && estoqueAtual > 0;
           }).slice(0, 5);
@@ -398,7 +398,7 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
               id: `estoque-baixo-${produto.id}`,
               tipo: 'aviso',
               titulo: 'Estoque Baixo',
-              mensagem: `${produto.nome} está com estoque baixo (${produto.estoque_atual || 0} un.)`,
+              mensagem: `${produto.nome} está com estoque baixo (${produto.estoque_atual_grades || 0} un.)`,
               icone: 'estoque',
               lida: false,
               data: new Date().toISOString(),
@@ -408,7 +408,7 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
           });
 
           // Produtos sem estoque (apenas pronta_entrega)
-          const produtosSemEstoque = produtosEstoque.filter(p => (p.estoque_atual || 0) === 0 && p.ativo).slice(0, 3);
+          const produtosSemEstoque = produtosEstoque.filter(p => (p.estoque_atual_grades || 0) === 0 && p.ativo).slice(0, 3);
           produtosSemEstoque.forEach(produto => {
             notificacoesAuto.push({
               id: `sem-estoque-${produto.id}`,

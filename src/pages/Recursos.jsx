@@ -34,7 +34,7 @@ export default function Recursos() {
 
       let recursosList = [];
       if (currentUser.role === 'admin') {
-        recursosList = await Recurso.list('-created_at');
+        recursosList = await Recurso.list({ sort: '-created_at' });
       } else {
         const allRecursos = await Recurso.filter({ ativo: true }, '-created_at');
         recursosList = allRecursos.filter(r => {

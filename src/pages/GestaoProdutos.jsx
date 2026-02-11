@@ -70,7 +70,7 @@ export default function GestaoProdutos() {
         }
       } else {
         // Admin ou outros veem tudo
-        produtosList = await Produto.list('-created_at');
+        produtosList = await Produto.list({ sort: '-created_at' });
         fornecedoresList = await Fornecedor.list();
       }
 

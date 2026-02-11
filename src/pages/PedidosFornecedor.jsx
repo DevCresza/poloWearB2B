@@ -95,7 +95,7 @@ export default function PedidosFornecedor() {
       let clientesList = [];
 
       if (currentUser.role === 'admin') {
-        pedidosList = await Pedido.list('-created_date');
+        pedidosList = await Pedido.list({ sort: '-created_date' });
         clientesList = await User.list(); // Load all users for admin
       } else if (currentUser.tipo_negocio === 'fornecedor') {
         // Usar fornecedor_id do usuário diretamente (se disponível)
@@ -541,11 +541,11 @@ export default function PedidosFornecedor() {
         qtd_parcelas: qtdParcelas,
         cliente_confirmou_boleto: false,
         status_pagamento: 'pendente',
-        parcelas_info: JSON.stringify(parcelas.map((p, i) => ({
+        parcelas_info: parcelas.map((p, i) => ({
           numero: i + 1,
           dataVencimento: p.dataVencimento,
           boletoUrl: boletoUpload.file_url
-        })))
+        }))
       });
 
       // Excluir TODAS as cobranças existentes do pedido (placeholders e parcelas reais)

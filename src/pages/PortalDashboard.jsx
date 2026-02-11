@@ -159,7 +159,7 @@ export default function PortalDashboard() {
 
       } else if (currentUser.role === 'admin') {
         // Dashboard Admin
-        pedidosList = await Pedido.list('-created_date', 10);
+        pedidosList = await Pedido.list({ sort: '-created_date', limit: 10 });
         produtosList = await Produto.list();
         carteiraList = await Carteira.list();
         

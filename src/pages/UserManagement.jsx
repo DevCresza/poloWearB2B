@@ -57,7 +57,7 @@ export default function UserManagement() {
     try {
       const [userList, pendingList, fornecedoresList] = await Promise.all([
         User.list(),
-        PendingUser.list('-created_at'),
+        PendingUser.list({ sort: '-created_at' }),
         Fornecedor.list()
       ]);
       setUsers(userList || []);
