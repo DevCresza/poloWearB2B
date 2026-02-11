@@ -1017,7 +1017,89 @@ export default function MeusPedidos() {
         </Dialog>
       )}
 
-      {/* Comprovantes são enviados por parcela via Carteira Financeira ou Ver Detalhes */}
+      {/* Modal de Upload de Comprovante */}
+      {showComprovanteModal && (
+        <Dialog open={showComprovanteModal} onOpenChange={(open) => {
+          if (!open) {
+            setShowComprovanteModal(false);
+            setComprovanteFile(null);
+            setDataPagamentoComprovante('');
+            setSelectedTitulo(null);
+          }
+        }}>
+          <DialogContent className="max-w-md rounded-3xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Upload className="w-5 h-5 text-blue-600" />
+                Enviar Comprovante de Pagamento
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {selectedTitulo && (
+                <div className="p-4 bg-gray-50 rounded-lg border">
+                  <p className="text-sm text-gray-600 mb-1">
+                    Pedido #{selectedTitulo.pedido_id ? selectedTitulo.pedido_id.slice(-8).toUpperCase() : 'N/A'}
+                    {selectedTitulo.parcela_numero && ` - Parcela ${selectedTitulo.parcela_numero}/${selectedTitulo.total_parcelas || '?'}`}
+                  </p>
+                  <p className="text-2xl font-bold text-blue-600">{formatCurrency(selectedTitulo.valor)}</p>
+                  <p className="text-sm text-gray-500">
+                    Vencimento: {new Date(selectedTitulo.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <label className="text-sm font-medium block mb-1">Data do Pagamento *</label>
+                <Input
+                  type="date"
+                  value={dataPagamentoComprovante}
+                  onChange={(e) => setDataPagamentoComprovante(e.target.value)}
+                  max={new Date().toISOString().split('T')[0]}
+                />
+                <p className="text-xs text-gray-500 mt-1">Informe a data em que o pagamento foi realizado</p>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium block mb-1">Comprovante *</label>
+                <Input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={(e) => setComprovanteFile(e.target.files[0])}
+                />
+                <p className="text-xs text-gray-500 mt-1">Formatos aceitos: PDF, JPG, JPEG, PNG</p>
+              </div>
+
+              <Alert>
+                <AlertDescription>
+                  Após enviar o comprovante, ele será analisado pelo departamento financeiro.
+                  Você receberá uma notificação quando for aprovado ou recusado.
+                </AlertDescription>
+              </Alert>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowComprovanteModal(false);
+                    setComprovanteFile(null);
+                    setDataPagamentoComprovante('');
+                    setSelectedTitulo(null);
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleEnviarComprovantePedido}
+                  disabled={!comprovanteFile || !dataPagamentoComprovante || uploadingComprovante}
+                  className="bg-blue-600"
+                >
+                  {uploadingComprovante ? 'Enviando...' : 'Enviar Comprovante'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Modal de Confirmação com Data */}
       <Dialog open={showConfirmacaoModal} onOpenChange={setShowConfirmacaoModal}>
