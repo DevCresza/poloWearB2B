@@ -15,7 +15,7 @@ export default function AlertaBloqueio() {
   const [showModal, setShowModal] = useState(false);
   const [alertType, setAlertType] = useState(null); // 'global' | 'loja'
   const navigate = useNavigate();
-  const { lojaSelecionada, isLojaBloqueada } = useLojaContext();
+  const { lojaSelecionada, isLojaBloqueada, loadLojas } = useLojaContext();
 
   useEffect(() => {
     checkUser();
@@ -33,7 +33,7 @@ export default function AlertaBloqueio() {
       const currentUser = await User.me();
 
       // Verificar inadimplência automaticamente para clientes multimarca
-      if (currentUser.tipo_negocio === 'multimarca' && !currentUser.bloqueado) {
+      if (currentUser.tipo_negocio === 'multimarca') {
         try {
           const titulosCliente = await Carteira.filter({ cliente_user_id: currentUser.id });
           const hoje = new Date();
@@ -48,7 +48,8 @@ export default function AlertaBloqueio() {
 
           const totalVencido = titulosVencidos.reduce((sum, t) => sum + (t.valor || 0), 0);
 
-          if (titulosVencidos.length > 0 && totalVencido > 0) {
+          if (!currentUser.bloqueado && titulosVencidos.length > 0 && totalVencido > 0) {
+            // Auto-bloqueio: tem títulos vencidos
             await User.update(currentUser.id, {
               bloqueado: true,
               motivo_bloqueio: `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`,
@@ -58,6 +59,23 @@ export default function AlertaBloqueio() {
             currentUser.bloqueado = true;
             currentUser.motivo_bloqueio = `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`;
             currentUser.total_vencido = totalVencido;
+          } else if (currentUser.bloqueado && (titulosVencidos.length === 0 || totalVencido <= 0)) {
+            // Auto-desbloqueio: estava bloqueado mas não tem mais títulos vencidos
+            // Só desbloqueia automaticamente se foi bloqueio automático (não manual pelo admin)
+            const isAutoBlock = currentUser.motivo_bloqueio?.startsWith('Bloqueio automático');
+            if (isAutoBlock) {
+              await User.update(currentUser.id, {
+                bloqueado: false,
+                motivo_bloqueio: null,
+                data_bloqueio: null,
+                total_vencido: 0
+              });
+              currentUser.bloqueado = false;
+              currentUser.motivo_bloqueio = null;
+              currentUser.total_vencido = 0;
+              // Limpar flag de sessão para não mostrar modal de bloqueio
+              sessionStorage.removeItem('bloqueio_visto');
+            }
           }
         } catch (e) {
           console.warn('Erro ao verificar inadimplência:', e);
@@ -78,35 +96,47 @@ export default function AlertaBloqueio() {
 
   const checkLojaBloqueio = async () => {
     if (!lojaSelecionada) return;
-    // Auto-bloqueio por loja: checar títulos vencidos filtrados por loja_id
-    if (user?.tipo_negocio === 'multimarca' && !lojaSelecionada.bloqueada) {
-      try {
-        const titulosLoja = await Carteira.filter({
-          cliente_user_id: user.id,
-          loja_id: lojaSelecionada.id
+    if (user?.tipo_negocio !== 'multimarca') return;
+
+    try {
+      const titulosLoja = await Carteira.filter({
+        cliente_user_id: user.id,
+        loja_id: lojaSelecionada.id
+      });
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+
+      const titulosVencidos = (titulosLoja || []).filter(t => {
+        if (t.status !== 'pendente') return false;
+        if (!t.data_vencimento) return false;
+        const dv = new Date(t.data_vencimento + 'T00:00:00');
+        return dv < hoje;
+      });
+
+      const totalVencido = titulosVencidos.reduce((sum, t) => sum + (t.valor || 0), 0);
+
+      if (!lojaSelecionada.bloqueada && titulosVencidos.length > 0 && totalVencido > 0) {
+        // Auto-bloqueio da loja
+        await Loja.update(lojaSelecionada.id, {
+          bloqueada: true,
+          motivo_bloqueio: `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`,
+          data_bloqueio: new Date().toISOString()
         });
-        const hoje = new Date();
-        hoje.setHours(0, 0, 0, 0);
-
-        const titulosVencidos = (titulosLoja || []).filter(t => {
-          if (t.status !== 'pendente') return false;
-          if (!t.data_vencimento) return false;
-          const dv = new Date(t.data_vencimento + 'T00:00:00');
-          return dv < hoje;
-        });
-
-        const totalVencido = titulosVencidos.reduce((sum, t) => sum + (t.valor || 0), 0);
-
-        if (titulosVencidos.length > 0 && totalVencido > 0) {
+        loadLojas(); // Recarregar lojas no contexto
+      } else if (lojaSelecionada.bloqueada && (titulosVencidos.length === 0 || totalVencido <= 0)) {
+        // Auto-desbloqueio da loja: não tem mais títulos vencidos
+        const isAutoBlock = lojaSelecionada.motivo_bloqueio?.startsWith('Bloqueio automático');
+        if (isAutoBlock) {
           await Loja.update(lojaSelecionada.id, {
-            bloqueada: true,
-            motivo_bloqueio: `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`,
-            data_bloqueio: new Date().toISOString()
+            bloqueada: false,
+            motivo_bloqueio: null,
+            data_bloqueio: null
           });
+          loadLojas(); // Recarregar lojas no contexto
         }
-      } catch (e) {
-        console.warn('Erro ao verificar inadimplência por loja:', e);
       }
+    } catch (e) {
+      console.warn('Erro ao verificar inadimplência por loja:', e);
     }
   };
 

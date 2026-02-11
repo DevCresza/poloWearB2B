@@ -88,24 +88,9 @@ export default function MeusPedidos() {
         setLojasMap(map);
       }
 
-      // Filtrar pedidos para mostrar:
-      // - Pedidos em andamento (antes de faturar ou ainda não entregues)
-      // - Pedidos já faturados mas com parcelas pendentes (para acompanhamento)
-      // - NÃO mostra cancelados (vão para histórico)
-      // - NÃO mostra finalizados com todas parcelas pagas (vão para histórico)
+      // Filtrar pedidos: mostra todos exceto cancelados (que vão para histórico)
       const pedidosFiltrados = (pedidosList || []).filter(pedido => {
-        // Pedidos cancelados vão para histórico
         if (pedido.status === 'cancelado') return false;
-
-        // Pedidos finalizados só aparecem se ainda há parcelas pendentes
-        if (pedido.status === 'finalizado') {
-          const parcelasPendentes = (carteiraList || []).filter(
-            t => t.pedido_id === pedido.id && (t.status === 'pendente' || t.status === 'em_analise')
-          );
-          return parcelasPendentes.length > 0;
-        }
-
-        // Pedidos em andamento sempre aparecem
         return true;
       });
 
@@ -336,34 +321,39 @@ export default function MeusPedidos() {
       const paymentInfo = getPaymentStatusInfo(pedido.status_pagamento);
       const itens = Array.isArray(pedido.itens) ? pedido.itens : JSON.parse(pedido.itens || '[]');
       const totalItens = itens.reduce((sum, item) => sum + item.quantidade, 0);
+      const lojaName = pedido.loja_id && lojasMap[pedido.loja_id] ? lojasMap[pedido.loja_id] : '';
 
       return {
         numero_pedido: `#${pedido.id.slice(-8).toUpperCase()}`,
         fornecedor: getFornecedorNome(pedido.fornecedor_id),
+        loja: lojaName,
         data_pedido: formatDate(pedido.created_date),
+        data_faturamento: pedido.nf_data_upload ? formatDate(pedido.nf_data_upload) : '',
+        nf_numero: pedido.nf_numero || '',
         status: statusInfo.label,
         status_pagamento: paymentInfo.label,
         metodo_pagamento: pedido.metodo_pagamento?.replace('_', ' ').toUpperCase() || '',
         quantidade_itens: totalItens,
-        valor_total: pedido.valor_total,
-        data_prevista_entrega: pedido.data_prevista_entrega ? formatDate(pedido.data_prevista_entrega) : '',
-        codigo_rastreio: pedido.codigo_rastreio || '',
-        transportadora: pedido.transportadora || ''
+        valor_total: pedido.valor_final || pedido.valor_total || 0,
+        transportadora: pedido.transportadora || '',
+        codigo_rastreio: pedido.codigo_rastreio || ''
       };
     });
 
     const columns = [
       { key: 'numero_pedido', label: 'Nº Pedido' },
       { key: 'fornecedor', label: 'Fornecedor' },
-      { key: 'data_pedido', label: 'Data do Pedido' },
+      { key: 'loja', label: 'Loja' },
+      { key: 'data_pedido', label: 'Data Pedido' },
+      { key: 'data_faturamento', label: 'Data Faturamento' },
+      { key: 'nf_numero', label: 'Nº NF' },
       { key: 'status', label: 'Status' },
       { key: 'status_pagamento', label: 'Status Pagamento' },
       { key: 'metodo_pagamento', label: 'Método Pagamento' },
       { key: 'quantidade_itens', label: 'Qtd. Itens' },
       { key: 'valor_total', label: 'Valor Total (R$)' },
-      { key: 'data_prevista_entrega', label: 'Previsão Entrega' },
-      { key: 'codigo_rastreio', label: 'Código Rastreio' },
-      { key: 'transportadora', label: 'Transportadora' }
+      { key: 'transportadora', label: 'Transportadora' },
+      { key: 'codigo_rastreio', label: 'Código Rastreio' }
     ];
 
     exportToCSV(
@@ -379,12 +369,15 @@ export default function MeusPedidos() {
       const paymentInfo = getPaymentStatusInfo(pedido.status_pagamento);
       const itens = Array.isArray(pedido.itens) ? pedido.itens : JSON.parse(pedido.itens || '[]');
       const totalItens = itens.reduce((sum, item) => sum + item.quantidade, 0);
+      const lojaName = pedido.loja_id && lojasMap[pedido.loja_id] ? lojasMap[pedido.loja_id] : '-';
 
       return {
         numero_pedido: `#${pedido.id.slice(-8).toUpperCase()}`,
         fornecedor: getFornecedorNome(pedido.fornecedor_id),
+        loja: lojaName,
         data_pedido: formatDate(pedido.created_date),
         data_faturamento: pedido.nf_data_upload ? formatDate(pedido.nf_data_upload) : '-',
+        nf_numero: pedido.nf_numero || '-',
         status: statusInfo.label,
         status_pagamento: paymentInfo.label,
         quantidade_itens: totalItens,
@@ -393,10 +386,12 @@ export default function MeusPedidos() {
     });
 
     const columns = [
-      { key: 'numero_pedido', label: 'Nº Pedido' },
+      { key: 'numero_pedido', label: 'Pedido' },
       { key: 'fornecedor', label: 'Fornecedor' },
+      { key: 'loja', label: 'Loja' },
       { key: 'data_pedido', label: 'Data Pedido' },
       { key: 'data_faturamento', label: 'Faturamento' },
+      { key: 'nf_numero', label: 'NF' },
       { key: 'status', label: 'Status' },
       { key: 'status_pagamento', label: 'Pagamento' },
       { key: 'quantidade_itens', label: 'Qtd.' },
@@ -407,7 +402,8 @@ export default function MeusPedidos() {
       exportData,
       columns,
       `Meus Pedidos - ${user?.empresa || user?.full_name || 'Cliente'}`,
-      `meus_pedidos_${new Date().toISOString().split('T')[0]}.pdf`
+      `meus_pedidos_${new Date().toISOString().split('T')[0]}.pdf`,
+      { orientation: 'landscape' }
     );
   };
 
@@ -596,22 +592,24 @@ export default function MeusPedidos() {
               Carteira Financeira
             </Button>
 
-            <Button
-              onClick={handleExportPDF}
-              variant="outline"
-              className="rounded-xl"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Exportar PDF
-            </Button>
-            <Button
-              onClick={handleExportCSV}
-              variant="outline"
-              className="rounded-xl"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Exportar CSV
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                onClick={handleExportPDF}
+                variant="outline"
+                className="rounded-xl"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                PDF
+              </Button>
+              <Button
+                onClick={handleExportCSV}
+                variant="outline"
+                className="rounded-xl"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                CSV
+              </Button>
+            </div>
           </div>
 
           {/* Filtros por data */}

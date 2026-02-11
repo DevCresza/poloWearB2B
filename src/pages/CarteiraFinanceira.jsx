@@ -3,6 +3,7 @@ import { User } from '@/api/entities';
 import { Carteira } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { Pedido } from '@/api/entities';
+import { Loja } from '@/api/entities';
 import { SendEmail, UploadFile } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -336,24 +337,75 @@ export default function CarteiraFinanceira() {
         data_pagamento: dataPagamentoConfirmada
       });
 
-      // 2. Atualizar totais do cliente (não bloqueia aprovação se falhar)
+      // 2. Atualizar totais do cliente e verificar auto-desbloqueio
       try {
         const cliente = await User.get(tituloParaAprovar.cliente_user_id);
-        const novoTotalAberto = (cliente.total_em_aberto || 0) - tituloParaAprovar.valor;
 
+        // Recalcular totais com base em TODOS os títulos restantes do cliente
+        const todosTitulos = await Carteira.filter({ cliente_user_id: tituloParaAprovar.cliente_user_id });
         const hoje = new Date();
         hoje.setHours(0, 0, 0, 0);
-        const dataVencimento = new Date(tituloParaAprovar.data_vencimento + 'T00:00:00');
-        const estaVencido = dataVencimento < hoje;
 
-        const novoTotalVencido = estaVencido
-          ? (cliente.total_vencido || 0) - tituloParaAprovar.valor
-          : (cliente.total_vencido || 0);
+        // Excluir o título atual (acabou de ser marcado como pago)
+        const titulosRestantes = (todosTitulos || []).filter(t => t.id !== tituloParaAprovar.id);
 
-        await User.update(tituloParaAprovar.cliente_user_id, {
+        const novoTotalAberto = titulosRestantes
+          .filter(t => t.status === 'pendente' || t.status === 'em_analise')
+          .reduce((sum, t) => sum + (t.valor || 0), 0);
+
+        const novoTotalVencido = titulosRestantes
+          .filter(t => {
+            if (t.status !== 'pendente') return false;
+            if (!t.data_vencimento) return false;
+            const dv = new Date(t.data_vencimento + 'T00:00:00');
+            return dv < hoje;
+          })
+          .reduce((sum, t) => sum + (t.valor || 0), 0);
+
+        const updateData = {
           total_em_aberto: Math.max(0, novoTotalAberto),
           total_vencido: Math.max(0, novoTotalVencido)
-        });
+        };
+
+        // Auto-desbloqueio: se não tem mais títulos vencidos e foi bloqueio automático
+        if (cliente.bloqueado && novoTotalVencido <= 0) {
+          const isAutoBlock = cliente.motivo_bloqueio?.startsWith('Bloqueio automático');
+          if (isAutoBlock) {
+            updateData.bloqueado = false;
+            updateData.motivo_bloqueio = null;
+            updateData.data_bloqueio = null;
+          }
+        }
+
+        await User.update(tituloParaAprovar.cliente_user_id, updateData);
+
+        // Auto-desbloqueio por loja: verificar se a loja do título deve ser desbloqueada
+        if (tituloParaAprovar.loja_id) {
+          try {
+            const titulosLoja = titulosRestantes.filter(t => t.loja_id === tituloParaAprovar.loja_id);
+            const totalVencidoLoja = titulosLoja
+              .filter(t => {
+                if (t.status !== 'pendente') return false;
+                if (!t.data_vencimento) return false;
+                const dv = new Date(t.data_vencimento + 'T00:00:00');
+                return dv < hoje;
+              })
+              .reduce((sum, t) => sum + (t.valor || 0), 0);
+
+            if (totalVencidoLoja <= 0) {
+              const loja = await Loja.get(tituloParaAprovar.loja_id);
+              if (loja?.bloqueada && loja.motivo_bloqueio?.startsWith('Bloqueio automático')) {
+                await Loja.update(tituloParaAprovar.loja_id, {
+                  bloqueada: false,
+                  motivo_bloqueio: null,
+                  data_bloqueio: null
+                });
+              }
+            }
+          } catch (e) {
+            console.warn('Erro ao verificar desbloqueio da loja:', e);
+          }
+        }
       } catch (e) {
         console.warn('Erro ao atualizar totais do cliente:', e);
       }
@@ -575,30 +627,49 @@ export default function CarteiraFinanceira() {
         hoje.setHours(0, 0, 0, 0);
         const isVencido = vencimento < hoje && titulo.status === 'pendente';
 
+        // Tipo: mostrar "Recebido" quando pago, senão traduzir o tipo original
+        const tipoLabel = titulo.status === 'pago'
+          ? 'Recebido'
+          : titulo.tipo === 'a_receber' ? 'A Receber'
+          : titulo.tipo === 'a_pagar' ? 'A Pagar'
+          : titulo.tipo || '-';
+
+        // Nome do cliente
+        const clienteNome = titulo.cliente_user_id && clientesMap[titulo.cliente_user_id]
+          ? clientesMap[titulo.cliente_user_id]
+          : (user?.tipo_negocio === 'multimarca' || user?.tipo_negocio === 'franqueado')
+            ? (user.empresa || user.razao_social || user.full_name || '-')
+            : '-';
+
+        // Número do pedido
+        const numeroPedido = titulo.pedido_id ? `#${titulo.pedido_id.slice(-8).toUpperCase()}` : '-';
+
         return {
+          numero_pedido: numeroPedido,
+          cliente: clienteNome,
           fornecedor: getFornecedorNome(titulo),
           descricao: titulo.descricao || '-',
-          tipo: titulo.tipo || 'a_receber',
+          tipo: tipoLabel,
           valor: titulo.valor || 0,
           vencimento: formatDate(titulo.data_vencimento),
           pagamento: titulo.data_pagamento ? formatDate(titulo.data_pagamento) : '-',
           status: titulo.status === 'pago' ? 'Pago' : isVencido ? 'Vencido' : titulo.status === 'em_analise' ? 'Em Análise' : 'Pendente',
-          categoria: titulo.categoria || '-',
           observacoes: titulo.observacoes || '-'
         };
       });
 
       // Definir colunas
       const columns = [
+        { key: 'numero_pedido', label: 'Pedido' },
+        { key: 'cliente', label: 'Cliente' },
         { key: 'fornecedor', label: 'Fornecedor' },
         { key: 'descricao', label: 'Descrição' },
         { key: 'tipo', label: 'Tipo' },
         { key: 'valor', label: 'Valor (R$)' },
         { key: 'vencimento', label: 'Vencimento' },
-        { key: 'pagamento', label: 'Data Pagamento' },
+        { key: 'pagamento', label: 'Pagamento' },
         { key: 'status', label: 'Status' },
-        { key: 'categoria', label: 'Categoria' },
-        { key: 'observacoes', label: 'Observações' }
+        { key: 'observacoes', label: 'Obs.' }
       ];
 
       if (format === 'pdf') {
@@ -606,7 +677,8 @@ export default function CarteiraFinanceira() {
           exportData,
           columns,
           'Carteira Financeira - Polo Wear',
-          `carteira_financeira_${new Date().toISOString().split('T')[0]}.pdf`
+          `carteira_financeira_${new Date().toISOString().split('T')[0]}.pdf`,
+          { orientation: 'landscape' }
         );
       } else if (format === 'csv') {
         exportToCSV(

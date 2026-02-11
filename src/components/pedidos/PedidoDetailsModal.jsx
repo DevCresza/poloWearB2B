@@ -190,11 +190,47 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       setParcelasBoletoConfig(parcelas.map(p => ({
         dataVencimento: p.data_vencimento || '',
         parcelaId: p.id,
-        isPago: p.status === 'pago'
+        isPago: p.status === 'pago',
+        valor: p.valor || 0
       })));
     }
     setBoletoFile(null);
     setShowEditBoleto(true);
+  };
+
+  // Alterar quantidade de parcelas no modo edição (preserva pagas)
+  const handleQtdParcelasEditChange = (value) => {
+    const num = parseInt(value);
+    const parcelasPagasCount = parcelasBoletoConfig.filter(p => p.isPago).length;
+
+    if (num < parcelasPagasCount) {
+      toast.info(`Mínimo de ${parcelasPagasCount} parcela(s) - existem parcelas já pagas`);
+      return;
+    }
+
+    setQtdParcelasBoleto(num);
+
+    if (num > parcelasBoletoConfig.length) {
+      // Adicionar novas parcelas no final
+      const novas = [...parcelasBoletoConfig];
+      for (let i = parcelasBoletoConfig.length; i < num; i++) {
+        novas.push({ dataVencimento: '', isPago: false });
+      }
+      setParcelasBoletoConfig(novas);
+    } else if (num < parcelasBoletoConfig.length) {
+      // Remover parcelas não-pagas do final
+      const result = [...parcelasBoletoConfig];
+      while (result.length > num) {
+        let lastNonPaidIdx = -1;
+        for (let i = result.length - 1; i >= 0; i--) {
+          if (!result[i].isPago) { lastNonPaidIdx = i; break; }
+        }
+        if (lastNonPaidIdx >= 0) {
+          result.splice(lastNonPaidIdx, 1);
+        } else break;
+      }
+      setParcelasBoletoConfig(result);
+    }
   };
 
   // Upload de Boleto (primeiro envio - cria parcelas)
@@ -217,10 +253,13 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       });
 
       if (temParcelasConfiguradas) {
+        // Deletar apenas parcelas não pagas (preservar parcelas já quitadas)
         const parcelasAntigas = await Carteira.filter({ pedido_id: pedido.id });
         const parcelasReaisAntigas = (parcelasAntigas || []).filter(t => t.parcela_numero);
         for (const p of parcelasReaisAntigas) {
-          await Carteira.delete(p.id);
+          if (p.status !== 'pago') {
+            await Carteira.delete(p.id);
+          }
         }
 
         const valorBase = pedido.valor_final || pedido.valor_total || 0;
@@ -257,13 +296,28 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     }
   };
 
-  // Editar boleto existente (atualiza arquivo e/ou datas de parcelas não pagas)
+  // Editar boleto existente (atualiza arquivo, datas, adiciona/remove parcelas não pagas)
   const handleEditBoleto = async () => {
     const parcelasEditaveis = parcelasBoletoConfig.filter(p => !p.isPago);
     if (parcelasEditaveis.some(p => !p.dataVencimento)) {
       toast.info('Preencha todas as datas de vencimento das parcelas pendentes');
       return;
     }
+
+    const valorTotal = pedido.valor_final || pedido.valor_total || 0;
+    const valorJaPago = parcelasBoletoConfig
+      .filter(p => p.isPago)
+      .reduce((sum, p) => sum + (p.valor || 0), 0);
+    const valorRestante = valorTotal - valorJaPago;
+
+    if (valorRestante < 0) {
+      toast.error('O valor das parcelas pagas já excede o valor total do pedido');
+      return;
+    }
+
+    const qtdEditaveis = parcelasEditaveis.length;
+    const valorPorParcela = qtdEditaveis > 0 ? Math.round((valorRestante / qtdEditaveis) * 100) / 100 : 0;
+
     setUploading(true);
     try {
       let novaUrl = pedido.boleto_url;
@@ -276,13 +330,60 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
         });
       }
 
-      // Atualizar apenas parcelas não pagas (editar in-place)
-      for (const config of parcelasBoletoConfig) {
-        if (config.isPago || !config.parcelaId) continue;
-        await Carteira.update(config.parcelaId, {
-          data_vencimento: config.dataVencimento,
-          boleto_url: novaUrl
-        });
+      // IDs das parcelas que devem permanecer
+      const idsParcelasConfig = parcelasBoletoConfig
+        .filter(p => p.parcelaId)
+        .map(p => p.parcelaId);
+
+      // Deletar parcelas não-pagas que foram removidas (redução de quantidade)
+      const parcelasParaDeletar = parcelas.filter(
+        p => p.status !== 'pago' && !idsParcelasConfig.includes(p.id)
+      );
+      for (const p of parcelasParaDeletar) {
+        await Carteira.delete(p.id);
+      }
+
+      // Atualizar existentes e criar novas
+      const totalParcelas = parcelasBoletoConfig.length;
+      for (let i = 0; i < parcelasBoletoConfig.length; i++) {
+        const config = parcelasBoletoConfig[i];
+        const parcelaNum = i + 1;
+
+        if (config.isPago && config.parcelaId) {
+          // Parcela paga: só atualizar total_parcelas para exibição correta
+          await Carteira.update(config.parcelaId, {
+            parcela_numero: parcelaNum,
+            total_parcelas: totalParcelas,
+            boleto_url: novaUrl
+          });
+        } else if (config.parcelaId) {
+          // Parcela existente não-paga: atualizar data, valor e URL
+          await Carteira.update(config.parcelaId, {
+            data_vencimento: config.dataVencimento,
+            valor: valorPorParcela,
+            parcela_numero: parcelaNum,
+            total_parcelas: totalParcelas,
+            boleto_url: novaUrl
+          });
+        } else {
+          // Parcela nova: criar
+          await Carteira.create({
+            pedido_id: pedido.id,
+            cliente_user_id: pedido.comprador_user_id,
+            fornecedor_id: pedido.fornecedor_id,
+            loja_id: pedido.loja_id,
+            tipo: 'a_receber',
+            valor: valorPorParcela,
+            data_vencimento: config.dataVencimento,
+            status: 'pendente',
+            parcela_numero: parcelaNum,
+            total_parcelas: totalParcelas,
+            boleto_url: novaUrl,
+            descricao: totalParcelas > 1
+              ? `Parcela ${parcelaNum}/${totalParcelas} - Pedido #${pedido.id.slice(-8).toUpperCase()}`
+              : `Pedido #${pedido.id.slice(-8).toUpperCase()}`
+          });
+        }
       }
 
       toast.success('Boleto atualizado com sucesso!');
@@ -1334,6 +1435,131 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                         </div>
                       </div>
                     </div>
+
+                    {/* Botão Atualizar Boleto na aba Pagamento */}
+                    {canUpload && !showEditBoleto && !todasParcelasPagas && (
+                      <div className="mt-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleOpenEditBoleto}
+                          className="w-full text-blue-700 border-blue-300 hover:bg-blue-100"
+                        >
+                          <Pencil className="w-4 h-4 mr-2" />
+                          Editar / Adicionar Parcelas
+                        </Button>
+                      </div>
+                    )}
+                    {canUpload && todasParcelasPagas && (
+                      <div className="mt-4">
+                        <Badge className="bg-green-100 text-green-800">
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Todas as parcelas pagas - nao editavel
+                        </Badge>
+                      </div>
+                    )}
+
+                    {/* Formulário de edição de parcelas inline na aba Pagamento */}
+                    {canUpload && showEditBoleto && (() => {
+                      const valorTotal = pedido.valor_final || pedido.valor_total || 0;
+                      const valorPago = parcelasBoletoConfig.filter(p => p.isPago).reduce((s, p) => s + (p.valor || 0), 0);
+                      const valorRestante = valorTotal - valorPago;
+                      const qtdEditaveis = parcelasBoletoConfig.filter(p => !p.isPago).length;
+                      const valorPorParcela = qtdEditaveis > 0 ? valorRestante / qtdEditaveis : 0;
+                      const parcelasPagasCount = parcelasBoletoConfig.filter(p => p.isPago).length;
+
+                      return (
+                      <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-semibold text-blue-800">Editar Parcelas:</p>
+                          <Button variant="ghost" size="sm" onClick={() => setShowEditBoleto(false)} className="text-xs text-gray-500">
+                            <ChevronUp className="w-4 h-4 mr-1" /> Fechar
+                          </Button>
+                        </div>
+
+                        <div className="bg-white/60 p-3 rounded-lg space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <Label className="text-xs">Quantidade de Parcelas</Label>
+                              <Select value={String(qtdParcelasBoleto)} onValueChange={handleQtdParcelasEditChange}>
+                                <SelectTrigger className="h-9">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
+                                    <SelectItem key={n} value={String(n)} disabled={n < parcelasPagasCount}>{n}x</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="flex items-end">
+                              <div className="text-xs text-blue-800 space-y-0.5">
+                                <p><strong>Valor total:</strong> {formatCurrency(valorTotal)}</p>
+                                {valorPago > 0 && <p className="text-green-700"><strong>Ja pago:</strong> {formatCurrency(valorPago)}</p>}
+                                {qtdEditaveis > 0 && <p><strong>Por parcela:</strong> {formatCurrency(valorPorParcela)}</p>}
+                              </div>
+                            </div>
+                          </div>
+
+                          {temParcelaPaga && (
+                            <Badge className="bg-amber-100 text-amber-800 text-xs">
+                              <AlertTriangle className="w-3 h-3 mr-1" />
+                              Parcelas pagas nao editaveis
+                            </Badge>
+                          )}
+
+                          <div className="space-y-2">
+                            <Label className="text-xs">Datas de Vencimento</Label>
+                            {parcelasBoletoConfig.map((parcela, index) => (
+                              <div key={index} className={`flex items-center gap-2 p-2 rounded border ${parcela.isPago ? 'bg-green-50 border-green-200' : 'bg-white border-blue-200'}`}>
+                                <Badge variant="outline" className="text-xs shrink-0">{index + 1}/{qtdParcelasBoleto}</Badge>
+                                <span className="text-xs text-gray-500 shrink-0">
+                                  {formatCurrency(parcela.isPago ? (parcela.valor || 0) : valorPorParcela)}
+                                </span>
+                                {parcela.isPago ? (
+                                  <>
+                                    <span className="text-sm text-gray-600 flex-1">
+                                      {parcela.dataVencimento ? new Date(parcela.dataVencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}
+                                    </span>
+                                    <Badge className="bg-green-100 text-green-800 text-xs shrink-0">
+                                      <CheckCircle className="w-3 h-3 mr-1" />
+                                      Pago
+                                    </Badge>
+                                  </>
+                                ) : (
+                                  <Input
+                                    type="date"
+                                    value={parcela.dataVencimento}
+                                    onChange={(e) => handleParcelaBoletoDataChange(index, e.target.value)}
+                                    className="h-8 text-sm"
+                                  />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label className="text-xs">Novo arquivo do boleto (opcional)</Label>
+                          <Input
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png,.crm"
+                            onChange={(e) => setBoletoFile(e.target.files[0])}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Deixe em branco para manter o arquivo atual</p>
+                        </div>
+                        <Button
+                          onClick={handleEditBoleto}
+                          disabled={uploading}
+                          size="sm"
+                          className="w-full bg-blue-600 hover:bg-blue-700"
+                        >
+                          <Pencil className="w-4 h-4 mr-2" />
+                          {uploading ? 'Salvando...' : 'Salvar Alterações'}
+                        </Button>
+                      </div>
+                      );
+                    })()}
                   </div>
                 ) : (
                   <div className="p-6 bg-gray-50 rounded-lg border border-dashed border-gray-300 text-center">
@@ -1440,7 +1666,15 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       </Badge>
                     </div>
                   )}
-                  {canUpload && showEditBoleto && (
+                  {canUpload && showEditBoleto && (() => {
+                    const valorTotal = pedido.valor_final || pedido.valor_total || 0;
+                    const valorPago = parcelasBoletoConfig.filter(p => p.isPago).reduce((s, p) => s + (p.valor || 0), 0);
+                    const valorRestante = valorTotal - valorPago;
+                    const qtdEditaveis = parcelasBoletoConfig.filter(p => !p.isPago).length;
+                    const valorPorParcela = qtdEditaveis > 0 ? valorRestante / qtdEditaveis : 0;
+                    const parcelasPagasCount = parcelasBoletoConfig.filter(p => p.isPago).length;
+
+                    return (
                     <div className="mt-4 pt-4 border-t border-blue-200 space-y-3">
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-semibold text-blue-800">Editar Boleto:</p>
@@ -1449,20 +1683,37 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                         </Button>
                       </div>
 
-                      {/* Parcelas existentes */}
                       <div className="bg-blue-100/50 p-3 rounded-lg space-y-3">
-                        <div className="flex items-end justify-between">
-                          <div className="text-xs text-blue-800">
-                            <p><strong>{qtdParcelasBoleto} parcela(s)</strong></p>
-                            <p><strong>Valor total:</strong> {formatCurrency(pedido.valor_final || pedido.valor_total)}</p>
+                        {/* Seletor de quantidade + resumo de valores */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-xs">Quantidade de Parcelas</Label>
+                            <Select value={String(qtdParcelasBoleto)} onValueChange={handleQtdParcelasEditChange}>
+                              <SelectTrigger className="h-9">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
+                                  <SelectItem key={n} value={String(n)} disabled={n < parcelasPagasCount}>{n}x</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
-                          {temParcelaPaga && (
-                            <Badge className="bg-amber-100 text-amber-800 text-xs">
-                              <AlertTriangle className="w-3 h-3 mr-1" />
-                              Parcelas pagas não editáveis
-                            </Badge>
-                          )}
+                          <div className="flex items-end">
+                            <div className="text-xs text-blue-800 space-y-0.5">
+                              <p><strong>Valor total:</strong> {formatCurrency(valorTotal)}</p>
+                              {valorPago > 0 && <p className="text-green-700"><strong>Ja pago:</strong> {formatCurrency(valorPago)}</p>}
+                              {qtdEditaveis > 0 && <p><strong>Por parcela:</strong> {formatCurrency(valorPorParcela)}</p>}
+                            </div>
+                          </div>
                         </div>
+
+                        {temParcelaPaga && (
+                          <Badge className="bg-amber-100 text-amber-800 text-xs">
+                            <AlertTriangle className="w-3 h-3 mr-1" />
+                            Parcelas pagas nao editaveis
+                          </Badge>
+                        )}
 
                         {/* Datas de vencimento */}
                         <div className="space-y-2">
@@ -1470,7 +1721,9 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                           {parcelasBoletoConfig.map((parcela, index) => (
                             <div key={index} className={`flex items-center gap-2 p-2 rounded border ${parcela.isPago ? 'bg-green-50 border-green-200' : 'bg-white border-blue-200'}`}>
                               <Badge variant="outline" className="text-xs shrink-0">{index + 1}/{qtdParcelasBoleto}</Badge>
-                              <span className="text-xs text-gray-500 shrink-0">{formatCurrency(parcelas[index]?.valor || (pedido.valor_final || pedido.valor_total) / qtdParcelasBoleto)}</span>
+                              <span className="text-xs text-gray-500 shrink-0">
+                                {formatCurrency(parcela.isPago ? (parcela.valor || 0) : valorPorParcela)}
+                              </span>
                               {parcela.isPago ? (
                                 <>
                                   <span className="text-sm text-gray-600 flex-1">
@@ -1513,7 +1766,8 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                         {uploading ? 'Salvando...' : 'Salvar Alterações'}
                       </Button>
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
               ) : (
                 <div className="p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">

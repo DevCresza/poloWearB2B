@@ -72,14 +72,14 @@ export const exportToCSV = (data, columns, filename = 'export.csv') => {
  * @param {string} title - Título do relatório
  * @param {string} filename - Nome do arquivo
  */
-export const exportToPDF = (data, columns, title = 'Relatório', filename = 'export.pdf') => {
+export const exportToPDF = (data, columns, title = 'Relatório', filename = 'export.pdf', options = {}) => {
   if (!data || data.length === 0) {
     toast.info('Não há dados para exportar');
     return;
   }
 
   try {
-    const doc = new jsPDF();
+    const doc = new jsPDF({ orientation: options.orientation || 'portrait' });
 
     // Adicionar título
     doc.setFontSize(16);
