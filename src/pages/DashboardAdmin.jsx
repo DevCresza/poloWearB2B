@@ -22,6 +22,7 @@ import {
 } from 'recharts';
 import { base44 } from '@/api/base44Client';
 import { exportToCSV, formatCurrency, formatDate } from '@/utils/exportUtils';
+import DashboardKpiCards from '../components/DashboardKpiCards';
 
 export default function DashboardAdmin() {
   const [loading, setLoading] = useState(true);
@@ -48,10 +49,13 @@ export default function DashboardAdmin() {
     pedidosEmAnalise: 0,
     pedidosEmProducao: 0,
     pedidosFaturados: 0,
+    qtdFaturada: 0,
+    valorFaturado: 0,
     clientesAtivos: 0,
     clientesBloqueados: 0,
     clientesNovos: 0,
     valorEmAberto: 0,
+    valorAVencer: 0,
     valorVencido: 0,
     produtosAtivos: 0,
     produtosEstoqueBaixo: 0,
@@ -198,15 +202,29 @@ export default function DashboardAdmin() {
     trintaDiasAtras.setDate(hoje.getDate() - 30);
     const clientesNovos = clientesList.filter(c => new Date(c.created_date) >= trintaDiasAtras).length;
 
-    // Financeiro
-    const valorEmAberto = carteiraList
-      .filter(t => t.status === 'pendente')
-      .reduce((sum, t) => sum + (t.valor || 0), 0);
+    // Faturado (KPI padronizado)
+    const FATURADO_STATUSES = ['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'];
+    const pedidosFaturadosAll = pedidosList.filter(p => FATURADO_STATUSES.includes(p.status));
+    const qtdFaturada = pedidosFaturadosAll.length;
+    const valorFaturado = pedidosFaturadosAll.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
 
-    const valorVencido = carteiraList
+    // Financeiro
+    const hojeZero = new Date();
+    hojeZero.setHours(0, 0, 0, 0);
+    const pendentesCarteira = carteiraList.filter(t => t.status === 'pendente');
+    const valorEmAberto = pendentesCarteira.reduce((sum, t) => sum + (t.valor || 0), 0);
+
+    const valorAVencer = pendentesCarteira
       .filter(t => {
         const vencimento = new Date(t.data_vencimento);
-        return t.status === 'pendente' && vencimento < hoje;
+        return vencimento >= hojeZero;
+      })
+      .reduce((sum, t) => sum + (t.valor || 0), 0);
+
+    const valorVencido = pendentesCarteira
+      .filter(t => {
+        const vencimento = new Date(t.data_vencimento);
+        return vencimento < hojeZero;
       })
       .reduce((sum, t) => sum + (t.valor || 0), 0);
 
@@ -230,10 +248,13 @@ export default function DashboardAdmin() {
       pedidosEmAnalise,
       pedidosEmProducao,
       pedidosFaturados,
+      qtdFaturada,
+      valorFaturado,
       clientesAtivos,
       clientesBloqueados,
       clientesNovos,
       valorEmAberto,
+      valorAVencer,
       valorVencido,
       produtosAtivos,
       produtosEstoqueBaixo,
@@ -512,40 +533,23 @@ export default function DashboardAdmin() {
         </div>
       ) : (
         <>
-          {/* KPIs Principais */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl shadow-neumorphic">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <DollarSign className="w-10 h-10 opacity-80" />
-                  <Badge className="bg-white/20 text-white">
-                    {stats.crescimentoMensal > 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-                    {Math.abs(stats.crescimentoMensal).toFixed(1)}%
-                  </Badge>
-                </div>
-                <p className="text-sm opacity-90 mb-1">Faturamento do Mês</p>
-                <p className="text-3xl font-bold">R$ {stats.faturamentoMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                <p className="text-xs opacity-75 mt-2">
-                  Total: R$ {stats.faturamentoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </p>
-              </CardContent>
-            </Card>
+          {/* KPIs Padronizados (6 cards) */}
+          <DashboardKpiCards
+            role="admin"
+            kpis={{
+              totalPedidos: stats.pedidosTotal,
+              valorTotal: stats.faturamentoTotal,
+              valorFaturado: stats.valorFaturado,
+              qtdFaturada: stats.qtdFaturada,
+              pendenteFaturamento: stats.faturamentoTotal - stats.valorFaturado,
+              qtdPendenteFaturamento: stats.pedidosTotal - stats.qtdFaturada,
+              valorAVencer: stats.valorAVencer,
+              valorVencido: stats.valorVencido,
+            }}
+          />
 
-            <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl shadow-neumorphic">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <Package className="w-10 h-10 opacity-80" />
-                  <Badge className="bg-white/20 text-white">{stats.pedidosMes} novos</Badge>
-                </div>
-                <p className="text-sm opacity-90 mb-1">Total de Pedidos</p>
-                <p className="text-3xl font-bold">{stats.pedidosTotal}</p>
-                <div className="text-xs opacity-75 mt-2 space-y-1">
-                  <p>Em análise: {stats.pedidosEmAnalise}</p>
-                  <p>Em produção: {stats.pedidosEmProducao}</p>
-                </div>
-              </CardContent>
-            </Card>
-
+          {/* KPIs Admin-Específicos */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-2xl shadow-neumorphic">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-2">
@@ -560,21 +564,6 @@ export default function DashboardAdmin() {
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-2xl shadow-neumorphic">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <AlertTriangle className="w-10 h-10 opacity-80" />
-                  <Badge className="bg-white/20 text-white">Alerta</Badge>
-                </div>
-                <p className="text-sm opacity-90 mb-1">Valores Vencidos</p>
-                <p className="text-3xl font-bold">R$ {stats.valorVencido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                <p className="text-xs opacity-75 mt-2">
-                  Em aberto: R$ {stats.valorEmAberto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* KPI de Pedidos Atrasados - NOVO */}
             <Card className="bg-gradient-to-br from-red-50 to-orange-50 border-red-200 rounded-2xl shadow-neumorphic">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-red-900 flex items-center gap-2">
@@ -586,6 +575,23 @@ export default function DashboardAdmin() {
                 <div className="text-3xl font-bold text-red-700">{pedidosAtrasados.total}</div>
                 <p className="text-xs text-red-600 mt-1">
                   Necessitam atenção imediata
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl shadow-neumorphic">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-2">
+                  <DollarSign className="w-10 h-10 opacity-80" />
+                  <Badge className="bg-white/20 text-white">
+                    {stats.crescimentoMensal > 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
+                    {Math.abs(stats.crescimentoMensal).toFixed(1)}%
+                  </Badge>
+                </div>
+                <p className="text-sm opacity-90 mb-1">Faturamento do Mês</p>
+                <p className="text-3xl font-bold">R$ {stats.faturamentoMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                <p className="text-xs opacity-75 mt-2">
+                  Ticket médio: R$ {stats.ticketMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </p>
               </CardContent>
             </Card>

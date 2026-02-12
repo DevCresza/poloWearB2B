@@ -815,7 +815,9 @@ export default function PedidosFornecedor() {
       { key: 'cliente_nome', label: 'Cliente' },
       { key: 'status', label: 'Status' },
       { key: 'valor_formatado', label: 'Valor' },
-      { key: 'data_formatada', label: 'Data' }
+      { key: 'data_formatada', label: 'Data Pedido' },
+      { key: 'nf_numero', label: 'NF' },
+      { key: 'data_faturamento', label: 'Data Faturamento' }
     ];
 
     // Preparar dados para exportação
@@ -824,7 +826,9 @@ export default function PedidosFornecedor() {
       cliente_nome: clientes.find(c => c.id === p.comprador_user_id)?.full_name || 'N/A',
       status: p.status?.charAt(0).toUpperCase() + p.status?.slice(1) || 'N/A',
       valor_formatado: formatCurrency(p.valor_total),
-      data_formatada: formatDate(p.created_date)
+      data_formatada: formatDate(p.created_date),
+      nf_numero: p.nf_numero || '-',
+      data_faturamento: p.nf_data_upload ? formatDate(p.nf_data_upload) : '-'
     }));
 
     exportToPDF(data, columns, 'Relatório de Pedidos', `pedidos-${new Date().toISOString().split('T')[0]}.pdf`);
@@ -1285,99 +1289,104 @@ export default function PedidosFornecedor() {
 
                     {/* Ações */}
                     <div className="flex flex-col gap-2 lg:w-64">
-                      {pedido.status === 'novo_pedido' && (
+                      {/* Ações operacionais do fornecedor (não disponíveis para admin) */}
+                      {user?.role !== 'admin' && (
                         <>
-                          <Button
-                            onClick={() => {
-                              setSelectedPedido(pedido);
-                              setShowApprovalModal(true);
-                            }}
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            <CheckCircle className="w-4 h-4 mr-2" />
-                            Aprovar Pedido
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            onClick={() => {
-                              setSelectedPedido(pedido);
-                              setShowRejectModal(true);
-                            }}
-                          >
-                            <XCircle className="w-4 h-4 mr-2" />
-                            Recusar
-                          </Button>
+                          {pedido.status === 'novo_pedido' && (
+                            <>
+                              <Button
+                                onClick={() => {
+                                  setSelectedPedido(pedido);
+                                  setShowApprovalModal(true);
+                                }}
+                                className="bg-green-600 hover:bg-green-700"
+                              >
+                                <CheckCircle className="w-4 h-4 mr-2" />
+                                Aprovar Pedido
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                onClick={() => {
+                                  setSelectedPedido(pedido);
+                                  setShowRejectModal(true);
+                                }}
+                              >
+                                <XCircle className="w-4 h-4 mr-2" />
+                                Recusar
+                              </Button>
+                            </>
+                          )}
+
+                          {pedido.status === 'em_producao' && !pedido.nf_url && (
+                            <>
+                              <Button
+                                onClick={() => {
+                                  setSelectedPedido(pedido);
+                                  setNfNumero('');
+                                  setNfDataEmissao(new Date().toISOString().split('T')[0]);
+                                  setNfFile(null);
+                                  setShowFaturarModal(true);
+                                }}
+                                className="bg-indigo-600 hover:bg-indigo-700"
+                              >
+                                <FileText className="w-4 h-4 mr-2" />
+                                Faturar Pedido
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => handleMudarMetodoPagamento(pedido, pedido.metodo_pagamento === 'boleto' ? 'a_vista' : 'boleto')}
+                              >
+                                Mudar para {pedido.metodo_pagamento === 'boleto' ? 'À Vista' : 'Boleto'}
+                              </Button>
+                            </>
+                          )}
+
+                          {pedido.status === 'faturado' && (
+                            <Button
+                              onClick={() => {
+                                setSelectedPedido(pedido);
+                                setShowEnvioModal(true);
+                              }}
+                              className="bg-orange-600 hover:bg-orange-700"
+                            >
+                              <Truck className="w-4 h-4 mr-2" />
+                              Informar Envio
+                            </Button>
+                          )}
+
+                          {/* Botão para atualizar NF separadamente */}
+                          {['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && pedido.nf_url && (
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedPedido(pedido);
+                                setNfNumero(pedido.nf_numero || '');
+                                setNfDataEmissao(pedido.nf_data_upload ? pedido.nf_data_upload.split('T')[0] : '');
+                                setNfFile(null);
+                                setShowAtualizarNFModal(true);
+                              }}
+                              className="border-indigo-300 text-indigo-700"
+                            >
+                              <FileText className="w-4 h-4 mr-2" />
+                              Atualizar NF
+                            </Button>
+                          )}
+
+                          {/* Botão para enviar boleto separadamente */}
+                          {['em_producao', 'faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && (
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedPedido(pedido);
+                                setShowBoletoModal(true);
+                              }}
+                              className={pedido.boleto_url ? 'border-green-300 text-green-700' : ''}
+                            >
+                              <Upload className="w-4 h-4 mr-2" />
+                              {pedido.boleto_url ? 'Atualizar Boleto' : 'Enviar Boleto'}
+                            </Button>
+                          )}
                         </>
-                      )}
-
-                      {pedido.status === 'em_producao' && !pedido.nf_url && (
-                        <>
-                          <Button
-                            onClick={() => {
-                              setSelectedPedido(pedido);
-                              setNfNumero('');
-                              setNfDataEmissao(new Date().toISOString().split('T')[0]);
-                              setNfFile(null);
-                              setShowFaturarModal(true);
-                            }}
-                            className="bg-indigo-600 hover:bg-indigo-700"
-                          >
-                            <FileText className="w-4 h-4 mr-2" />
-                            Faturar Pedido
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => handleMudarMetodoPagamento(pedido, pedido.metodo_pagamento === 'boleto' ? 'a_vista' : 'boleto')}
-                          >
-                            Mudar para {pedido.metodo_pagamento === 'boleto' ? 'À Vista' : 'Boleto'}
-                          </Button>
-                        </>
-                      )}
-
-                      {pedido.status === 'faturado' && (
-                        <Button
-                          onClick={() => {
-                            setSelectedPedido(pedido);
-                            setShowEnvioModal(true);
-                          }}
-                          className="bg-orange-600 hover:bg-orange-700"
-                        >
-                          <Truck className="w-4 h-4 mr-2" />
-                          Informar Envio
-                        </Button>
-                      )}
-
-                      {/* Botão para atualizar NF separadamente */}
-                      {['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && pedido.nf_url && (
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedPedido(pedido);
-                            setNfNumero(pedido.nf_numero || '');
-                            setNfDataEmissao(pedido.nf_data_upload ? pedido.nf_data_upload.split('T')[0] : '');
-                            setNfFile(null);
-                            setShowAtualizarNFModal(true);
-                          }}
-                          className="border-indigo-300 text-indigo-700"
-                        >
-                          <FileText className="w-4 h-4 mr-2" />
-                          Atualizar NF
-                        </Button>
-                      )}
-
-                      {/* Botão para enviar boleto separadamente */}
-                      {['em_producao', 'faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && (
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedPedido(pedido);
-                            setShowBoletoModal(true);
-                          }}
-                          className={pedido.boleto_url ? 'border-green-300 text-green-700' : ''}
-                        >
-                          <Upload className="w-4 h-4 mr-2" />
-                          {pedido.boleto_url ? 'Atualizar Boleto' : 'Enviar Boleto'}
-                        </Button>
                       )}
 
                       {/* Botão para ver comprovante do cliente */}
@@ -1403,8 +1412,8 @@ export default function PedidosFornecedor() {
                         Ver Detalhes
                       </Button>
 
-                      {/* Botão para cancelar pedido - aparece em todos status exceto cancelado e finalizado */}
-                      {!['cancelado', 'finalizado'].includes(pedido.status) && (
+                      {/* Botão para cancelar pedido - não aparece em novo_pedido (usar Recusar), cancelado ou finalizado */}
+                      {!['novo_pedido', 'cancelado', 'finalizado'].includes(pedido.status) && (
                         <Button
                           variant="outline"
                           className="border-red-300 text-red-700 hover:bg-red-50"

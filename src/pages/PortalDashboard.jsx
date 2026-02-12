@@ -15,6 +15,7 @@ import {
   CheckCircle, Clock, Truck, Eye, Calendar, BarChart3, FileText, X
 } from 'lucide-react';
 import AlertasVencimento from '../components/AlertasVencimento';
+import DashboardKpiCards from '../components/DashboardKpiCards';
 import { formatCurrency } from '@/utils/exportUtils';
 import { useLojaContext } from '@/contexts/LojaContext';
 
@@ -30,7 +31,9 @@ export default function PortalDashboard() {
     pedidosPendentes: 0,
     pedidosFinalizados: 0,
     valorTotalComprado: 0,
-    valorEmAberto: 0,
+    qtdFaturada: 0,
+    valorFaturado: 0,
+    valorAVencer: 0,
     valorVencido: 0,
     produtosAtivos: 0,
     estoqueBaixo: 0
@@ -63,23 +66,32 @@ export default function PortalDashboard() {
         carteiraList = await Carteira.filter(carteiraFilter);
 
         // Calcular estatísticas
+        const FATURADO_STATUSES = ['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'];
         const allPedidos = await Pedido.filter(pedidoFilter);
         const totalPedidos = allPedidos.length;
-        const pedidosPendentes = allPedidos.filter(p => 
+        const pedidosPendentes = allPedidos.filter(p =>
           ['novo_pedido', 'em_analise', 'aprovado', 'em_producao'].includes(p.status)
         ).length;
         const pedidosFinalizados = allPedidos.filter(p => p.status === 'finalizado').length;
         const valorTotalComprado = allPedidos.reduce((sum, p) => sum + (p.valor_total || 0), 0);
-        
-        const valorEmAberto = carteiraList
-          .filter(t => t.tipo === 'a_receber' && t.status === 'pendente')
-          .reduce((sum, t) => sum + (t.valor || 0), 0);
-        
+
+        const pedidosFaturados = allPedidos.filter(p => FATURADO_STATUSES.includes(p.status));
+        const qtdFaturada = pedidosFaturados.length;
+        const valorFaturado = pedidosFaturados.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
+
         const hoje = new Date();
-        const valorVencido = carteiraList
+        hoje.setHours(0, 0, 0, 0);
+        const pendentes = carteiraList.filter(t => t.status === 'pendente');
+        const valorAVencer = pendentes
           .filter(t => {
             const vencimento = new Date(t.data_vencimento);
-            return t.tipo === 'a_receber' && t.status === 'pendente' && vencimento < hoje;
+            return vencimento >= hoje;
+          })
+          .reduce((sum, t) => sum + (t.valor || 0), 0);
+        const valorVencido = pendentes
+          .filter(t => {
+            const vencimento = new Date(t.data_vencimento);
+            return vencimento < hoje;
           })
           .reduce((sum, t) => sum + (t.valor || 0), 0);
 
@@ -88,7 +100,9 @@ export default function PortalDashboard() {
           pedidosPendentes,
           pedidosFinalizados,
           valorTotalComprado,
-          valorEmAberto,
+          qtdFaturada,
+          valorFaturado,
+          valorAVencer,
           valorVencido,
           produtosAtivos: 0,
           estoqueBaixo: 0
@@ -116,8 +130,10 @@ export default function PortalDashboard() {
         }
 
         if (fornecedor) {
+          const FATURADO_STATUSES = ['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'];
           pedidosList = await Pedido.filter({ fornecedor_id: fornecedorId }, '-created_date', 10);
           produtosList = await Produto.filter({ fornecedor_id: fornecedorId });
+          carteiraList = await Carteira.filter({ fornecedor_id: fornecedorId });
 
           const allPedidos = await Pedido.filter({ fornecedor_id: fornecedorId });
           const totalPedidos = allPedidos.length;
@@ -126,6 +142,26 @@ export default function PortalDashboard() {
           ).length;
           const pedidosFinalizados = allPedidos.filter(p => p.status === 'finalizado').length;
           const valorTotalComprado = allPedidos.reduce((sum, p) => sum + (p.valor_total || 0), 0);
+
+          const pedidosFaturados = allPedidos.filter(p => FATURADO_STATUSES.includes(p.status));
+          const qtdFaturada = pedidosFaturados.length;
+          const valorFaturado = pedidosFaturados.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
+
+          const hoje = new Date();
+          hoje.setHours(0, 0, 0, 0);
+          const pendentes = carteiraList.filter(t => t.status === 'pendente');
+          const valorAVencer = pendentes
+            .filter(t => {
+              const vencimento = new Date(t.data_vencimento);
+              return vencimento >= hoje;
+            })
+            .reduce((sum, t) => sum + (t.valor || 0), 0);
+          const valorVencido = pendentes
+            .filter(t => {
+              const vencimento = new Date(t.data_vencimento);
+              return vencimento < hoje;
+            })
+            .reduce((sum, t) => sum + (t.valor || 0), 0);
 
           const produtosAtivos = produtosList.filter(p => p.ativo).length;
           const estoqueBaixo = produtosList.filter(p =>
@@ -138,19 +174,22 @@ export default function PortalDashboard() {
             pedidosPendentes,
             pedidosFinalizados,
             valorTotalComprado,
-            valorEmAberto: 0,
-            valorVencido: 0,
+            qtdFaturada,
+            valorFaturado,
+            valorAVencer,
+            valorVencido,
             produtosAtivos,
             estoqueBaixo
           });
         } else {
-          // Fornecedor não encontrado - sem dados
           setStats({
             totalPedidos: 0,
             pedidosPendentes: 0,
             pedidosFinalizados: 0,
             valorTotalComprado: 0,
-            valorEmAberto: 0,
+            qtdFaturada: 0,
+            valorFaturado: 0,
+            valorAVencer: 0,
             valorVencido: 0,
             produtosAtivos: 0,
             estoqueBaixo: 0
@@ -159,33 +198,42 @@ export default function PortalDashboard() {
 
       } else if (currentUser.role === 'admin') {
         // Dashboard Admin
+        const FATURADO_STATUSES = ['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'];
         pedidosList = await Pedido.list({ sort: '-created_date', limit: 10 });
         produtosList = await Produto.list();
         carteiraList = await Carteira.list();
-        
+
         const allPedidos = await Pedido.list();
         const totalPedidos = allPedidos.length;
-        const pedidosPendentes = allPedidos.filter(p => 
+        const pedidosPendentes = allPedidos.filter(p =>
           ['novo_pedido', 'em_analise'].includes(p.status)
         ).length;
         const pedidosFinalizados = allPedidos.filter(p => p.status === 'finalizado').length;
         const valorTotalComprado = allPedidos.reduce((sum, p) => sum + (p.valor_total || 0), 0);
-        
-        const valorEmAberto = carteiraList
-          .filter(t => t.tipo === 'a_receber' && t.status === 'pendente')
-          .reduce((sum, t) => sum + (t.valor || 0), 0);
-        
+
+        const pedidosFaturados = allPedidos.filter(p => FATURADO_STATUSES.includes(p.status));
+        const qtdFaturada = pedidosFaturados.length;
+        const valorFaturado = pedidosFaturados.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
+
         const hoje = new Date();
-        const valorVencido = carteiraList
+        hoje.setHours(0, 0, 0, 0);
+        const pendentes = carteiraList.filter(t => t.status === 'pendente');
+        const valorAVencer = pendentes
           .filter(t => {
             const vencimento = new Date(t.data_vencimento);
-            return t.tipo === 'a_receber' && t.status === 'pendente' && vencimento < hoje;
+            return vencimento >= hoje;
           })
           .reduce((sum, t) => sum + (t.valor || 0), 0);
-        
+        const valorVencido = pendentes
+          .filter(t => {
+            const vencimento = new Date(t.data_vencimento);
+            return vencimento < hoje;
+          })
+          .reduce((sum, t) => sum + (t.valor || 0), 0);
+
         const produtosAtivos = produtosList.filter(p => p.ativo).length;
-        const estoqueBaixo = produtosList.filter(p => 
-          p.controla_estoque && 
+        const estoqueBaixo = produtosList.filter(p =>
+          p.controla_estoque &&
           p.estoque_atual_grades <= p.estoque_minimo_grades
         ).length;
 
@@ -194,7 +242,9 @@ export default function PortalDashboard() {
           pedidosPendentes,
           pedidosFinalizados,
           valorTotalComprado,
-          valorEmAberto,
+          qtdFaturada,
+          valorFaturado,
+          valorAVencer,
           valorVencido,
           produtosAtivos,
           estoqueBaixo
@@ -283,63 +333,24 @@ export default function PortalDashboard() {
         </Alert>
       )}
 
-      {/* Cards de Estatísticas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-        <Card className="bg-slate-100 rounded-2xl shadow-neumorphic hover:shadow-xl transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <Package className="w-10 h-10 text-blue-600 opacity-80" />
-              <Badge className="bg-blue-100 text-blue-800 text-xs">Total</Badge>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Total de Pedidos</p>
-              <p className="text-3xl font-bold text-gray-900">{stats.totalPedidos}</p>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Cards de Estatísticas - 6 KPIs Padronizados */}
+      <DashboardKpiCards
+        role={isCliente ? 'cliente' : isFornecedor ? 'fornecedor' : 'admin'}
+        kpis={{
+          totalPedidos: stats.totalPedidos,
+          valorTotal: stats.valorTotalComprado,
+          valorFaturado: stats.valorFaturado,
+          qtdFaturada: stats.qtdFaturada,
+          pendenteFaturamento: stats.valorTotalComprado - stats.valorFaturado,
+          qtdPendenteFaturamento: stats.totalPedidos - stats.qtdFaturada,
+          valorAVencer: stats.valorAVencer,
+          valorVencido: stats.valorVencido,
+        }}
+      />
 
-        <Card className="bg-slate-100 rounded-2xl shadow-neumorphic hover:shadow-xl transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <Clock className="w-10 h-10 text-yellow-600 opacity-80" />
-              <Badge className="bg-yellow-100 text-yellow-800 text-xs">Pendentes</Badge>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Pedidos em Andamento</p>
-              <p className="text-3xl font-bold text-gray-900">{stats.pedidosPendentes}</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-slate-100 rounded-2xl shadow-neumorphic hover:shadow-xl transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <DollarSign className="w-10 h-10 text-green-600 opacity-80" />
-              <Badge className="bg-green-100 text-green-800 text-xs">Vendas</Badge>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Valor Total</p>
-              <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.valorTotalComprado)}</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {isCliente && (
-          <Card className="bg-slate-100 rounded-2xl shadow-neumorphic hover:shadow-xl transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <AlertTriangle className="w-10 h-10 text-red-600 opacity-80" />
-                <Badge className="bg-red-100 text-red-800 text-xs">Atenção</Badge>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Valores em Aberto</p>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.valorEmAberto)}</p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {(isFornecedor || isAdmin) && (
+      {/* Cards extras para fornecedor: Produtos Ativos e Estoque Baixo */}
+      {(isFornecedor || isAdmin) && (
+        <div className="grid grid-cols-2 gap-4 md:gap-6">
           <Card className="bg-slate-100 rounded-2xl shadow-neumorphic hover:shadow-xl transition-shadow">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
@@ -349,14 +360,25 @@ export default function PortalDashboard() {
               <div>
                 <p className="text-sm text-gray-600 mb-1">Produtos Ativos</p>
                 <p className="text-3xl font-bold text-gray-900">{stats.produtosAtivos}</p>
-                {stats.estoqueBaixo > 0 && (
-                  <p className="text-xs text-orange-600 mt-1">{stats.estoqueBaixo} com estoque baixo</p>
-                )}
               </div>
             </CardContent>
           </Card>
-        )}
-      </div>
+          {stats.estoqueBaixo > 0 && (
+            <Card className="bg-slate-100 rounded-2xl shadow-neumorphic hover:shadow-xl transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <AlertTriangle className="w-10 h-10 text-orange-600 opacity-80" />
+                  <Badge className="bg-orange-100 text-orange-800 text-xs">Alerta</Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Estoque Baixo</p>
+                  <p className="text-3xl font-bold text-gray-900">{stats.estoqueBaixo}</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* Ações Rápidas */}
       <Card className="bg-slate-100 rounded-2xl shadow-neumorphic">

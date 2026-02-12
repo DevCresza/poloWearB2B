@@ -164,10 +164,9 @@ export default function Layout({ children, currentPageName }) {
         <span>Meu Perfil</span>
       </Link>
 
-      {/* Links do Cliente */}
-      {(isCliente || isAdmin) && (
+      {/* Links do Cliente (apenas para clientes, NÃO admin) */}
+      {isCliente && (
         <div>
-          {isAdmin && <p className={sectionTitleClasses}>Área do Cliente</p>}
           <Link to={createPageUrl('Catalogo')} className={getNavLinkClasses('Catalogo')} onClick={() => setMobileMenuOpen(false)}>
             <ShoppingCart className="w-5 h-5" />
             <span>Catálogo</span>
@@ -195,13 +194,12 @@ export default function Layout({ children, currentPageName }) {
         </div>
       )}
 
-      {/* Links do Fornecedor */}
-      {(isFornecedor || isAdmin) && (
+      {/* Links do Fornecedor (apenas para fornecedores, NÃO admin) */}
+      {isFornecedor && (
         <div>
-          <p className={isAdmin ? sectionTitleClasses : "sr-only"}>Área do Fornecedor</p>
           <Link to={createPageUrl('GestaoProdutos')} className={getNavLinkClasses('GestaoProdutos')} onClick={() => setMobileMenuOpen(false)}>
             <ClipboardList className="w-5 h-5" />
-            <span>{isAdmin ? 'Todos Produtos' : 'Meus Produtos'}</span>
+            <span>Meus Produtos</span>
           </Link>
           <Link to={createPageUrl('GestaoEstoque')} className={getNavLinkClasses('GestaoEstoque')} onClick={() => setMobileMenuOpen(false)}>
             <Package className="w-5 h-5" />
@@ -213,19 +211,51 @@ export default function Layout({ children, currentPageName }) {
           </Link>
           <Link to={createPageUrl('PedidosFornecedor')} className={getNavLinkClasses('PedidosFornecedor')} onClick={() => setMobileMenuOpen(false)}>
             <Package className="w-5 h-5" />
-            <span>{isAdmin ? 'Pedidos Fornecedores' : 'Meus Pedidos'}</span>
+            <span>Meus Pedidos</span>
           </Link>
           <Link to={createPageUrl('CarteiraFinanceira')} className={getNavLinkClasses('CarteiraFinanceira')} onClick={() => setMobileMenuOpen(false)}>
             <DollarSign className="w-5 h-5" />
             <span>Carteira Financeira</span>
           </Link>
+          <Link to={createPageUrl('HistoricoCompras')} className={getNavLinkClasses('HistoricoCompras')} onClick={() => setMobileMenuOpen(false)}>
+            <TrendingUp className="w-5 h-5" />
+            <span>Histórico</span>
+          </Link>
         </div>
       )}
 
-      {/* Links de Administração */}
+      {/* Links de Administração (apenas admin - menu único e limpo) */}
       {isAdmin && (
         <div>
-          <p className={sectionTitleClasses}>Administração</p>
+          <p className={sectionTitleClasses}>Comercial</p>
+          <Link to={createPageUrl('Catalogo')} className={getNavLinkClasses('Catalogo')} onClick={() => setMobileMenuOpen(false)}>
+            <ShoppingCart className="w-5 h-5" />
+            <span>Catálogo</span>
+          </Link>
+          <Link to={createPageUrl('PedidosAdmin')} className={getNavLinkClasses('PedidosAdmin')} onClick={() => setMobileMenuOpen(false)}>
+            <Package className="w-5 h-5" />
+            <span>Pedidos</span>
+          </Link>
+          <Link to={createPageUrl('CarteiraFinanceira')} className={getNavLinkClasses('CarteiraFinanceira')} onClick={() => setMobileMenuOpen(false)}>
+            <DollarSign className="w-5 h-5" />
+            <span>Carteira Financeira</span>
+          </Link>
+
+          <p className={sectionTitleClasses}>Produtos</p>
+          <Link to={createPageUrl('GestaoProdutos')} className={getNavLinkClasses('GestaoProdutos')} onClick={() => setMobileMenuOpen(false)}>
+            <ClipboardList className="w-5 h-5" />
+            <span>Produtos</span>
+          </Link>
+          <Link to={createPageUrl('GestaoEstoque')} className={getNavLinkClasses('GestaoEstoque')} onClick={() => setMobileMenuOpen(false)}>
+            <Package className="w-5 h-5" />
+            <span>Estoque</span>
+          </Link>
+          <Link to={createPageUrl('GestaoCapsulas')} className={getNavLinkClasses('GestaoCapsulas')} onClick={() => setMobileMenuOpen(false)}>
+            <ImageIcon className="w-5 h-5" />
+            <span>Cápsulas</span>
+          </Link>
+
+          <p className={sectionTitleClasses}>Gestão</p>
           <Link to={createPageUrl('Admin')} className={getNavLinkClasses('Admin')} onClick={() => setMobileMenuOpen(false)}>
             <Shield className="w-5 h-5" />
             <span>Painel Admin</span>
@@ -236,11 +266,7 @@ export default function Layout({ children, currentPageName }) {
           </Link>
           <Link to={createPageUrl('UserManagement')} className={getNavLinkClasses('UserManagement')} onClick={() => setMobileMenuOpen(false)}>
             <Users className="w-5 h-5" />
-            <span>Gestão de Usuários</span>
-          </Link>
-          <Link to={createPageUrl('CrmDashboard')} className={getNavLinkClasses('CrmDashboard')} onClick={() => setMobileMenuOpen(false)}>
-            <TrendingUp className="w-5 h-5" />
-            <span>CRM & Leads</span>
+            <span>Usuários</span>
           </Link>
           <Link to={createPageUrl('GestaoClientes')} className={getNavLinkClasses('GestaoClientes')} onClick={() => setMobileMenuOpen(false)}>
             <UserPlus className="w-5 h-5" />
@@ -250,9 +276,9 @@ export default function Layout({ children, currentPageName }) {
             <Building className="w-5 h-5" />
             <span>Fornecedores</span>
           </Link>
-          <Link to={createPageUrl('PedidosAdmin')} className={getNavLinkClasses('PedidosAdmin')} onClick={() => setMobileMenuOpen(false)}>
-            <Package className="w-5 h-5" />
-            <span>Todos Pedidos</span>
+          <Link to={createPageUrl('CrmDashboard')} className={getNavLinkClasses('CrmDashboard')} onClick={() => setMobileMenuOpen(false)}>
+            <TrendingUp className="w-5 h-5" />
+            <span>CRM & Leads</span>
           </Link>
           <Link to={createPageUrl('GestaoMetas')} className={getNavLinkClasses('GestaoMetas')} onClick={() => setMobileMenuOpen(false)}>
             <Target className="w-5 h-5" />
@@ -267,6 +293,8 @@ export default function Layout({ children, currentPageName }) {
     </>
   );
 
+  const hideSeletorLoja = ['Carrinho', 'Catalogo'].includes(currentPageName);
+
   return (
     <LojaProvider user={currentUser}>
     <div className="min-h-screen bg-slate-100 flex flex-col lg:flex-row">
@@ -280,7 +308,7 @@ export default function Layout({ children, currentPageName }) {
         <div className="flex items-center justify-between p-4">
           <div className="font-bold text-xl text-blue-600">POLO B2B</div>
           <div className="flex items-center gap-2">
-            {isCliente && <SeletorLoja />}
+            {isCliente && !hideSeletorLoja && <SeletorLoja />}
             {/* Notificações Mobile */}
             <NotificacoesDropdown
               userId={currentUser.id}
@@ -347,7 +375,7 @@ export default function Layout({ children, currentPageName }) {
             </h1>
             <div className="flex items-center gap-2 lg:gap-4">
               {/* Seletor de Loja */}
-              {isCliente && <SeletorLoja />}
+              {isCliente && !hideSeletorLoja && <SeletorLoja />}
 
               {/* Sino de Notificações */}
               <NotificacoesDropdown

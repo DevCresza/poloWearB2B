@@ -38,6 +38,7 @@ export default function PedidosAdmin() {
   const [filtrosStatus, setFiltrosStatus] = useState([]); // Array para múltipla seleção de status do pedido
   const [filtrosPagamento, setFiltrosPagamento] = useState([]); // Array para múltipla seleção de status de pagamento
   const [filtrosFornecedor, setFiltrosFornecedor] = useState([]); // Array para múltipla seleção de fornecedor
+  const [filtrosCliente, setFiltrosCliente] = useState([]); // Array para múltipla seleção de cliente
   const [filtroPeriodo, setFiltroPeriodo] = useState('all');
 
   useEffect(() => {
@@ -227,15 +228,24 @@ export default function PedidosAdmin() {
     );
   };
 
+  const toggleFiltroCliente = (clienteId) => {
+    setFiltrosCliente(prev =>
+      prev.includes(clienteId)
+        ? prev.filter(c => c !== clienteId)
+        : [...prev, clienteId]
+    );
+  };
+
   const limparFiltros = () => {
     setFiltrosStatus([]);
     setFiltrosPagamento([]);
     setFiltrosFornecedor([]);
+    setFiltrosCliente([]);
     setFiltroPeriodo('all');
     setSearchTerm('');
   };
 
-  const temFiltrosAtivos = filtrosStatus.length > 0 || filtrosPagamento.length > 0 || filtrosFornecedor.length > 0 || filtroPeriodo !== 'all' || searchTerm;
+  const temFiltrosAtivos = filtrosStatus.length > 0 || filtrosPagamento.length > 0 || filtrosFornecedor.length > 0 || filtrosCliente.length > 0 || filtroPeriodo !== 'all' || searchTerm;
 
   // Filtrar pedidos
   const filteredPedidos = useMemo(() => {
@@ -257,6 +267,11 @@ export default function PedidosAdmin() {
     // Filtro por fornecedor (múltipla seleção)
     if (filtrosFornecedor.length > 0) {
       filtered = filtered.filter(pedido => filtrosFornecedor.includes(pedido.fornecedor_id));
+    }
+
+    // Filtro por cliente (múltipla seleção)
+    if (filtrosCliente.length > 0) {
+      filtered = filtered.filter(pedido => filtrosCliente.includes(pedido.comprador_user_id));
     }
 
     // Filtro por status de pagamento (múltipla seleção)
@@ -289,7 +304,7 @@ export default function PedidosAdmin() {
     }
 
     return filtered;
-  }, [pedidos, searchTerm, filtrosStatus, filtrosPagamento, filtrosFornecedor, filtroPeriodo, users, fornecedores]);
+  }, [pedidos, searchTerm, filtrosStatus, filtrosPagamento, filtrosFornecedor, filtrosCliente, filtroPeriodo, users, fornecedores]);
 
   // Calcular totais por status
   const calcularTotaisPorStatus = () => {
@@ -502,12 +517,28 @@ export default function PedidosAdmin() {
                 onClear={() => setFiltrosFornecedor([])}
               />
             )}
+            {users.filter(u => u.tipo_negocio === 'multimarca' || u.tipo_negocio === 'franqueado').length > 0 && (
+              <MultiSelectFilter
+                label="Cliente"
+                options={users
+                  .filter(u => u.tipo_negocio === 'multimarca' || u.tipo_negocio === 'franqueado')
+                  .map(u => ({
+                    value: u.id,
+                    label: u.empresa || u.razao_social || u.nome_marca || u.full_name
+                  }))
+                  .sort((a, b) => a.label.localeCompare(b.label))
+                }
+                selected={filtrosCliente}
+                onToggle={toggleFiltroCliente}
+                onClear={() => setFiltrosCliente([])}
+              />
+            )}
           </div>
 
           {/* Indicador de filtros ativos */}
           {temFiltrosAtivos && (
             <div className="text-sm text-gray-500 pt-2 border-t">
-              Filtros ativos: {filtrosStatus.length + filtrosPagamento.length + filtrosFornecedor.length + (filtroPeriodo !== 'all' ? 1 : 0)} |
+              Filtros ativos: {filtrosStatus.length + filtrosPagamento.length + filtrosFornecedor.length + filtrosCliente.length + (filtroPeriodo !== 'all' ? 1 : 0)} |
               Mostrando {filteredPedidos.length} de {pedidos.length} pedidos
             </div>
           )}

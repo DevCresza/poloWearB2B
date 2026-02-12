@@ -26,12 +26,15 @@ import { useLojaContext } from '@/contexts/LojaContext';
 export default function HistoricoCompras() {
   const { lojaSelecionada, loading: lojasLoading } = useLojaContext();
   const [user, setUser] = useState(null);
+  const [isFornecedor, setIsFornecedor] = useState(false);
   const [pedidos, setPedidos] = useState([]);
   const [produtos, setProdutos] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
+  const [clientesMap, setClientesMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroFornecedor, setFiltroFornecedor] = useState('todos');
+  const [filtroCliente, setFiltroCliente] = useState('todos');
   const [filtroCategoria, setFiltroCategoria] = useState('todas');
   const [periodoInicio, setPeriodoInicio] = useState('');
   const [periodoFim, setPeriodoFim] = useState('');
@@ -59,11 +62,29 @@ export default function HistoricoCompras() {
       const currentUser = await User.me();
       setUser(currentUser);
 
-      const pedidoFilter = { comprador_user_id: currentUser.id, status: 'finalizado' };
-      const carteiraFilter = { cliente_user_id: currentUser.id };
-      if (lojaSelecionada) {
-        pedidoFilter.loja_id = lojaSelecionada.id;
-        carteiraFilter.loja_id = lojaSelecionada.id;
+      const userIsFornecedor = currentUser.tipo_negocio === 'fornecedor';
+      setIsFornecedor(userIsFornecedor);
+
+      let pedidoFilter;
+      let carteiraFilter;
+      let fornecedorId = null;
+
+      if (userIsFornecedor) {
+        // Resolve fornecedor_id
+        fornecedorId = currentUser.fornecedor_id;
+        if (!fornecedorId) {
+          const fornecedoresBusca = await Fornecedor.filter({ responsavel_user_id: currentUser.id });
+          if (fornecedoresBusca[0]) fornecedorId = fornecedoresBusca[0].id;
+        }
+        pedidoFilter = { fornecedor_id: fornecedorId, status: 'finalizado' };
+        carteiraFilter = { fornecedor_id: fornecedorId };
+      } else {
+        pedidoFilter = { comprador_user_id: currentUser.id, status: 'finalizado' };
+        carteiraFilter = { cliente_user_id: currentUser.id };
+        if (lojaSelecionada) {
+          pedidoFilter.loja_id = lojaSelecionada.id;
+          carteiraFilter.loja_id = lojaSelecionada.id;
+        }
       }
 
       const [pedidosList, produtosList, fornecedoresList, carteiraList] = await Promise.all([
@@ -73,35 +94,44 @@ export default function HistoricoCompras() {
         Carteira.filter(carteiraFilter)
       ]);
 
+      // Para fornecedor, carregar mapa de clientes
+      if (userIsFornecedor) {
+        const clienteIds = [...new Set((pedidosList || []).map(p => p.comprador_user_id).filter(Boolean))];
+        const clientesObj = {};
+        if (clienteIds.length > 0) {
+          const allUsers = await User.list();
+          allUsers.forEach(u => {
+            if (clienteIds.includes(u.id)) {
+              clientesObj[u.id] = u.empresa || u.razao_social || u.nome_marca || u.full_name || 'N/A';
+            }
+          });
+        }
+        setClientesMap(clientesObj);
+      }
+
       // Filtrar apenas pedidos finalizados que:
       // - Não têm parcelas na carteira OU
       // - Todas as parcelas estão pagas
       const pedidosFiltrados = (pedidosList || []).filter(pedido => {
         const parcelasDoPedido = (carteiraList || []).filter(t => t.pedido_id === pedido.id);
-
-        // Se não tem parcelas na carteira, considera como histórico
         if (parcelasDoPedido.length === 0) return true;
-
-        // Se tem parcelas, todas devem estar pagas
         const todasPagas = parcelasDoPedido.every(t => t.status === 'pago');
         return todasPagas;
       });
 
       // Incluir também pedidos cancelados no histórico
-      const pedidosCancelados = await Pedido.filter({
-        comprador_user_id: currentUser.id,
-        status: 'cancelado'
-      }, '-created_date');
+      const canceladoFilter = userIsFornecedor
+        ? { fornecedor_id: fornecedorId, status: 'cancelado' }
+        : { comprador_user_id: currentUser.id, status: 'cancelado' };
+      const pedidosCancelados = await Pedido.filter(canceladoFilter, '-created_date');
 
       const todosHistorico = [...pedidosFiltrados, ...(pedidosCancelados || [])];
-      // Ordenar por data mais recente
       todosHistorico.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
 
       setPedidos(todosHistorico);
       setProdutos(produtosList || []);
       setFornecedores(fornecedoresList || []);
 
-      // Calcular stats com todos os pedidos finalizados (não apenas os totalmente pagos)
       calculateStats(pedidosList || [], produtosList, fornecedoresList || []);
     } catch (_error) {
     } finally {
@@ -165,22 +195,23 @@ export default function HistoricoCompras() {
       });
     }
 
-    // Compras por fornecedor
-    const fornecedorMap = {};
+    // Agrupamento por entidade (fornecedor para cliente, cliente para fornecedor)
+    const entityMap = {};
     pedidosList.forEach(pedido => {
-      if (!fornecedorMap[pedido.fornecedor_id]) {
-        fornecedorMap[pedido.fornecedor_id] = {
-          valor: 0,
-          pedidos: 0
-        };
+      const key = isFornecedor ? pedido.comprador_user_id : pedido.fornecedor_id;
+      if (!key) return;
+      if (!entityMap[key]) {
+        entityMap[key] = { valor: 0, pedidos: 0 };
       }
-      fornecedorMap[pedido.fornecedor_id].valor += pedido.valor_final || pedido.valor_total || 0;
-      fornecedorMap[pedido.fornecedor_id].pedidos += 1;
+      entityMap[key].valor += pedido.valor_final || pedido.valor_total || 0;
+      entityMap[key].pedidos += 1;
     });
 
-    const comprasPorFornecedor = Object.entries(fornecedorMap).map(([id, data]) => ({
+    const comprasPorFornecedor = Object.entries(entityMap).map(([id, data]) => ({
       fornecedor_id: id,
-      nome: fornecedoresList.find(f => f.id === id)?.nome_marca || 'N/A',
+      nome: isFornecedor
+        ? (clientesMap[id] || 'N/A')
+        : (fornecedoresList.find(f => f.id === id)?.nome_marca || 'N/A'),
       ...data
     }));
 
@@ -288,8 +319,10 @@ export default function HistoricoCompras() {
   };
 
   const filteredPedidos = pedidos.filter(pedido => {
-    const matchesFornecedor = filtroFornecedor === 'todos' || pedido.fornecedor_id === filtroFornecedor;
-    
+    const matchesEntity = isFornecedor
+      ? (filtroCliente === 'todos' || pedido.comprador_user_id === filtroCliente)
+      : (filtroFornecedor === 'todos' || pedido.fornecedor_id === filtroFornecedor);
+
     let matchesPeriodo = true;
     if (periodoInicio && periodoFim) {
       const dataPedido = new Date(pedido.created_date);
@@ -304,7 +337,7 @@ export default function HistoricoCompras() {
       matchesSearch = pedido.id.toLowerCase().includes(search);
     }
 
-    return matchesFornecedor && matchesPeriodo && matchesSearch;
+    return matchesEntity && matchesPeriodo && matchesSearch;
   });
 
   const getFornecedorNome = (fornecedorId) => {
@@ -312,13 +345,22 @@ export default function HistoricoCompras() {
     return fornecedor?.nome_marca || 'N/A';
   };
 
+  const getEntityNome = (pedido) => {
+    if (isFornecedor) {
+      return clientesMap[pedido.comprador_user_id] || 'N/A';
+    }
+    return getFornecedorNome(pedido.fornecedor_id);
+  };
+
   const handleExport = async (format) => {
     try {
-      // Preparar dados para exportação
+      const entityLabel = isFornecedor ? 'Cliente' : 'Fornecedor';
+      const tipoLabel = isFornecedor ? 'Vendas' : 'Compras';
+
       const exportData = filteredPedidos.map(pedido => ({
         id: pedido.id.substring(0, 8),
         data: formatDateTime(pedido.created_date),
-        fornecedor: getFornecedorNome(pedido.fornecedor_id),
+        entidade: getEntityNome(pedido),
         status: pedido.status,
         status_pagamento: pedido.status_pagamento,
         valor_total: pedido.valor_total,
@@ -326,11 +368,10 @@ export default function HistoricoCompras() {
         metodo_pagamento: pedido.metodo_pagamento || 'Não informado'
       }));
 
-      // Definir colunas
       const columns = [
         { key: 'id', label: 'ID Pedido' },
         { key: 'data', label: 'Data' },
-        { key: 'fornecedor', label: 'Fornecedor' },
+        { key: 'entidade', label: entityLabel },
         { key: 'status', label: 'Status' },
         { key: 'status_pagamento', label: 'Pagamento' },
         { key: 'valor_total', label: 'Valor Total' },
@@ -338,18 +379,21 @@ export default function HistoricoCompras() {
         { key: 'metodo_pagamento', label: 'Método Pagamento' }
       ];
 
+      const fileName = isFornecedor ? 'historico_vendas' : 'historico_compras';
+      const title = `Histórico de ${tipoLabel} - ${user?.empresa || user?.full_name || ''}`;
+
       if (format === 'pdf') {
         await exportToPDF(
           exportData,
           columns,
-          `Histórico de Compras - ${user?.empresa || user?.full_name || 'Cliente'}`,
-          `historico_compras_${new Date().toISOString().split('T')[0]}.pdf`
+          title,
+          `${fileName}_${new Date().toISOString().split('T')[0]}.pdf`
         );
       } else if (format === 'csv') {
         exportToCSV(
           exportData,
           columns,
-          `historico_compras_${new Date().toISOString().split('T')[0]}.csv`
+          `${fileName}_${new Date().toISOString().split('T')[0]}.csv`
         );
       }
     } catch (_error) {
@@ -376,8 +420,12 @@ export default function HistoricoCompras() {
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Histórico de Compras</h1>
-          <p className="text-gray-600">Analise seu histórico e padrões de compra</p>
+          <h1 className="text-3xl font-bold text-gray-900">
+            {isFornecedor ? 'Histórico de Vendas' : 'Histórico de Compras'}
+          </h1>
+          <p className="text-gray-600">
+            {isFornecedor ? 'Analise seu histórico e padrões de venda' : 'Analise seu histórico e padrões de compra'}
+          </p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -394,19 +442,21 @@ export default function HistoricoCompras() {
             <Download className="w-4 h-4 mr-2" />
             Exportar CSV
           </Button>
-          <Button
-            onClick={gerarSugestoesIA}
-            disabled={loadingSugestoes}
-            className="bg-purple-600 hover:bg-purple-700"
-          >
-            <Sparkles className="w-4 h-4 mr-2" />
-            {loadingSugestoes ? 'Gerando...' : 'Sugestões IA'}
-          </Button>
+          {!isFornecedor && (
+            <Button
+              onClick={gerarSugestoesIA}
+              disabled={loadingSugestoes}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              {loadingSugestoes ? 'Gerando...' : 'Sugestões IA'}
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* Sugestões da IA */}
-      {sugestoesIA && (
+      {/* Sugestões da IA (apenas cliente) */}
+      {!isFornecedor && sugestoesIA && (
         <Card className="bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-purple-900">
@@ -443,7 +493,7 @@ export default function HistoricoCompras() {
               <DollarSign className="w-8 h-8 text-green-600" />
               <TrendingUp className="w-5 h-5 text-green-600" />
             </div>
-            <p className="text-sm text-gray-600">Total Comprado</p>
+            <p className="text-sm text-gray-600">{isFornecedor ? 'Total Vendido' : 'Total Comprado'}</p>
             <p className="text-3xl font-bold text-gray-900">
               R$ {stats.totalComprado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </p>
@@ -486,7 +536,7 @@ export default function HistoricoCompras() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="w-5 h-5" />
-                Evolução de Compras
+                {isFornecedor ? 'Evolução de Vendas' : 'Evolução de Compras'}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -506,7 +556,7 @@ export default function HistoricoCompras() {
 
           <Card className="bg-slate-100 rounded-2xl shadow-neumorphic">
             <CardHeader>
-              <CardTitle>Compras por Fornecedor</CardTitle>
+              <CardTitle>{isFornecedor ? 'Vendas por Cliente' : 'Compras por Fornecedor'}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -531,7 +581,7 @@ export default function HistoricoCompras() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Package className="w-5 h-5" />
-                Produtos Mais Comprados
+                {isFornecedor ? 'Produtos Mais Vendidos' : 'Produtos Mais Comprados'}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -641,17 +691,31 @@ export default function HistoricoCompras() {
               />
             </div>
 
-            <Select value={filtroFornecedor} onValueChange={setFiltroFornecedor}>
-              <SelectTrigger>
-                <SelectValue placeholder="Todos os fornecedores" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos os fornecedores</SelectItem>
-                {fornecedores.map(f => (
-                  <SelectItem key={f.id} value={f.id}>{f.razao_social || f.nome_fantasia || f.nome_marca}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {isFornecedor ? (
+              <Select value={filtroCliente} onValueChange={setFiltroCliente}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos os clientes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os clientes</SelectItem>
+                  {Object.entries(clientesMap).map(([id, nome]) => (
+                    <SelectItem key={id} value={id}>{nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Select value={filtroFornecedor} onValueChange={setFiltroFornecedor}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos os fornecedores" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os fornecedores</SelectItem>
+                  {fornecedores.map(f => (
+                    <SelectItem key={f.id} value={f.id}>{f.razao_social || f.nome_fantasia || f.nome_marca}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
 
             <Input
               type="date"
@@ -682,7 +746,7 @@ export default function HistoricoCompras() {
                 <div className="flex-1">
                   <p className="font-semibold">#{pedido.id.slice(-8).toUpperCase()}</p>
                   <p className="text-sm text-gray-600">
-                    {getFornecedorNome(pedido.fornecedor_id)} • {new Date(pedido.created_date).toLocaleDateString('pt-BR')}
+                    {getEntityNome(pedido)} • {new Date(pedido.created_date).toLocaleDateString('pt-BR')}
                   </p>
                 </div>
                 <div className="text-right">

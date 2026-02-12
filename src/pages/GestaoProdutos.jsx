@@ -17,6 +17,7 @@ import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 
 export default function GestaoProdutos() {
+  const [user, setUser] = useState(null);
   const [produtos, setProdutos] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +40,7 @@ export default function GestaoProdutos() {
     setLoading(true);
     try {
       const currentUser = await User.me();
+      setUser(currentUser);
 
       let produtosList, fornecedoresList;
 
@@ -280,6 +282,8 @@ export default function GestaoProdutos() {
     );
   }
 
+  const isAdmin = user?.role === 'admin';
+
   return (
     <div className="space-y-6">
       {showForm ? (
@@ -302,11 +306,13 @@ export default function GestaoProdutos() {
               </h1>
               <p className="text-gray-600">Cadastre e gerencie produtos com grades personalizadas</p>
             </div>
-            
-            <Button onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-700 text-white">
-              <Plus className="w-4 h-4 mr-2" />
-              Novo Produto
-            </Button>
+
+            {isAdmin && (
+              <Button onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-700 text-white">
+                <Plus className="w-4 h-4 mr-2" />
+                Novo Produto
+              </Button>
+            )}
           </div>
 
           {/* Filtros */}
@@ -490,23 +496,27 @@ export default function GestaoProdutos() {
                                 <Edit className="w-4 h-4 mr-1" />
                                 Editar
                               </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDuplicate(produto)}
-                                className="text-blue-600 border-blue-300 hover:bg-blue-50"
-                              >
-                                <Copy className="w-4 h-4 mr-1" />
-                                Duplicar
-                              </Button>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => handleDelete(produto)}
-                              >
-                                <Trash2 className="w-4 h-4 mr-1" />
-                                Excluir
-                              </Button>
+                              {isAdmin && (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleDuplicate(produto)}
+                                    className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                                  >
+                                    <Copy className="w-4 h-4 mr-1" />
+                                    Duplicar
+                                  </Button>
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() => handleDelete(produto)}
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-1" />
+                                    Excluir
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
