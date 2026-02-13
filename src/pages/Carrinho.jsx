@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import {
   ShoppingCart, Trash2, Plus, Minus, Package, AlertTriangle,
   CheckCircle, CreditCard, ArrowRight, Building, ArrowLeft,
-  XCircle, DollarSign
+  XCircle, DollarSign, ChevronDown, ChevronUp, Eye
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -45,6 +45,7 @@ export default function Carrinho() {
   const [replicarPreSelectedIds, setReplicarPreSelectedIds] = useState([]);
   // Per-supplier-group selected lojas: { fornecedor_id: Set<loja_id> }
   const [selectedLojasMap, setSelectedLojasMap] = useState({});
+  const [capsulaProdutosExpandidos, setCapsulaProdutosExpandidos] = useState({});
 
   useEffect(() => {
     loadData();
@@ -266,9 +267,8 @@ export default function Carrinho() {
     return [
       { value: 'pix', label: 'PIX' },
       { value: 'cartao_credito', label: 'Cartão de Crédito' },
-      { value: 'boleto', label: 'Boleto' },
-      { value: 'transferencia', label: 'Transferência Bancária' },
-      { value: 'boleto_faturado', label: 'Boleto Faturado (30 dias)' }
+      { value: 'boleto_faturado', label: 'Boleto Faturado (30 dias)' },
+      { value: 'transferencia', label: 'Transferência Bancária' }
     ];
   };
 
@@ -588,10 +588,11 @@ export default function Carrinho() {
       salvarCarrinho(novoCarrinho);
 
       const fornecedorNome = fornecedor?.nome_marca || 'Fornecedor';
+      const numeroPedido = result.pedidoId ? `#${result.pedidoId.substring(0, 8).toUpperCase()}` : '';
       if (grupo.temCapsula) {
-        toast.success(`Pedido para ${fornecedorNome} (incluindo cápsula) criado com sucesso!`);
+        toast.success(`Pedido ${numeroPedido} para ${fornecedorNome} (incluindo cápsula) criado com sucesso!`);
       } else {
-        toast.success(`Pedido para ${fornecedorNome} criado com sucesso!`);
+        toast.success(`Pedido ${numeroPedido} para ${fornecedorNome} criado com sucesso!`);
       }
 
       if (novoCarrinho.length === 0) {
@@ -772,9 +773,89 @@ export default function Carrinho() {
                                     {item.detalhes_produtos?.length || 0} produtos inclusos
                                   </p>
 
-                                  {/* Mostrar cores disponíveis na cápsula */}
-                                  {(() => {
-                                    // Coletar todas as cores e somar quantidades de grades
+                                  {/* Botão Ver Produtos */}
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-2 text-purple-700 border-purple-300 hover:bg-purple-50"
+                                    onClick={() => setCapsulaProdutosExpandidos(prev => ({
+                                      ...prev,
+                                      [item.id]: !prev[item.id]
+                                    }))}
+                                  >
+                                    <Eye className="w-3.5 h-3.5 mr-1" />
+                                    {capsulaProdutosExpandidos[item.id] ? 'Ocultar Produtos' : 'Ver Produtos'}
+                                    {capsulaProdutosExpandidos[item.id]
+                                      ? <ChevronUp className="w-3.5 h-3.5 ml-1" />
+                                      : <ChevronDown className="w-3.5 h-3.5 ml-1" />
+                                    }
+                                  </Button>
+
+                                  {/* Lista de Produtos Expandida */}
+                                  {capsulaProdutosExpandidos[item.id] && item.detalhes_produtos && (
+                                    <div className="mt-3 bg-white rounded-lg border border-purple-200 divide-y divide-purple-100">
+                                      {item.detalhes_produtos.map((detalhe, dIdx) => {
+                                        const produtoCompleto = produtos.find(p => p.id === detalhe.id);
+                                        const config = detalhe.configuracao;
+                                        const isVariantes = config && typeof config === 'object' && config.variantes;
+                                        const qtdSimples = typeof config === 'number' ? config : null;
+
+                                        // Foto do produto
+                                        let fotoUrl = null;
+                                        if (detalhe.foto) {
+                                          fotoUrl = typeof detalhe.foto === 'string' ? detalhe.foto : detalhe.foto?.url;
+                                        }
+                                        if (!fotoUrl && produtoCompleto) {
+                                          try {
+                                            const fotos = typeof produtoCompleto.fotos === 'string' ? JSON.parse(produtoCompleto.fotos) : produtoCompleto.fotos;
+                                            if (fotos && fotos.length > 0) {
+                                              fotoUrl = typeof fotos[0] === 'string' ? fotos[0] : fotos[0]?.url;
+                                            }
+                                          } catch {}
+                                        }
+
+                                        return (
+                                          <div key={dIdx} className="flex items-center gap-3 p-3">
+                                            {fotoUrl ? (
+                                              <img src={fotoUrl} alt={detalhe.nome} className="w-12 h-12 object-cover rounded flex-shrink-0" onError={e => e.target.style.display = 'none'} />
+                                            ) : (
+                                              <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center flex-shrink-0">
+                                                <Package className="w-5 h-5 text-gray-400" />
+                                              </div>
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                              <p className="text-sm font-medium text-gray-900 truncate">{detalhe.nome}</p>
+                                              {produtoCompleto && (
+                                                <p className="text-xs text-gray-500">
+                                                  {produtoCompleto.marca}
+                                                  {produtoCompleto.referencia_polo ? ` - Ref: ${produtoCompleto.referencia_polo}` : ''}
+                                                </p>
+                                              )}
+                                              {/* Variantes por cor */}
+                                              {isVariantes && config.variantes.length > 0 && (
+                                                <div className="flex flex-wrap gap-1.5 mt-1">
+                                                  {config.variantes.map((v, vIdx) => (
+                                                    <span key={vIdx} className="inline-flex items-center gap-1 text-xs bg-purple-50 border border-purple-200 rounded px-1.5 py-0.5">
+                                                      <span className="w-3 h-3 rounded-full border border-gray-300 flex-shrink-0" style={{ backgroundColor: v.cor_codigo_hex || v.cor_hex || '#000' }} />
+                                                      {v.cor_nome}: {v.quantidade}
+                                                    </span>
+                                                  ))}
+                                                </div>
+                                              )}
+                                              {/* Quantidade simples */}
+                                              {qtdSimples && (
+                                                <p className="text-xs text-purple-700 mt-0.5">Qtd: {qtdSimples}</p>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+
+                                  {/* Cores resumidas (quando fechado) */}
+                                  {!capsulaProdutosExpandidos[item.id] && (() => {
                                     const coresComQuantidade = new Map();
                                     item.detalhes_produtos?.forEach(detalhe => {
                                       const config = detalhe.configuracao;
@@ -783,37 +864,23 @@ export default function Carrinho() {
                                           const corNome = variante.cor_nome;
                                           const corHex = variante.cor_codigo_hex || '#000000';
                                           const quantidade = variante.quantidade || 0;
-
                                           if (coresComQuantidade.has(corNome)) {
-                                            const existing = coresComQuantidade.get(corNome);
-                                            existing.quantidade += quantidade;
+                                            coresComQuantidade.get(corNome).quantidade += quantidade;
                                           } else {
-                                            coresComQuantidade.set(corNome, {
-                                              hex: corHex,
-                                              quantidade: quantidade
-                                            });
+                                            coresComQuantidade.set(corNome, { hex: corHex, quantidade });
                                           }
                                         });
                                       }
                                     });
-
                                     if (coresComQuantidade.size > 0) {
                                       return (
-                                        <div className="mt-3 bg-white rounded-lg p-3 border border-purple-100">
-                                          <p className="text-sm font-semibold text-gray-900 mb-2">Cores incluídas:</p>
-                                          <div className="space-y-1.5">
-                                            {Array.from(coresComQuantidade.entries()).map(([corNome, dados], idx) => (
-                                              <div key={idx} className="flex items-center gap-2 text-sm">
-                                                <div
-                                                  className="w-5 h-5 rounded-full border-2 border-gray-300 shadow-sm flex-shrink-0"
-                                                  style={{ backgroundColor: dados.hex }}
-                                                />
-                                                <span className="text-gray-800">
-                                                  <strong>{corNome}</strong> - {dados.quantidade} grade(s)
-                                                </span>
-                                              </div>
-                                            ))}
-                                          </div>
+                                        <div className="mt-2 flex flex-wrap gap-1.5">
+                                          {Array.from(coresComQuantidade.entries()).map(([corNome, dados], idx) => (
+                                            <span key={idx} className="inline-flex items-center gap-1 text-xs bg-white border border-purple-200 rounded-full px-2 py-0.5">
+                                              <span className="w-3 h-3 rounded-full border border-gray-300" style={{ backgroundColor: dados.hex }} />
+                                              {corNome} ({dados.quantidade})
+                                            </span>
+                                          ))}
                                         </div>
                                       );
                                     }

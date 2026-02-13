@@ -627,7 +627,9 @@ export default function ReplicarPedidoModal({
                         )}
                         <span className="font-medium flex-1">{r.lojaNome}</span>
                         {r.success ? (
-                          <Badge className="bg-green-600 text-white text-[10px]">Criado</Badge>
+                          <Badge className="bg-green-600 text-white text-[10px]">
+                            Pedido #{r.pedidoId ? r.pedidoId.substring(0, 8).toUpperCase() : 'OK'}
+                          </Badge>
                         ) : (
                           <span className="text-xs text-red-600 max-w-[200px] truncate">{r.error}</span>
                         )}

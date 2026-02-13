@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Capsula, User } from '@/api/entities';
+import { Capsula, Fornecedor, User } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Plus, Edit, Trash2, Image, Sparkles } from 'lucide-react';
@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 
 export default function GestaoCapsulas() {
   const [capsulas, setCapsulas] = useState([]);
+  const [fornecedoresMap, setFornecedoresMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingCapsula, setEditingCapsula] = useState(null);
@@ -49,6 +50,12 @@ export default function GestaoCapsulas() {
       }
 
       setCapsulas(capsulasList || []);
+
+      // Carregar fornecedores para exibir razão social
+      const fornecedores = await Fornecedor.list();
+      const map = {};
+      (fornecedores || []).forEach(f => { map[f.id] = f; });
+      setFornecedoresMap(map);
     } catch (error) {
       console.error('Erro ao carregar cápsulas:', error);
     } finally {
@@ -132,6 +139,14 @@ export default function GestaoCapsulas() {
                     <h3 className="font-bold text-lg text-gray-800">{capsula.nome}</h3>
                     <p className="text-sm text-gray-600 line-clamp-2">{capsula.descricao}</p>
                     <p className="text-sm font-medium text-blue-600">{capsula.produto_ids?.length || 0} produtos</p>
+                    {capsula.fornecedor_id && fornecedoresMap[capsula.fornecedor_id] && (
+                      <div className="text-xs text-gray-500">
+                        {fornecedoresMap[capsula.fornecedor_id].nome_marca && (
+                          <p className="font-medium text-gray-700">{fornecedoresMap[capsula.fornecedor_id].nome_marca}</p>
+                        )}
+                        <p>{fornecedoresMap[capsula.fornecedor_id].razao_social}</p>
+                      </div>
+                    )}
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="icon" onClick={() => handleEdit(capsula)}>
                         <Edit className="w-4 h-4"/>

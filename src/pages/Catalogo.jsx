@@ -1859,6 +1859,12 @@ export default function Catalogo() {
                           <div className="flex-1">
                             <h4 className="font-semibold text-gray-900">{produto.nome}</h4>
                             <p className="text-sm text-gray-600">{produto.marca}</p>
+                            {produto.fornecedor_id && (() => {
+                              const forn = fornecedores.find(f => f.id === produto.fornecedor_id);
+                              return forn?.razao_social ? (
+                                <p className="text-xs text-gray-500">{forn.razao_social}</p>
+                              ) : null;
+                            })()}
 
                             {/* Mostrar composição de cores se tiver variantes */}
                             {qtdConfig && typeof qtdConfig === 'object' && qtdConfig.variantes && qtdConfig.variantes.length > 0 && (

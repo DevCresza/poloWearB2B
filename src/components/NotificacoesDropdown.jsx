@@ -19,6 +19,19 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+// Supabase retorna timestamps sem timezone (ex: "2026-02-12 10:00:00")
+// JS interpreta como local time, mas na verdade é UTC. Precisamos normalizar.
+const parseAsUTC = (dateStr) => {
+  if (!dateStr) return new Date();
+  const d = new Date(dateStr);
+  // Se a string não contém indicador de timezone (Z, +, -) após a data, é UTC do Supabase
+  if (typeof dateStr === 'string' && !dateStr.match(/[Z+\-]\d{0,2}:?\d{0,2}$/i) && !dateStr.endsWith('Z')) {
+    // Adicionar Z para interpretar como UTC
+    return new Date(dateStr.replace(' ', 'T') + 'Z');
+  }
+  return d;
+};
+
 // Helpers para persistir notificações auto-geradas dispensadas no localStorage
 const DISMISSED_KEY = 'polo_notif_dismissed';
 
@@ -114,7 +127,7 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
 
       // Combinar e ordenar por data
       const todasNotificacoes = [...notificacoesUsuario, ...autoFiltradas]
-        .sort((a, b) => new Date(b.created_at || b.data) - new Date(a.created_at || a.data));
+        .sort((a, b) => parseAsUTC(b.created_at || b.data) - parseAsUTC(a.created_at || a.data));
 
       setNotificacoes(todasNotificacoes);
     } catch (error) {
@@ -621,7 +634,7 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
                         </p>
                         <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
                           <Clock className="w-3 h-3" />
-                          {formatDistanceToNow(new Date(notificacao.data || notificacao.created_at), {
+                          {formatDistanceToNow(parseAsUTC(notificacao.data || notificacao.created_at), {
                             addSuffix: true,
                             locale: ptBR
                           })}

@@ -36,6 +36,7 @@ export default function UserManagement() {
   const [showBloqueioModal, setShowBloqueioModal] = useState(false);
   const [bloqueioTarget, setBloqueioTarget] = useState(null);
   const [motivoBloqueio, setMotivoBloqueio] = useState('');
+  const [filtroTipo, setFiltroTipo] = useState('todos');
 
   const getStatusBadge = (status) => {
     const statusMap = {
@@ -318,10 +319,27 @@ export default function UserManagement() {
           <TabsContent value="active">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <UsersIcon className="w-5 h-5" />
-                  <span>Usuários Ativos no Sistema</span>
-                </CardTitle>
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <CardTitle className="flex items-center gap-2">
+                    <UsersIcon className="w-5 h-5" />
+                    <span>Usuários Ativos no Sistema</span>
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500">Filtrar por tipo:</span>
+                    <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+                      <SelectTrigger className="w-[180px] h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent position="popper" sideOffset={5}>
+                        <SelectItem value="todos">Todos</SelectItem>
+                        <SelectItem value="admin">Administrador</SelectItem>
+                        <SelectItem value="multimarca">Multimarca</SelectItem>
+                        <SelectItem value="franqueado">Franqueado</SelectItem>
+                        <SelectItem value="fornecedor">Fornecedor</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -337,7 +355,12 @@ export default function UserManagement() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {users.map(user => {
+                    {users.filter(user => {
+                      if (filtroTipo === 'todos') return true;
+                      if (filtroTipo === 'admin') return user.role === 'admin';
+                      if (filtroTipo === 'franqueado') return user.tipo_negocio === 'franqueado' || user.categoria_cliente === 'franqueado';
+                      return user.tipo_negocio === filtroTipo;
+                    }).map(user => {
                       const isCliente = user.tipo_negocio === 'multimarca' || user.tipo_negocio === 'franqueado' || user.categoria_cliente === 'franqueado';
                       return (
                       <TableRow key={user.id}>
@@ -389,41 +412,42 @@ export default function UserManagement() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-2 flex-wrap">
-                            <Button variant="outline" size="sm" onClick={() => handleEdit(user)}>
-                              <Edit className="w-4 h-4 mr-1" />
-                              Editar
+                          <div className="flex gap-1.5 flex-nowrap">
+                            <Button variant="outline" size="sm" className="px-2 h-8 whitespace-nowrap" onClick={() => handleEdit(user)}>
+                              <Edit className="w-4 h-4 sm:mr-1" />
+                              <span className="hidden sm:inline">Editar</span>
                             </Button>
                             {isCliente && !user.bloqueado && (
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="text-red-600 border-red-200 hover:bg-red-50"
+                                className="px-2 h-8 whitespace-nowrap text-red-600 border-red-200 hover:bg-red-50"
                                 onClick={() => handleBloquear(user)}
                               >
-                                <Ban className="w-4 h-4 mr-1" />
-                                Bloquear
+                                <Ban className="w-4 h-4 sm:mr-1" />
+                                <span className="hidden sm:inline">Bloquear</span>
                               </Button>
                             )}
                             {isCliente && user.bloqueado && (
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="text-green-600 border-green-200 hover:bg-green-50"
+                                className="px-2 h-8 whitespace-nowrap text-green-600 border-green-200 hover:bg-green-50"
                                 onClick={() => handleDesbloquear(user)}
                               >
-                                <ShieldCheck className="w-4 h-4 mr-1" />
-                                Desbloquear
+                                <ShieldCheck className="w-4 h-4 sm:mr-1" />
+                                <span className="hidden sm:inline">Desbloquear</span>
                               </Button>
                             )}
                             <Button
                               variant="destructive"
                               size="sm"
+                              className="px-2 h-8 whitespace-nowrap"
                               onClick={() => handleDelete(user.id, user.full_name)}
                               disabled={currentUser.id === user.id}
                             >
-                              <Trash2 className="w-4 h-4 mr-1" />
-                              Excluir
+                              <Trash2 className="w-4 h-4 sm:mr-1" />
+                              <span className="hidden sm:inline">Excluir</span>
                             </Button>
                           </div>
                         </TableCell>

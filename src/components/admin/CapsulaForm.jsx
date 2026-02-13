@@ -11,7 +11,8 @@ import { Capsula } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Search, Plus, Minus, Package, Filter } from 'lucide-react';
+import { Search, Plus, Minus, Package, Filter, Lock, AlertTriangle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import ImageUploader from './ImageUploader';
 import { toast } from 'sonner';
 
@@ -89,34 +90,68 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
     loadData();
   }, [capsula, currentUser]);
 
+  // Detectar fornecedor travado baseado nos produtos selecionados
+  const fornecedorTravado = (() => {
+    if (formData.produto_ids.length === 0) return null;
+    const primeiroProduto = allProdutos.find(p => p.id === formData.produto_ids[0]);
+    return primeiroProduto?.fornecedor_id || null;
+  })();
+
   const handleProductSelection = (productId) => {
+    const produto = allProdutos.find(p => p.id === productId);
+    if (!produto) return;
+
     setFormData(prev => {
-      const newProductIds = prev.produto_ids.includes(productId)
+      const isRemoving = prev.produto_ids.includes(productId);
+      const newProductIds = isRemoving
         ? prev.produto_ids.filter(id => id !== productId)
         : [...prev.produto_ids, productId];
 
       // Se desmarcar, remover da quantidade
       const newQuantidades = { ...prev.produtos_quantidades };
-      if (!newProductIds.includes(productId)) {
+      if (isRemoving) {
         delete newQuantidades[productId];
       } else if (!newQuantidades[productId]) {
-        // Verificar se produto tem variantes
-        const produto = allProdutos.find(p => p.id === productId);
         if (produto?.tem_variantes_cor) {
-          // Inicializar com array vazio de variantes
           newQuantidades[productId] = { variantes: [] };
         } else {
-          // Definir quantidade padrão de 1
           newQuantidades[productId] = 1;
         }
+      }
+
+      // Auto-setar fornecedor_id da capsula baseado nos produtos
+      let newFornecedorId = prev.fornecedor_id;
+      if (newProductIds.length > 0) {
+        const primeiroProd = allProdutos.find(p => p.id === newProductIds[0]);
+        newFornecedorId = primeiroProd?.fornecedor_id || null;
+      } else {
+        newFornecedorId = currentUser?.tipo_negocio === 'fornecedor' ? currentUser.fornecedor_id : null;
       }
 
       return {
         ...prev,
         produto_ids: newProductIds,
-        produtos_quantidades: newQuantidades
+        produtos_quantidades: newQuantidades,
+        fornecedor_id: newFornecedorId
       };
     });
+
+    // Auto-travar filtro de fornecedor quando admin seleciona primeiro produto
+    if (currentUser?.role === 'admin') {
+      const isRemoving = formData.produto_ids.includes(productId);
+      const newIds = isRemoving
+        ? formData.produto_ids.filter(id => id !== productId)
+        : [...formData.produto_ids, productId];
+
+      if (newIds.length > 0) {
+        const primeiroProd = allProdutos.find(p => p.id === newIds[0]);
+        if (primeiroProd?.fornecedor_id) {
+          setSelectedFornecedor(primeiroProd.fornecedor_id);
+        }
+      } else {
+        setSelectedFornecedor('all');
+      }
+    }
   };
 
   const handleQuantidadeChange = (productId, quantidade) => {
@@ -131,8 +166,16 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
   };
 
   const filteredProdutos = allProdutos.filter(p => {
-    const matchesSearch = p.nome.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFornecedor = selectedFornecedor === 'all' || p.fornecedor_id === selectedFornecedor;
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = !term ||
+      (p.nome || '').toLowerCase().includes(term) ||
+      (p.referencia_polo || '').toLowerCase().includes(term) ||
+      (p.referencia_fornecedor || '').toLowerCase().includes(term) ||
+      (p.marca || '').toLowerCase().includes(term);
+    // Se tem produtos selecionados, forçar mesmo fornecedor
+    const matchesFornecedor = fornecedorTravado
+      ? p.fornecedor_id === fornecedorTravado
+      : selectedFornecedor === 'all' || p.fornecedor_id === selectedFornecedor;
     return matchesSearch && matchesFornecedor;
   });
 
@@ -194,14 +237,28 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
       toast.info('Selecione ao menos um produto para a cápsula.');
       return;
     }
+
+    // Validar que todos os produtos são do mesmo fornecedor
+    const fornecedorIds = new Set();
+    formData.produto_ids.forEach(pid => {
+      const prod = allProdutos.find(p => p.id === pid);
+      if (prod?.fornecedor_id) fornecedorIds.add(prod.fornecedor_id);
+    });
+    if (fornecedorIds.size > 1) {
+      toast.error('Todos os produtos da cápsula devem ser do mesmo fornecedor.');
+      return;
+    }
+
+    const fornecedorDaCapsula = fornecedorIds.size === 1
+      ? Array.from(fornecedorIds)[0]
+      : (currentUser?.tipo_negocio === 'fornecedor' ? currentUser.fornecedor_id : null);
+
     setLoading(true);
     try {
       const dataToSave = {
         ...formData,
-        // Supabase JSONB aceita objetos JavaScript diretamente
         produtos_quantidades: formData.produtos_quantidades,
-        // Garantir que o fornecedor_id seja salvo
-        fornecedor_id: formData.fornecedor_id || (currentUser?.tipo_negocio === 'fornecedor' ? currentUser.fornecedor_id : null)
+        fornecedor_id: fornecedorDaCapsula
       };
 
       if (capsula) {
@@ -254,14 +311,29 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
             <div className="md:col-span-2">
               <Label className="font-medium text-lg">Selecionar Produtos e Quantidades Mínimas ({formData.produto_ids.length})</Label>
 
+              {/* Aviso: mesmo fornecedor obrigatório */}
+              {fornecedorTravado && currentUser?.role === 'admin' && (
+                <Alert className="mt-2 border-blue-200 bg-blue-50">
+                  <Lock className="h-4 w-4 text-blue-600" />
+                  <AlertDescription className="text-blue-800 text-sm">
+                    Fornecedor travado: <strong>{fornecedores.find(f => f.id === fornecedorTravado)?.razao_social || fornecedores.find(f => f.id === fornecedorTravado)?.nome_marca || 'Fornecedor'}</strong>.
+                    Todos os produtos devem ser do mesmo fornecedor. Remova todos os produtos para trocar.
+                  </AlertDescription>
+                </Alert>
+              )}
+
               {/* Filtros */}
               <div className="mt-2 flex gap-3">
                 {/* Filtro por Fornecedor - só mostra para admin */}
                 {currentUser?.role === 'admin' && (
                   <div className="w-64">
-                    <Select value={selectedFornecedor} onValueChange={setSelectedFornecedor}>
-                      <SelectTrigger className="bg-slate-100 shadow-neumorphic-inset">
-                        <Filter className="w-4 h-4 mr-2 text-gray-400" />
+                    <Select
+                      value={fornecedorTravado || selectedFornecedor}
+                      onValueChange={setSelectedFornecedor}
+                      disabled={!!fornecedorTravado}
+                    >
+                      <SelectTrigger className={`bg-slate-100 shadow-neumorphic-inset ${fornecedorTravado ? 'opacity-60' : ''}`}>
+                        {fornecedorTravado ? <Lock className="w-4 h-4 mr-2 text-blue-500" /> : <Filter className="w-4 h-4 mr-2 text-gray-400" />}
                         <SelectValue placeholder="Filtrar por fornecedor" />
                       </SelectTrigger>
                       <SelectContent>

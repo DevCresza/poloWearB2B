@@ -1,7 +1,7 @@
 // Helper para criação de usuários pelo admin
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { UserTable } from '@/api/supabaseEntities';
-import { Fornecedor } from '@/api/entities';
+import { Fornecedor, Loja } from '@/api/entities';
 import { SendEmail } from '@/api/integrations';
 
 /**
@@ -131,7 +131,18 @@ export async function createUserWithAccess(userData) {
       }
     }
 
-    // 7. Enviar email com credenciais
+    // 7. Se tem lojas (cadastro de cliente), criar as lojas vinculadas ao usuário
+    if (userData.lojas && userData.lojas.length > 0 && createdUser?.id) {
+      for (const lojaData of userData.lojas) {
+        try {
+          await Loja.create({ ...lojaData, user_id: createdUser.id, ativa: true });
+        } catch (lojaError) {
+          console.error('Erro ao criar loja:', lojaError);
+        }
+      }
+    }
+
+    // 8. Enviar email com credenciais
     try {
       await sendWelcomeEmail(createdUser, password);
     } catch (emailError) {

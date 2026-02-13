@@ -3,10 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { Eye, EyeOff, Users, Store, MapPin, Settings } from 'lucide-react';
+import { Eye, EyeOff, Users, Store, Settings, Plus, Trash2, MapPin, Loader2 } from 'lucide-react';
+import { consultarCep, formatCepForDisplay } from '@/lib/cepHelpers';
+import { toast } from 'sonner';
 
 const permissoesPadraoMultimarca = {
   ver_dashboard: true,
@@ -42,34 +45,49 @@ const tiposCliente = [
   { value: 'varejo', label: 'Varejo' }
 ];
 
+const emptyLoja = () => ({
+  _key: Date.now() + Math.random(),
+  nome: '',
+  nome_fantasia: '',
+  cnpj: '',
+  codigo_cliente: '',
+  endereco_completo: '',
+  cidade: '',
+  estado: '',
+  cep: '',
+  telefone: ''
+});
+
 export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
   const [formData, setFormData] = useState({
     full_name: '',
     email: '',
     password: '',
     categoria_cliente: '',
-    nome_empresa: '',
-    cnpj: '',
     telefone: '',
-    endereco: '',
-    cidade: '',
-    estado: '',
-    cep: '',
     permissoes: permissoesPadraoMultimarca,
     observacoes: ''
   });
+  const [lojas, setLojas] = useState([emptyLoja()]);
   const [showPassword, setShowPassword] = useState(false);
+  const [buscandoCep, setBuscandoCep] = useState({});
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.categoria_cliente) {
-      alert('Selecione o tipo de cliente');
+      toast.info('Selecione o tipo de cliente.');
+      return;
+    }
+    // Validar ao menos 1 loja com razão social preenchida
+    const lojasValidas = lojas.filter(l => l.nome.trim());
+    if (lojasValidas.length === 0) {
+      toast.info('Cadastre ao menos uma loja com Razão Social.');
       return;
     }
     const userData = {
       ...formData,
       tipo_negocio: 'multimarca',
-      // role será definido automaticamente como tipo_negocio no helper
+      lojas: lojasValidas.map(({ _key, ...rest }) => rest)
     };
     onSubmit(userData);
   };
@@ -84,15 +102,53 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
     }));
   };
 
+  const addLoja = () => {
+    setLojas(prev => [...prev, emptyLoja()]);
+  };
+
+  const removeLoja = (index) => {
+    if (lojas.length <= 1) {
+      toast.info('Ao menos uma loja é obrigatória.');
+      return;
+    }
+    setLojas(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateLoja = (index, field, value) => {
+    setLojas(prev => prev.map((loja, i) => i === index ? { ...loja, [field]: value } : loja));
+  };
+
+  const handleCepLojaChange = async (index, cep) => {
+    updateLoja(index, 'cep', cep);
+    const cleanCep = cep.replace(/\D/g, '');
+    if (cleanCep.length === 8) {
+      setBuscandoCep(prev => ({ ...prev, [index]: true }));
+      try {
+        const endereco = await consultarCep(cleanCep);
+        setLojas(prev => prev.map((loja, i) => i === index ? {
+          ...loja,
+          cep: formatCepForDisplay(cleanCep),
+          endereco_completo: endereco.endereco_completo,
+          cidade: endereco.cidade,
+          estado: endereco.estado
+        } : loja));
+      } catch {
+        toast.error('CEP não encontrado.');
+      } finally {
+        setBuscandoCep(prev => ({ ...prev, [index]: false }));
+      }
+    }
+  };
+
   const permissoesGroups = [
     {
-      title: 'Catálogo e Produtos',
+      title: 'Catalogo e Produtos',
       icon: Store,
       permissions: [
-        { key: 'ver_catalogo', label: 'Ver Catálogo' },
-        { key: 'ver_capsulas', label: 'Ver Cápsulas' },
+        { key: 'ver_catalogo', label: 'Ver Catalogo' },
+        { key: 'ver_capsulas', label: 'Ver Capsulas' },
         { key: 'ver_pronta_entrega', label: 'Ver Pronta Entrega' },
-        { key: 'ver_programacao', label: 'Ver Programação' }
+        { key: 'ver_programacao', label: 'Ver Programacao' }
       ]
     },
     {
@@ -104,11 +160,11 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
       ]
     },
     {
-      title: 'Relatórios',
+      title: 'Relatorios',
       icon: Settings,
       permissions: [
-        { key: 'ver_relatorios', label: 'Ver Relatórios' },
-        { key: 'ver_precos_custo', label: 'Ver Preços de Custo' }
+        { key: 'ver_relatorios', label: 'Ver Relatorios' },
+        { key: 'ver_precos_custo', label: 'Ver Precos de Custo' }
       ]
     }
   ];
@@ -150,7 +206,7 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Senha Temporária *</Label>
+                <Label htmlFor="password">Senha Temporaria *</Label>
                 <div className="relative">
                   <Input
                     id="password"
@@ -159,7 +215,7 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
                     onChange={e => setFormData({...formData, password: e.target.value})}
                     required
                     minLength={6}
-                    placeholder="Mínimo 6 caracteres"
+                    placeholder="Minimo 6 caracteres"
                   />
                   <button
                     type="button"
@@ -178,18 +234,6 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
                   onChange={e => setFormData({...formData, telefone: e.target.value})}
                 />
               </div>
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Dados da Empresa */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <Store className="w-4 h-4" />
-              Dados da Empresa
-            </h3>
-            <div className="grid md:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="categoria_cliente">Tipo de Cliente *</Label>
                 <Select
@@ -206,82 +250,130 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="nome_empresa">Nome da Empresa *</Label>
-                <Input
-                  id="nome_empresa"
-                  value={formData.nome_empresa}
-                  onChange={e => setFormData({...formData, nome_empresa: e.target.value})}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="cnpj">CNPJ</Label>
-                <Input
-                  id="cnpj"
-                  value={formData.cnpj}
-                  onChange={e => setFormData({...formData, cnpj: e.target.value})}
-                />
-              </div>
             </div>
           </div>
 
           <Separator />
 
-          {/* Endereço */}
+          {/* Lojas */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <MapPin className="w-4 h-4" />
-              Localização
-            </h3>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="endereco">Endereço</Label>
-                <Input
-                  id="endereco"
-                  value={formData.endereco}
-                  onChange={e => setFormData({...formData, endereco: e.target.value})}
-                />
-              </div>
-              <div className="grid md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="cidade">Cidade</Label>
-                  <Input
-                    id="cidade"
-                    value={formData.cidade}
-                    onChange={e => setFormData({...formData, cidade: e.target.value})}
-                  />
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Store className="w-4 h-4" />
+                Lojas <span className="text-sm font-normal text-gray-500">(minimo 1 obrigatoria)</span>
+              </h3>
+              <Button type="button" variant="outline" size="sm" onClick={addLoja}>
+                <Plus className="w-4 h-4 mr-1" />
+                Adicionar Loja
+              </Button>
+            </div>
+
+            <div className="space-y-6">
+              {lojas.map((loja, index) => (
+                <div key={loja._key} className="relative border rounded-lg p-4 bg-gray-50/50">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-blue-700 flex items-center gap-1">
+                      <Store className="w-3.5 h-3.5" />
+                      Loja {index + 1}
+                    </span>
+                    {lojas.length > 1 && (
+                      <Button type="button" variant="ghost" size="sm" className="text-red-500 hover:text-red-700 h-7 px-2" onClick={() => removeLoja(index)}>
+                        <Trash2 className="w-3.5 h-3.5 mr-1" />
+                        Remover
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Razao Social *</Label>
+                      <Input
+                        value={loja.nome}
+                        onChange={e => updateLoja(index, 'nome', e.target.value)}
+                        placeholder="Razao social da loja"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Nome Fantasia</Label>
+                      <Input
+                        value={loja.nome_fantasia}
+                        onChange={e => updateLoja(index, 'nome_fantasia', e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">CNPJ</Label>
+                      <Input
+                        value={loja.cnpj}
+                        onChange={e => updateLoja(index, 'cnpj', e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Codigo do Cliente</Label>
+                      <Input
+                        value={loja.codigo_cliente}
+                        onChange={e => updateLoja(index, 'codigo_cliente', e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs flex items-center gap-1">
+                        CEP {buscandoCep[index] && <Loader2 className="w-3 h-3 animate-spin" />}
+                      </Label>
+                      <Input
+                        value={loja.cep}
+                        onChange={e => handleCepLojaChange(index, e.target.value)}
+                        placeholder="00000-000"
+                        maxLength={9}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Telefone</Label>
+                      <Input
+                        value={loja.telefone}
+                        onChange={e => updateLoja(index, 'telefone', e.target.value)}
+                      />
+                    </div>
+                    <div className="md:col-span-2 space-y-1">
+                      <Label className="text-xs flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        Endereco Completo
+                      </Label>
+                      <Textarea
+                        value={loja.endereco_completo}
+                        onChange={e => updateLoja(index, 'endereco_completo', e.target.value)}
+                        rows={2}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Cidade</Label>
+                      <Input
+                        value={loja.cidade}
+                        onChange={e => updateLoja(index, 'cidade', e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Estado</Label>
+                      <Select value={loja.estado} onValueChange={value => updateLoja(index, 'estado', value)}>
+                        <SelectTrigger><SelectValue placeholder="UF" /></SelectTrigger>
+                        <SelectContent>
+                          {estados.map(uf => (
+                            <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="estado">Estado</Label>
-                  <Select value={formData.estado} onValueChange={value => setFormData({...formData, estado: value})}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      {estados.map(estado => (
-                        <SelectItem key={estado} value={estado}>{estado}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cep">CEP</Label>
-                  <Input
-                    id="cep"
-                    value={formData.cep}
-                    onChange={e => setFormData({...formData, cep: e.target.value})}
-                  />
-                </div>
-              </div>
+              ))}
             </div>
           </div>
 
           <Separator />
 
-          {/* Permissões */}
+          {/* Permissoes */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold flex items-center gap-2">
               <Settings className="w-4 h-4" />
-              Permissões de Acesso
+              Permissoes de Acesso
             </h3>
             <div className="grid md:grid-cols-3 gap-6">
               {permissoesGroups.map((group) => (
@@ -309,14 +401,14 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
 
           <Separator />
 
-          {/* Observações */}
+          {/* Observacoes */}
           <div className="space-y-2">
-            <Label htmlFor="observacoes">Observações</Label>
+            <Label htmlFor="observacoes">Observacoes</Label>
             <Input
               id="observacoes"
               value={formData.observacoes}
               onChange={e => setFormData({...formData, observacoes: e.target.value})}
-              placeholder="Observações sobre este cliente..."
+              placeholder="Observacoes sobre este cliente..."
             />
           </div>
 
