@@ -978,6 +978,13 @@ export default function Catalogo() {
                       <Badge variant="outline" className="w-fit bg-purple-50 text-purple-700 border-purple-200 mt-2 text-xs">
                         {capsula.produto_ids?.length || 0} produtos
                       </Badge>
+                      {capsula.fornecedor_id && (() => {
+                        const forn = fornecedores.find(f => f.id === capsula.fornecedor_id);
+                        const nome = forn?.razao_social || forn?.nome_fantasia || forn?.nome_marca;
+                        return nome ? (
+                          <p className="text-xs text-gray-500 mt-1">{nome}</p>
+                        ) : null;
+                      })()}
                     </CardHeader>
                   </Card>
                 </div>
@@ -1861,8 +1868,9 @@ export default function Catalogo() {
                             <p className="text-sm text-gray-600">{produto.marca}</p>
                             {produto.fornecedor_id && (() => {
                               const forn = fornecedores.find(f => f.id === produto.fornecedor_id);
-                              return forn?.razao_social ? (
-                                <p className="text-xs text-gray-500">{forn.razao_social}</p>
+                              const nomeForn = forn?.razao_social || forn?.nome_fantasia || forn?.nome_marca;
+                              return nomeForn ? (
+                                <p className="text-xs text-gray-500">{nomeForn}</p>
                               ) : null;
                             })()}
 
