@@ -47,14 +47,21 @@ const tiposCliente = [
 
 const emptyLoja = () => ({
   _key: Date.now() + Math.random(),
+  categoria_cliente: '',
+  codigo_cliente: '',
+  cnpj: '',
   nome: '',
   nome_fantasia: '',
-  cnpj: '',
-  codigo_cliente: '',
-  endereco_completo: '',
+  transportadora_padrao: '',
+  suframa: '',
+  inscricao_estadual: '',
   cidade: '',
   estado: '',
+  endereco_completo: '',
   cep: '',
+  bairro: '',
+  whatsapp: '',
+  email: '',
   telefone: ''
 });
 
@@ -63,7 +70,6 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
     full_name: '',
     email: '',
     password: '',
-    categoria_cliente: '',
     telefone: '',
     permissoes: permissoesPadraoMultimarca,
     observacoes: ''
@@ -74,19 +80,22 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.categoria_cliente) {
-      toast.info('Selecione o tipo de cliente.');
-      return;
-    }
-    // Validar ao menos 1 loja com razão social preenchida
+    // Validar ao menos 1 loja com razão social e tipo de cliente preenchidos
     const lojasValidas = lojas.filter(l => l.nome.trim());
     if (lojasValidas.length === 0) {
-      toast.info('Cadastre ao menos uma loja com Razão Social.');
+      toast.info('Cadastre ao menos uma loja com Razao Social.');
       return;
     }
+    const lojaSemTipo = lojasValidas.find(l => !l.categoria_cliente);
+    if (lojaSemTipo) {
+      toast.info('Selecione o Tipo de Cliente em todas as lojas.');
+      return;
+    }
+    // Usar categoria da primeira loja como categoria padrão do usuário
     const userData = {
       ...formData,
       tipo_negocio: 'multimarca',
+      categoria_cliente: lojasValidas[0].categoria_cliente,
       lojas: lojasValidas.map(({ _key, ...rest }) => rest)
     };
     onSubmit(userData);
@@ -129,6 +138,7 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
           ...loja,
           cep: formatCepForDisplay(cleanCep),
           endereco_completo: endereco.endereco_completo,
+          bairro: endereco.bairro || '',
           cidade: endereco.cidade,
           estado: endereco.estado
         } : loja));
@@ -234,22 +244,6 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
                   onChange={e => setFormData({...formData, telefone: e.target.value})}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="categoria_cliente">Tipo de Cliente *</Label>
-                <Select
-                  value={formData.categoria_cliente}
-                  onValueChange={value => setFormData({...formData, categoria_cliente: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tiposCliente.map(tipo => (
-                      <SelectItem key={tipo.value} value={tipo.value}>{tipo.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
           </div>
 
@@ -284,7 +278,32 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
                     )}
                   </div>
 
-                  <div className="grid md:grid-cols-2 gap-4">
+                  <div className="grid md:grid-cols-3 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Tipo de Cliente *</Label>
+                      <Select value={loja.categoria_cliente} onValueChange={value => updateLoja(index, 'categoria_cliente', value)}>
+                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                        <SelectContent>
+                          {tiposCliente.map(t => (
+                            <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Cod. Cliente</Label>
+                      <Input
+                        value={loja.codigo_cliente}
+                        onChange={e => updateLoja(index, 'codigo_cliente', e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">CNPJ</Label>
+                      <Input
+                        value={loja.cnpj}
+                        onChange={e => updateLoja(index, 'cnpj', e.target.value)}
+                      />
+                    </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Razao Social *</Label>
                       <Input
@@ -301,17 +320,25 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">CNPJ</Label>
+                      <Label className="text-xs">Transportadora Padrao</Label>
                       <Input
-                        value={loja.cnpj}
-                        onChange={e => updateLoja(index, 'cnpj', e.target.value)}
+                        value={loja.transportadora_padrao}
+                        onChange={e => updateLoja(index, 'transportadora_padrao', e.target.value)}
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Codigo do Cliente</Label>
+                      <Label className="text-xs">SUFRAMA</Label>
                       <Input
-                        value={loja.codigo_cliente}
-                        onChange={e => updateLoja(index, 'codigo_cliente', e.target.value)}
+                        value={loja.suframa}
+                        onChange={e => updateLoja(index, 'suframa', e.target.value)}
+                        placeholder="Quando aplicavel"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">IE (Inscricao Estadual)</Label>
+                      <Input
+                        value={loja.inscricao_estadual}
+                        onChange={e => updateLoja(index, 'inscricao_estadual', e.target.value)}
                       />
                     </div>
                     <div className="space-y-1">
@@ -325,22 +352,21 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
                         maxLength={9}
                       />
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Telefone</Label>
-                      <Input
-                        value={loja.telefone}
-                        onChange={e => updateLoja(index, 'telefone', e.target.value)}
-                      />
-                    </div>
                     <div className="md:col-span-2 space-y-1">
                       <Label className="text-xs flex items-center gap-1">
                         <MapPin className="w-3 h-3" />
                         Endereco Completo
                       </Label>
-                      <Textarea
+                      <Input
                         value={loja.endereco_completo}
                         onChange={e => updateLoja(index, 'endereco_completo', e.target.value)}
-                        rows={2}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Bairro</Label>
+                      <Input
+                        value={loja.bairro}
+                        onChange={e => updateLoja(index, 'bairro', e.target.value)}
                       />
                     </div>
                     <div className="space-y-1">
@@ -351,7 +377,7 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Estado</Label>
+                      <Label className="text-xs">UF</Label>
                       <Select value={loja.estado} onValueChange={value => updateLoja(index, 'estado', value)}>
                         <SelectTrigger><SelectValue placeholder="UF" /></SelectTrigger>
                         <SelectContent>
@@ -360,6 +386,29 @@ export default function UserFormMultimarca({ onSubmit, onCancel, loading }) {
                           ))}
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">WhatsApp</Label>
+                      <Input
+                        value={loja.whatsapp}
+                        onChange={e => updateLoja(index, 'whatsapp', e.target.value)}
+                        placeholder="(XX) XXXXX-XXXX"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Email</Label>
+                      <Input
+                        type="email"
+                        value={loja.email}
+                        onChange={e => updateLoja(index, 'email', e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Telefone</Label>
+                      <Input
+                        value={loja.telefone}
+                        onChange={e => updateLoja(index, 'telefone', e.target.value)}
+                      />
                     </div>
                   </div>
                 </div>

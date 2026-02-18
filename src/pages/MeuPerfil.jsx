@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import {
@@ -24,6 +25,20 @@ import AvatarEditor from '@/components/AvatarEditor';
 import { formatCurrency } from '@/utils/exportUtils';
 import { Loja } from '@/api/entities';
 import { useLojaContext } from '@/contexts/LojaContext';
+
+const tiposClienteLoja = [
+  { value: 'franqueado', label: 'Franqueado' },
+  { value: 'multimarca', label: 'Multimarca' },
+  { value: 'revendedor', label: 'Revendedor' },
+  { value: 'atacado', label: 'Atacado' },
+  { value: 'varejo', label: 'Varejo' }
+];
+
+const estadosUf = [
+  'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA',
+  'MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN',
+  'RS','RO','RR','SC','SP','SE','TO'
+];
 
 export default function MeuPerfil() {
   const [user, setUser] = useState(null);
@@ -46,8 +61,10 @@ export default function MeuPerfil() {
   const [salvandoLoja, setSalvandoLoja] = useState(false);
   const [buscandoCepLoja, setBuscandoCepLoja] = useState(false);
   const [lojaFormData, setLojaFormData] = useState({
-    nome: '', nome_fantasia: '', cnpj: '', codigo_cliente: '',
-    endereco_completo: '', cidade: '', estado: '', cep: '', telefone: ''
+    categoria_cliente: '', codigo_cliente: '', cnpj: '', nome: '', nome_fantasia: '',
+    transportadora_padrao: '', suframa: '', inscricao_estadual: '',
+    endereco_completo: '', bairro: '', cidade: '', estado: '', cep: '',
+    whatsapp: '', email: '', telefone: ''
   });
   const lojaCtx = useLojaContext();
 
@@ -214,21 +231,30 @@ export default function MeuPerfil() {
     if (loja) {
       setLojaEditando(loja);
       setLojaFormData({
+        categoria_cliente: loja.categoria_cliente || '',
+        codigo_cliente: loja.codigo_cliente || '',
+        cnpj: loja.cnpj || '',
         nome: loja.nome || '',
         nome_fantasia: loja.nome_fantasia || '',
-        cnpj: loja.cnpj || '',
-        codigo_cliente: loja.codigo_cliente || '',
+        transportadora_padrao: loja.transportadora_padrao || '',
+        suframa: loja.suframa || '',
+        inscricao_estadual: loja.inscricao_estadual || '',
         endereco_completo: loja.endereco_completo || '',
+        bairro: loja.bairro || '',
         cidade: loja.cidade || '',
         estado: loja.estado || '',
         cep: loja.cep || '',
+        whatsapp: loja.whatsapp || '',
+        email: loja.email || '',
         telefone: loja.telefone || ''
       });
     } else {
       setLojaEditando(null);
       setLojaFormData({
-        nome: '', nome_fantasia: '', cnpj: '', codigo_cliente: '',
-        endereco_completo: '', cidade: '', estado: '', cep: '', telefone: ''
+        categoria_cliente: '', codigo_cliente: '', cnpj: '', nome: '', nome_fantasia: '',
+        transportadora_padrao: '', suframa: '', inscricao_estadual: '',
+        endereco_completo: '', bairro: '', cidade: '', estado: '', cep: '',
+        whatsapp: '', email: '', telefone: ''
       });
     }
     setShowLojaModal(true);
@@ -245,6 +271,7 @@ export default function MeuPerfil() {
           ...prev,
           cep: formatCepForDisplay(cleanCep),
           endereco_completo: endereco.endereco_completo,
+          bairro: endereco.bairro || '',
           cidade: endereco.cidade,
           estado: endereco.estado
         }));
@@ -805,14 +832,17 @@ export default function MeuPerfil() {
                             )}
                           </div>
                           <div className="space-y-1 text-sm text-gray-600">
+                            {loja.categoria_cliente && <p><span className="text-gray-400">Tipo:</span> <span className="capitalize">{loja.categoria_cliente}</span></p>}
                             {loja.cnpj && <p><span className="text-gray-400">CNPJ:</span> {loja.cnpj}</p>}
-                            {loja.codigo_cliente && <p><span className="text-gray-400">Código:</span> {loja.codigo_cliente}</p>}
+                            {loja.inscricao_estadual && <p><span className="text-gray-400">IE:</span> {loja.inscricao_estadual}</p>}
+                            {loja.codigo_cliente && <p><span className="text-gray-400">Cod:</span> {loja.codigo_cliente}</p>}
                             {(loja.cidade || loja.estado) && (
                               <p className="flex items-center gap-1">
                                 <MapPin className="w-3 h-3" />
                                 {loja.cidade}{loja.estado ? `/${loja.estado}` : ''}
                               </p>
                             )}
+                            {loja.whatsapp && <p><span className="text-gray-400">WhatsApp:</span> {loja.whatsapp}</p>}
                             {loja.telefone && <p><span className="text-gray-400">Tel:</span> {loja.telefone}</p>}
                           </div>
                           <div className="flex gap-2 mt-2">
@@ -901,7 +931,7 @@ export default function MeuPerfil() {
 
       {/* Modal de Loja */}
       <Dialog open={showLojaModal} onOpenChange={setShowLojaModal}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Store className="w-5 h-5 text-blue-600" />
@@ -909,44 +939,86 @@ export default function MeuPerfil() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <Label>Razão Social *</Label>
-                <Input value={lojaFormData.nome} onChange={(e) => setLojaFormData({...lojaFormData, nome: e.target.value})} className="mt-1" />
-              </div>
-              <div className="md:col-span-2">
-                <Label>Nome Fantasia</Label>
-                <Input value={lojaFormData.nome_fantasia} onChange={(e) => setLojaFormData({...lojaFormData, nome_fantasia: e.target.value})} className="mt-1" />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label className="text-xs">Tipo de Cliente</Label>
+                <Select value={lojaFormData.categoria_cliente} onValueChange={(v) => setLojaFormData({...lojaFormData, categoria_cliente: v})}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    {tiposClienteLoja.map(t => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
-                <Label>CNPJ</Label>
-                <Input value={lojaFormData.cnpj} onChange={(e) => setLojaFormData({...lojaFormData, cnpj: e.target.value})} className="mt-1" />
-              </div>
-              <div>
-                <Label>Código do Cliente</Label>
+                <Label className="text-xs">Cod. Cliente</Label>
                 <Input value={lojaFormData.codigo_cliente} onChange={(e) => setLojaFormData({...lojaFormData, codigo_cliente: e.target.value})} className="mt-1" />
               </div>
               <div>
-                <Label className="flex items-center gap-2">
+                <Label className="text-xs">CNPJ</Label>
+                <Input value={lojaFormData.cnpj} onChange={(e) => setLojaFormData({...lojaFormData, cnpj: e.target.value})} className="mt-1" />
+              </div>
+              <div className="md:col-span-2">
+                <Label className="text-xs">Razao Social *</Label>
+                <Input value={lojaFormData.nome} onChange={(e) => setLojaFormData({...lojaFormData, nome: e.target.value})} className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs">Nome Fantasia</Label>
+                <Input value={lojaFormData.nome_fantasia} onChange={(e) => setLojaFormData({...lojaFormData, nome_fantasia: e.target.value})} className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs">Transportadora Padrao</Label>
+                <Input value={lojaFormData.transportadora_padrao} onChange={(e) => setLojaFormData({...lojaFormData, transportadora_padrao: e.target.value})} className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs">SUFRAMA</Label>
+                <Input value={lojaFormData.suframa} onChange={(e) => setLojaFormData({...lojaFormData, suframa: e.target.value})} placeholder="Quando aplicavel" className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs">IE (Inscricao Estadual)</Label>
+                <Input value={lojaFormData.inscricao_estadual} onChange={(e) => setLojaFormData({...lojaFormData, inscricao_estadual: e.target.value})} className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs flex items-center gap-2">
                   CEP {buscandoCepLoja && <Loader2 className="w-3 h-3 animate-spin" />}
                 </Label>
                 <Input value={lojaFormData.cep} onChange={(e) => handleCepLojaChange(e.target.value)} maxLength={9} placeholder="00000-000" className="mt-1" />
               </div>
-              <div>
-                <Label>Telefone</Label>
-                <Input value={lojaFormData.telefone} onChange={(e) => setLojaFormData({...lojaFormData, telefone: e.target.value})} className="mt-1" />
-              </div>
               <div className="md:col-span-2">
-                <Label>Endereço Completo</Label>
-                <Textarea value={lojaFormData.endereco_completo} onChange={(e) => setLojaFormData({...lojaFormData, endereco_completo: e.target.value})} rows={2} className="mt-1" />
+                <Label className="text-xs">Endereco Completo</Label>
+                <Input value={lojaFormData.endereco_completo} onChange={(e) => setLojaFormData({...lojaFormData, endereco_completo: e.target.value})} className="mt-1" />
               </div>
               <div>
-                <Label>Cidade</Label>
+                <Label className="text-xs">Bairro</Label>
+                <Input value={lojaFormData.bairro} onChange={(e) => setLojaFormData({...lojaFormData, bairro: e.target.value})} className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs">Cidade</Label>
                 <Input value={lojaFormData.cidade} onChange={(e) => setLojaFormData({...lojaFormData, cidade: e.target.value})} className="mt-1" />
               </div>
               <div>
-                <Label>Estado</Label>
-                <Input value={lojaFormData.estado} onChange={(e) => setLojaFormData({...lojaFormData, estado: e.target.value})} className="mt-1" />
+                <Label className="text-xs">UF</Label>
+                <Select value={lojaFormData.estado} onValueChange={(v) => setLojaFormData({...lojaFormData, estado: v})}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="UF" /></SelectTrigger>
+                  <SelectContent>
+                    {estadosUf.map(uf => (
+                      <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">WhatsApp</Label>
+                <Input value={lojaFormData.whatsapp} onChange={(e) => setLojaFormData({...lojaFormData, whatsapp: e.target.value})} placeholder="(XX) XXXXX-XXXX" className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs">Email</Label>
+                <Input type="email" value={lojaFormData.email} onChange={(e) => setLojaFormData({...lojaFormData, email: e.target.value})} className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs">Telefone</Label>
+                <Input value={lojaFormData.telefone} onChange={(e) => setLojaFormData({...lojaFormData, telefone: e.target.value})} className="mt-1" />
               </div>
             </div>
             <div className="flex justify-end gap-3 pt-4 border-t">
