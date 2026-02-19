@@ -13,6 +13,7 @@ import AdminLojaManager from '../components/admin/AdminLojaManager';
 import WhatsappModal from '../components/crm/WhatsappModal';
 import { toast } from 'sonner';
 import { Loja } from '@/api/entities';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 export default function GestaoClientes() {
   const [users, setUsers] = useState([]);
@@ -96,10 +97,31 @@ export default function GestaoClientes() {
   const handleDelete = async (userId, userName) => {
     if (window.confirm(`Tem certeza que deseja excluir o usuário "${userName}"? Esta ação não pode ser desfeita.`)) {
       try {
+        // 1. Deletar do Supabase Auth via Edge Function
+        if (isSupabaseConfigured()) {
+          const { data, error: authError } = await supabase.functions.invoke('deleteAuthUser', {
+            body: { userId }
+          });
+
+          if (authError) {
+            console.error('Erro ao deletar do Auth:', authError);
+            toast.error('Falha ao excluir usuário do sistema de autenticação.');
+            return;
+          }
+
+          if (data?.error) {
+            console.error('Erro retornado pela função:', data.error);
+            toast.error(`Falha ao excluir: ${data.error}`);
+            return;
+          }
+        }
+
+        // 2. Deletar da tabela users
         await User.delete(userId);
         toast.success('Usuário excluído com sucesso.');
         loadUsers();
-      } catch (_error) {
+      } catch (error) {
+        console.error('Erro ao excluir usuário:', error);
         toast.error('Falha ao excluir o usuário. Tente novamente.');
       }
     }

@@ -358,7 +358,7 @@ export default function HistoricoCompras() {
       const tipoLabel = isFornecedor ? 'Vendas' : 'Compras';
 
       const exportData = filteredPedidos.map(pedido => ({
-        id: pedido.id.substring(0, 8),
+        id: pedido.id.slice(-8).toUpperCase(),
         data: formatDateTime(pedido.created_date),
         entidade: getEntityNome(pedido),
         status: pedido.status,

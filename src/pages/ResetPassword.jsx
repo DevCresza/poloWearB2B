@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { Loader2, KeyRound, CheckCircle, AlertTriangle } from 'lucide-react';
 
 export default function ResetPassword() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,28 +20,73 @@ export default function ResetPassword() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    // Supabase detecta automaticamente os tokens de recovery no hash da URL
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setSessionReady(true);
-        setChecking(false);
-      }
-    });
+    let cancelled = false;
 
-    // Fallback: verificar se já existe sessão (caso o evento já tenha disparado)
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        setSessionReady(true);
+    const initRecovery = async () => {
+      try {
+        // 1. Tentar trocar código PKCE por sessão (fluxo padrão v2.77+)
+        const code = searchParams.get('code');
+        if (code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (!exchangeError && !cancelled) {
+            setSessionReady(true);
+            setChecking(false);
+            return;
+          }
+          if (exchangeError) {
+            console.warn('[ResetPassword] Erro ao trocar código PKCE:', exchangeError.message);
+          }
+        }
+
+        // 2. Verificar hash na URL (fluxo implicit - fallback)
+        const hash = window.location.hash;
+        if (hash && hash.includes('type=recovery')) {
+          // detectSessionInUrl já processou o hash - aguardar sessão
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session && !cancelled) {
+            setSessionReady(true);
+            setChecking(false);
+            return;
+          }
+        }
+
+        // 3. Escutar evento PASSWORD_RECOVERY (pode disparar durante processamento)
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+          if (event === 'PASSWORD_RECOVERY' && !cancelled) {
+            setSessionReady(true);
+            setChecking(false);
+          }
+        });
+
+        // 4. Fallback final: checar sessão existente (pode já ter sido processada)
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        if (!cancelled) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            setSessionReady(true);
+          }
+          setChecking(false);
+        }
+
+        // Cleanup
+        return () => {
+          subscription.unsubscribe();
+        };
+      } catch (err) {
+        console.error('[ResetPassword] Erro na inicialização:', err);
+        if (!cancelled) {
+          setChecking(false);
+        }
       }
-      setChecking(false);
     };
 
-    // Aguardar um pouco para o Supabase processar o hash
-    setTimeout(checkSession, 1500);
+    initRecovery();
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

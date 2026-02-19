@@ -382,8 +382,8 @@ export default function Carrinho() {
       dataVencimento.setDate(dataVencimento.getDate() + 30);
 
       const descricaoCarteira = fornecedorId === 'capsula'
-        ? `Pedido #${pedido.id.substring(0, 8)} - Cápsula`
-        : `Pedido #${pedido.id.substring(0, 8)} - ${fornecedor?.nome_fantasia || fornecedor?.nome_marca}`;
+        ? `Pedido #${pedido.id.slice(-8).toUpperCase()} - Cápsula`
+        : `Pedido #${pedido.id.slice(-8).toUpperCase()} - ${fornecedor?.nome_fantasia || fornecedor?.nome_marca}`;
 
       await Carteira.create({
         pedido_id: pedido.id,
@@ -588,7 +588,7 @@ export default function Carrinho() {
       salvarCarrinho(novoCarrinho);
 
       const fornecedorNome = fornecedor?.nome_marca || 'Fornecedor';
-      const numeroPedido = result.pedidoId ? `#${result.pedidoId.substring(0, 8).toUpperCase()}` : '';
+      const numeroPedido = result.pedidoId ? `#${result.pedidoId.slice(-8).toUpperCase()}` : '';
       if (grupo.temCapsula) {
         toast.success(`Pedido ${numeroPedido} para ${fornecedorNome} (incluindo cápsula) criado com sucesso!`);
       } else {
@@ -1239,7 +1239,7 @@ export default function Carrinho() {
                       <div key={idx} className="flex justify-between items-center bg-white p-3 rounded border border-red-100">
                         <div>
                           <p className="text-sm font-medium text-gray-900">
-                            {titulo.descricao || `Título ${titulo.pedido_id ? '#' + titulo.pedido_id.substring(0, 8) : ''}`}
+                            {titulo.descricao || `Título ${titulo.pedido_id ? '#' + titulo.pedido_id.slice(-8).toUpperCase() : ''}`}
                           </p>
                           <p className="text-xs text-gray-500">
                             Vencimento: {new Date(titulo.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}
