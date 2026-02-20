@@ -17,7 +17,7 @@ import UserCreationWizard from '../components/admin/UserCreationWizard';
 import PendingUserDetails from '../components/admin/PendingUserDetails';
 import { toast } from 'sonner';
 import ClientForm from '../components/admin/ClientForm';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -135,28 +135,21 @@ export default function UserManagement() {
     }
     if (window.confirm(`Tem certeza que deseja excluir o usuário "${userName}"? Esta ação não pode ser desfeita.`)) {
       try {
-        // 1. Deletar do Supabase Auth via Edge Function (OBRIGATÓRIO)
-        if (isSupabaseConfigured()) {
-          const { data, error: authError } = await supabase.functions.invoke('deleteAuthUser', {
-            body: { userId }
-          });
+        const { data, error } = await supabase.rpc('delete_user_complete', {
+          target_user_id: userId
+        });
 
-          if (authError) {
-            console.error('Erro ao deletar do Auth:', authError);
-            toast.error('Falha ao excluir usuário do sistema de autenticação.');
-            return; // NÃO continuar se falhar no Auth
-          }
-
-          // Verificar se a função retornou erro no body
-          if (data?.error) {
-            console.error('Erro retornado pela função:', data.error);
-            toast.error(`Falha ao excluir: ${data.error}`);
-            return;
-          }
+        if (error) {
+          console.error('Erro ao excluir usuário:', error);
+          toast.error('Falha ao excluir o usuário. Tente novamente.');
+          return;
         }
 
-        // 2. Deletar da tabela users (só executa se Auth foi deletado com sucesso)
-        await User.delete(userId);
+        if (data && !data.success) {
+          toast.error(data.error || 'Falha ao excluir o usuário.');
+          return;
+        }
+
         toast.success('Usuário excluído com sucesso.');
         loadData();
       } catch (error) {
