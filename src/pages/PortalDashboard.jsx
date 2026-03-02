@@ -68,14 +68,15 @@ export default function PortalDashboard() {
         // Calcular estatísticas
         const FATURADO_STATUSES = ['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'];
         const allPedidos = await Pedido.filter(pedidoFilter);
-        const totalPedidos = allPedidos.length;
-        const pedidosPendentes = allPedidos.filter(p =>
+        const pedidosAtivos = allPedidos.filter(p => p.status !== 'cancelado');
+        const totalPedidos = pedidosAtivos.length;
+        const pedidosPendentes = pedidosAtivos.filter(p =>
           ['novo_pedido', 'em_analise', 'aprovado', 'em_producao'].includes(p.status)
         ).length;
-        const pedidosFinalizados = allPedidos.filter(p => p.status === 'finalizado').length;
-        const valorTotalComprado = allPedidos.reduce((sum, p) => sum + (p.valor_total || 0), 0);
+        const pedidosFinalizados = pedidosAtivos.filter(p => p.status === 'finalizado').length;
+        const valorTotalComprado = pedidosAtivos.reduce((sum, p) => sum + (p.valor_total || 0), 0);
 
-        const pedidosFaturados = allPedidos.filter(p => FATURADO_STATUSES.includes(p.status));
+        const pedidosFaturados = pedidosAtivos.filter(p => FATURADO_STATUSES.includes(p.status));
         const qtdFaturada = pedidosFaturados.length;
         const valorFaturado = pedidosFaturados.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
 
@@ -136,14 +137,15 @@ export default function PortalDashboard() {
           carteiraList = await Carteira.filter({ fornecedor_id: fornecedorId });
 
           const allPedidos = await Pedido.filter({ fornecedor_id: fornecedorId });
-          const totalPedidos = allPedidos.length;
-          const pedidosPendentes = allPedidos.filter(p =>
+          const pedidosAtivos = allPedidos.filter(p => p.status !== 'cancelado');
+          const totalPedidos = pedidosAtivos.length;
+          const pedidosPendentes = pedidosAtivos.filter(p =>
             ['novo_pedido', 'em_analise'].includes(p.status)
           ).length;
-          const pedidosFinalizados = allPedidos.filter(p => p.status === 'finalizado').length;
-          const valorTotalComprado = allPedidos.reduce((sum, p) => sum + (p.valor_total || 0), 0);
+          const pedidosFinalizados = pedidosAtivos.filter(p => p.status === 'finalizado').length;
+          const valorTotalComprado = pedidosAtivos.reduce((sum, p) => sum + (p.valor_total || 0), 0);
 
-          const pedidosFaturados = allPedidos.filter(p => FATURADO_STATUSES.includes(p.status));
+          const pedidosFaturados = pedidosAtivos.filter(p => FATURADO_STATUSES.includes(p.status));
           const qtdFaturada = pedidosFaturados.length;
           const valorFaturado = pedidosFaturados.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
 
@@ -204,14 +206,15 @@ export default function PortalDashboard() {
         carteiraList = await Carteira.list();
 
         const allPedidos = await Pedido.list();
-        const totalPedidos = allPedidos.length;
-        const pedidosPendentes = allPedidos.filter(p =>
+        const pedidosAtivos = allPedidos.filter(p => p.status !== 'cancelado');
+        const totalPedidos = pedidosAtivos.length;
+        const pedidosPendentes = pedidosAtivos.filter(p =>
           ['novo_pedido', 'em_analise'].includes(p.status)
         ).length;
-        const pedidosFinalizados = allPedidos.filter(p => p.status === 'finalizado').length;
-        const valorTotalComprado = allPedidos.reduce((sum, p) => sum + (p.valor_total || 0), 0);
+        const pedidosFinalizados = pedidosAtivos.filter(p => p.status === 'finalizado').length;
+        const valorTotalComprado = pedidosAtivos.reduce((sum, p) => sum + (p.valor_total || 0), 0);
 
-        const pedidosFaturados = allPedidos.filter(p => FATURADO_STATUSES.includes(p.status));
+        const pedidosFaturados = pedidosAtivos.filter(p => FATURADO_STATUSES.includes(p.status));
         const qtdFaturada = pedidosFaturados.length;
         const valorFaturado = pedidosFaturados.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
 

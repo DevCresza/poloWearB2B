@@ -329,7 +329,9 @@ export default function PedidosAdmin() {
   };
 
   const totaisPorStatus = calcularTotaisPorStatus();
-  const valorTotalGeral = Object.values(totaisPorStatus).reduce((sum, t) => sum + t.valor, 0);
+  const valorTotalGeral = Object.entries(totaisPorStatus)
+    .filter(([status]) => status !== 'cancelado')
+    .reduce((sum, [, t]) => sum + t.valor, 0);
 
   const statusColumns = [
     { key: 'novo_pedido', title: 'Novos Pedidos', color: 'border-blue-500' },

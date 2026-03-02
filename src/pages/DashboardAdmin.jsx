@@ -189,8 +189,8 @@ export default function DashboardAdmin() {
       ? ((faturamentoMes - faturamentoMesAnterior) / faturamentoMesAnterior) * 100
       : 0;
 
-    // Pedidos
-    const pedidosTotal = pedidosList.length;
+    // Pedidos (excluir cancelados do total)
+    const pedidosTotal = pedidosList.filter(p => p.status !== 'cancelado').length;
     const pedidosEmAnalise = pedidosList.filter(p => ['novo_pedido', 'em_analise'].includes(p.status)).length;
     const pedidosEmProducao = pedidosList.filter(p => p.status === 'em_producao').length;
     const pedidosFaturados = pedidosList.filter(p => p.status === 'faturado').length;
@@ -355,7 +355,7 @@ export default function DashboardAdmin() {
       .sort((a, b) => b.valor - a.valor)
       .slice(0, 10);
 
-    // Evolução de Pedidos (últimos 30 dias)
+    // Evolução de Pedidos (últimos 30 dias, excluindo cancelados)
     const evolucaoPedidos = [];
     for (let i = 29; i >= 0; i--) {
       const dia = new Date();
@@ -364,6 +364,7 @@ export default function DashboardAdmin() {
       const fimDia = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate(), 23, 59, 59);
 
       const pedidosDia = pedidosList.filter(p => {
+        if (p.status === 'cancelado') return false;
         const data = new Date(p.created_date);
         return data >= inicioDia && data <= fimDia;
       });

@@ -142,10 +142,10 @@ export default function CarteiraFinanceira() {
         if (pedidoIds.length > 0) {
           const pedidosPromises = pedidoIds.map(id => Pedido.get(id).catch(() => null));
           const pedidosResults = await Promise.all(pedidosPromises);
-          const pedidosNaoAprovados = new Set(
-            pedidosResults.filter(p => p && p.status === 'novo_pedido').map(p => p.id)
+          const pedidosExcluidos = new Set(
+            pedidosResults.filter(p => p && (p.status === 'novo_pedido' || p.status === 'cancelado')).map(p => p.id)
           );
-          titulosList = titulosComParcela.filter(t => !t.pedido_id || !pedidosNaoAprovados.has(t.pedido_id));
+          titulosList = titulosComParcela.filter(t => !t.pedido_id || !pedidosExcluidos.has(t.pedido_id));
         } else {
           titulosList = titulosComParcela;
         }
