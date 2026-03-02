@@ -12,8 +12,9 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Shield, LogIn, Users as UsersIcon, Plus, Edit, ExternalLink, Copy, CheckCircle, Clock, UserCheck, Eye, Settings, Trash2, Ban, ShieldCheck } from 'lucide-react';
+import { Shield, LogIn, Users as UsersIcon, Plus, Edit, ExternalLink, Copy, CheckCircle, Clock, UserCheck, Eye, Settings, Trash2, Ban, ShieldCheck, Store } from 'lucide-react';
 import UserCreationWizard from '../components/admin/UserCreationWizard';
+import AdminLojaManager from '../components/admin/AdminLojaManager';
 import PendingUserDetails from '../components/admin/PendingUserDetails';
 import { toast } from 'sonner';
 import ClientForm from '../components/admin/ClientForm';
@@ -37,6 +38,9 @@ export default function UserManagement() {
   const [bloqueioTarget, setBloqueioTarget] = useState(null);
   const [motivoBloqueio, setMotivoBloqueio] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('todos');
+  const [showLojaManager, setShowLojaManager] = useState(false);
+  const [lojaUserId, setLojaUserId] = useState(null);
+  const [lojaUserName, setLojaUserName] = useState('');
 
   const getStatusBadge = (status) => {
     const statusMap = {
@@ -410,6 +414,21 @@ export default function UserManagement() {
                               <Edit className="w-4 h-4 sm:mr-1" />
                               <span className="hidden sm:inline">Editar</span>
                             </Button>
+                            {isCliente && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="px-2 h-8 whitespace-nowrap text-blue-600 border-blue-200 hover:bg-blue-50"
+                                onClick={() => {
+                                  setLojaUserId(user.id);
+                                  setLojaUserName(user.full_name);
+                                  setShowLojaManager(true);
+                                }}
+                              >
+                                <Store className="w-4 h-4 sm:mr-1" />
+                                <span className="hidden sm:inline">Lojas</span>
+                              </Button>
+                            )}
                             {isCliente && !user.bloqueado && (
                               <Button
                                 variant="outline"
@@ -551,6 +570,21 @@ export default function UserManagement() {
           fornecedorMap={fornecedorMap}
         />
       )}
+
+      {/* Modal de Lojas */}
+      <AdminLojaManager
+        open={showLojaManager}
+        onOpenChange={(open) => {
+          setShowLojaManager(open);
+          if (!open) {
+            setLojaUserId(null);
+            setLojaUserName('');
+          }
+        }}
+        userId={lojaUserId}
+        userName={lojaUserName}
+        onLojasChanged={loadData}
+      />
 
       {/* Modal de Bloqueio */}
       <Dialog open={showBloqueioModal} onOpenChange={(open) => {

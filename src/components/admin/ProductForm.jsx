@@ -778,12 +778,12 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
                   <DollarSign className="w-5 h-5" />
-                  Precificação e Margem
+                  Precificação
                 </h3>
 
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label htmlFor="custo_por_peca">Custo por Peça (R$)</Label>
+                    <Label htmlFor="custo_por_peca">Preço de Venda Sugerido (R$)</Label>
                     <Input
                       id="custo_por_peca"
                       type="number"
@@ -827,30 +827,38 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                   </div>
                 )}
 
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-semibold text-purple-900">Margem de Lucro:</span>
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-purple-900">Markup:</span>
                     <span className="text-2xl font-bold text-purple-600">
                       {formData.margem_lucro}%
                     </span>
                   </div>
                   {formData.custo_por_peca > 0 && formData.preco_por_peca > 0 && (
-                    <p className="text-sm text-purple-700">
-                      Lucro por peça: R$ {(formData.preco_por_peca - formData.custo_por_peca).toFixed(2)}
-                    </p>
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-purple-900">ROI:</span>
+                        <span className="text-2xl font-bold text-purple-600">
+                          {(((formData.preco_por_peca - formData.custo_por_peca) / formData.preco_por_peca) * 100).toFixed(2)}%
+                        </span>
+                      </div>
+                      <p className="text-sm text-purple-700">
+                        Diferença por peça: R$ {(formData.preco_por_peca - formData.custo_por_peca).toFixed(2)}
+                      </p>
+                    </>
                   )}
                 </div>
 
                 <Separator />
 
                 <div className="space-y-4">
-                  <h4 className="font-semibold">Calculadora de Margem</h4>
+                  <h4 className="font-semibold">Calculadora de Markup</h4>
                   <p className="text-sm text-gray-600">
-                    Insira a margem desejada para calcular o preço sugerido:
+                    Insira o markup desejado para calcular o preço de venda:
                   </p>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Margem Desejada (%)</Label>
+                      <Label>Markup Desejado (%)</Label>
                       <Input
                         type="number"
                         step="1"
