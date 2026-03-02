@@ -26,11 +26,14 @@ export default function GestaoProdutos() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterFornecedor, setFilterFornecedor] = useState('all');
   const [filterCategoria, setFilterCategoria] = useState('all');
+  const [filterGenero, setFilterGenero] = useState('all');
 
   const categorias = [
-    'Camisetas', 'Polos', 'Shorts', 'Calças',
-    'Vestidos', 'Blusas', 'Jaquetas', 'Acessórios', 'Calçados'
+    'Camisetas', 'Polos', 'Camisas', 'Shorts', 'Calças',
+    'Vestidos', 'Blusas', 'Jaquetas', 'Acessórios', 'Calçados', 'Chinelos', 'Perfumes'
   ];
+
+  const generos = ['Feminino', 'Masculino', 'Unissex'];
 
   useEffect(() => {
     loadData();
@@ -270,8 +273,9 @@ export default function GestaoProdutos() {
                          produto.referencia_fornecedor?.toLowerCase().includes(term);
     const matchesFornecedor = filterFornecedor === 'all' || produto.fornecedor_id === filterFornecedor;
     const matchesCategoria = filterCategoria === 'all' || produto.categoria === filterCategoria;
-    
-    return matchesSearch && matchesFornecedor && matchesCategoria;
+    const matchesGenero = filterGenero === 'all' || produto.genero === filterGenero;
+
+    return matchesSearch && matchesFornecedor && matchesCategoria && matchesGenero;
   });
 
   if (loading) {
@@ -356,6 +360,20 @@ export default function GestaoProdutos() {
                     ))}
                   </SelectContent>
                 </Select>
+
+                <Select value={filterGenero} onValueChange={setFilterGenero}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="Todos gêneros" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos gêneros</SelectItem>
+                    {generos.map(genero => (
+                      <SelectItem key={genero} value={genero}>
+                        {genero}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </CardContent>
           </Card>
@@ -375,6 +393,7 @@ export default function GestaoProdutos() {
                       <TableHead>Produto</TableHead>
                       <TableHead>Fornecedor</TableHead>
                       <TableHead>Categoria</TableHead>
+                      <TableHead>Gênero</TableHead>
                       <TableHead>Grade</TableHead>
                       <TableHead>Preço</TableHead>
                       <TableHead>Estoque</TableHead>
@@ -430,7 +449,13 @@ export default function GestaoProdutos() {
                               <Badge variant="outline">{produto.categoria}</Badge>
                             )}
                           </TableCell>
-                          
+
+                          <TableCell>
+                            {produto.genero && (
+                              <Badge variant="outline">{produto.genero}</Badge>
+                            )}
+                          </TableCell>
+
                           <TableCell>
                             {produto.tipo_venda === 'grade' && (
                               <div className="text-sm">

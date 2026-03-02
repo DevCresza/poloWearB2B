@@ -32,6 +32,7 @@ export default function Catalogo() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFornecedor, setSelectedFornecedor] = useState('all');
   const [selectedCategoria, setSelectedCategoria] = useState('all');
+  const [selectedGenero, setSelectedGenero] = useState('all');
   const [selectedDisponibilidade, setSelectedDisponibilidade] = useState('all');
   const [filtroEstoque, setFiltroEstoque] = useState('all');
   const [ordenacao, setOrdenacao] = useState('estoque_desc');
@@ -433,6 +434,7 @@ export default function Catalogo() {
 
     const matchesFornecedor = selectedFornecedor === 'all' || produto.fornecedor_id === selectedFornecedor;
     const matchesCategoria = selectedCategoria === 'all' || produto.categoria === selectedCategoria;
+    const matchesGenero = selectedGenero === 'all' || produto.genero === selectedGenero;
     const matchesDisponibilidade = selectedDisponibilidade === 'all' || produto.disponibilidade === selectedDisponibilidade;
 
     // Filtro de estoque só se aplica a produtos de pronta entrega
@@ -446,7 +448,7 @@ export default function Catalogo() {
       }
     }
 
-    return matchesSearch && matchesFornecedor && matchesCategoria && matchesDisponibilidade && matchesEstoque;
+    return matchesSearch && matchesFornecedor && matchesCategoria && matchesGenero && matchesDisponibilidade && matchesEstoque;
   });
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
@@ -632,7 +634,8 @@ export default function Catalogo() {
     setShowDetailsModal(true);
   };
 
-  const categorias = ['Camisetas', 'Polos', 'Shorts', 'Calças', 'Vestidos', 'Blusas', 'Jaquetas', 'Acessórios', 'Calçados'];
+  const categorias = ['Camisetas', 'Polos', 'Camisas', 'Shorts', 'Calças', 'Vestidos', 'Blusas', 'Jaquetas', 'Acessórios', 'Calçados', 'Chinelos', 'Perfumes'];
+  const generos = ['Feminino', 'Masculino', 'Unissex'];
 
   const ProductCard = ({ produto }) => {
     let variantes = [];
@@ -719,7 +722,13 @@ export default function Catalogo() {
                 <p className="text-[10px] sm:text-xs text-gray-500">por peça</p>
               </div>
             </div>
-            
+
+            {produto.custo_por_peca > 0 && (
+              <p className="text-[10px] sm:text-xs text-green-700 bg-green-50 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg">
+                Preço sugerido de venda: {formatCurrency(produto.custo_por_peca)}/peça
+              </p>
+            )}
+
             {produto.tipo_venda === 'grade' && (
               <p className="text-[10px] sm:text-xs text-gray-600 bg-gray-50 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg">
                 Grade: {produto.total_pecas_grade} peças • {formatCurrency(produto.preco_grade_completa)}
@@ -890,7 +899,7 @@ export default function Catalogo() {
 
           {/* Extended Filters */}
           {showFilters && (
-            <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-200 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
+            <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-200 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
               <Select value={selectedFornecedor} onValueChange={setSelectedFornecedor}>
                 <SelectTrigger className="h-8 sm:h-9 text-xs sm:text-sm">
                   <SelectValue placeholder="Fornecedor" />
@@ -899,6 +908,18 @@ export default function Catalogo() {
                   <SelectItem value="all">Todos Fornecedores</SelectItem>
                   {fornecedores.map(f => (
                     <SelectItem key={f.id} value={f.id}>{f.razao_social || f.nome_fantasia || f.nome_marca}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={selectedGenero} onValueChange={setSelectedGenero}>
+                <SelectTrigger className="h-8 sm:h-9 text-xs sm:text-sm">
+                  <SelectValue placeholder="Gênero" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos Gêneros</SelectItem>
+                  {generos.map(g => (
+                    <SelectItem key={g} value={g}>{g}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1208,6 +1229,22 @@ export default function Catalogo() {
                     </div>
                   )}
                 </div>
+
+                {selectedProduto.custo_por_peca > 0 && (
+                  <div className="bg-green-50 p-4 rounded-xl space-y-2 border border-green-200">
+                    <div className="text-sm text-green-700 mb-1">Preço Sugerido de Venda</div>
+                    <div className="text-2xl font-bold text-green-600">
+                      {formatCurrency(selectedProduto.custo_por_peca)}
+                      <span className="text-sm font-normal text-green-600 ml-1">por peça</span>
+                    </div>
+                    {selectedProduto.preco_por_peca > 0 && (
+                      <div className="pt-2 mt-2 border-t border-green-200 flex justify-between items-center text-sm">
+                        <span className="text-green-700">Markup: {(selectedProduto.custo_por_peca / selectedProduto.preco_por_peca).toFixed(2)}×</span>
+                        <span className="text-green-700">ROI: {(((selectedProduto.custo_por_peca - selectedProduto.preco_por_peca) / selectedProduto.preco_por_peca) * 100).toFixed(0)}%</span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Variantes de Cor */}
                 {selectedProduto.tem_variantes_cor && (() => {

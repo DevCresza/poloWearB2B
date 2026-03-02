@@ -36,6 +36,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
     referencia_polo: '',
     tipo_venda: 'grade',
     categoria: '',
+    genero: '',
     temporada: 'Atemporal',
     disponibilidade: 'pronta_entrega',
     data_inicio_venda: '',
@@ -70,9 +71,11 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
   const [tamanhoSelecionado, setTamanhoSelecionado] = useState([]);
 
   const categorias = [
-    'Camisetas', 'Polos', 'Shorts', 'Calças',
-    'Vestidos', 'Blusas', 'Jaquetas', 'Acessórios', 'Calçados'
+    'Camisetas', 'Polos', 'Camisas', 'Shorts', 'Calças',
+    'Vestidos', 'Blusas', 'Jaquetas', 'Acessórios', 'Calçados', 'Chinelos', 'Perfumes'
   ];
+
+  const generos = ['Feminino', 'Masculino', 'Unissex'];
 
   const tamanhos = ['PP', 'P', 'M', 'G', 'GG', 'G1', 'G2', 'G3', 'G4', 'G5'];
 
@@ -308,26 +311,26 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
     }));
   };
 
-  const calcularMargemLucro = (custo, preco) => {
-    const custoNum = parseFloat(custo) || 0;
-    const precoNum = parseFloat(preco) || 0;
-    
-    if (custoNum > 0) {
-      const margem = ((precoNum - custoNum) / custoNum) * 100;
-      setFormData(prev => ({ ...prev, margem_lucro: parseFloat(margem.toFixed(2)) }));
+  const calcularMargemLucro = (sugerido, venda) => {
+    const sugeridoNum = parseFloat(sugerido) || 0;
+    const vendaNum = parseFloat(venda) || 0;
+
+    if (vendaNum > 0 && sugeridoNum > 0) {
+      const roi = ((sugeridoNum - vendaNum) / vendaNum) * 100;
+      setFormData(prev => ({ ...prev, margem_lucro: parseFloat(roi.toFixed(2)) }));
     }
   };
 
-  const sugerirPrecoComMargem = (custo, margemDesejada) => {
-    const custoNum = parseFloat(custo) || 0;
-    const margemNum = parseFloat(margemDesejada) || 0;
-    
-    if (custoNum > 0 && margemNum > 0) {
-      const precoSugerido = custoNum * (1 + margemNum / 100);
+  const sugerirPrecoComMarkup = (venda, markupDesejado) => {
+    const vendaNum = parseFloat(venda) || 0;
+    const markupNum = parseFloat(markupDesejado) || 0;
+
+    if (vendaNum > 0 && markupNum > 0) {
+      const precoSugerido = vendaNum * markupNum;
       setFormData(prev => ({
         ...prev,
-        preco_por_peca: parseFloat(precoSugerido.toFixed(2)),
-        preco_grade_completa: parseFloat((precoSugerido * prev.total_pecas_grade).toFixed(2))
+        custo_por_peca: parseFloat(precoSugerido.toFixed(2)),
+        margem_lucro: parseFloat((((precoSugerido - vendaNum) / vendaNum) * 100).toFixed(2))
       }));
     }
   };
@@ -557,6 +560,20 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                     <SelectContent>
                       {categorias.map(cat => (
                         <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="genero">Gênero</Label>
+                  <Select value={formData.genero || ''} onValueChange={(value) => setFormData({...formData, genero: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o gênero" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {generos.map(g => (
+                        <SelectItem key={g} value={g}>{g}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -827,43 +844,41 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                   </div>
                 )}
 
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-purple-900">Markup:</span>
-                    <span className="text-2xl font-bold text-purple-600">
-                      {formData.margem_lucro}%
-                    </span>
+                {formData.custo_por_peca > 0 && formData.preco_por_peca > 0 && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-purple-900">Markup (multiplicador):</span>
+                      <span className="text-2xl font-bold text-purple-600">
+                        {(formData.custo_por_peca / formData.preco_por_peca).toFixed(2)}×
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-purple-900">ROI do lojista:</span>
+                      <span className="text-2xl font-bold text-purple-600">
+                        {formData.margem_lucro}%
+                      </span>
+                    </div>
+                    <p className="text-sm text-purple-700">
+                      Ganho por peça: R$ {(formData.custo_por_peca - formData.preco_por_peca).toFixed(2)}
+                    </p>
                   </div>
-                  {formData.custo_por_peca > 0 && formData.preco_por_peca > 0 && (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-purple-900">ROI:</span>
-                        <span className="text-2xl font-bold text-purple-600">
-                          {(((formData.preco_por_peca - formData.custo_por_peca) / formData.preco_por_peca) * 100).toFixed(2)}%
-                        </span>
-                      </div>
-                      <p className="text-sm text-purple-700">
-                        Diferença por peça: R$ {(formData.preco_por_peca - formData.custo_por_peca).toFixed(2)}
-                      </p>
-                    </>
-                  )}
-                </div>
+                )}
 
                 <Separator />
 
                 <div className="space-y-4">
                   <h4 className="font-semibold">Calculadora de Markup</h4>
                   <p className="text-sm text-gray-600">
-                    Insira o markup desejado para calcular o preço de venda:
+                    Insira o multiplicador desejado para calcular o preço sugerido ao lojista:
                   </p>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Markup Desejado (%)</Label>
+                      <Label>Markup Desejado (×)</Label>
                       <Input
                         type="number"
-                        step="1"
-                        placeholder="Ex: 60"
-                        onBlur={(e) => sugerirPrecoComMargem(formData.custo_por_peca, e.target.value)}
+                        step="0.1"
+                        placeholder="Ex: 2.5"
+                        onBlur={(e) => sugerirPrecoComMarkup(formData.preco_por_peca, e.target.value)}
                       />
                     </div>
                   </div>
