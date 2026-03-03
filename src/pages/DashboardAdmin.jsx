@@ -167,9 +167,10 @@ export default function DashboardAdmin() {
     const mesAnterior = new Date(anoSelecionado, mesSelecionado - 2, 1);
     const fimMesAnterior = new Date(anoSelecionado, mesSelecionado - 1, 0);
 
-    // Faturamento - considerar pedidos finalizados OU faturados OU em transporte para ter mais dados
+    // Faturamento - considerar pedidos faturados, em transporte, pendente de pagamento e finalizados
+    const FATURAMENTO_STATUSES = ['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'];
     const pedidosParaFaturamento = pedidosList.filter(p =>
-      ['finalizado', 'faturado', 'em_transporte'].includes(p.status)
+      FATURAMENTO_STATUSES.includes(p.status)
     );
     const faturamentoTotal = pedidosParaFaturamento.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
 
@@ -202,9 +203,8 @@ export default function DashboardAdmin() {
     trintaDiasAtras.setDate(hoje.getDate() - 30);
     const clientesNovos = clientesList.filter(c => new Date(c.created_date) >= trintaDiasAtras).length;
 
-    // Faturado (KPI padronizado)
-    const FATURADO_STATUSES = ['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'];
-    const pedidosFaturadosAll = pedidosList.filter(p => FATURADO_STATUSES.includes(p.status));
+    // Faturado (KPI padronizado) - usa mesma lista de status
+    const pedidosFaturadosAll = pedidosList.filter(p => FATURAMENTO_STATUSES.includes(p.status));
     const qtdFaturada = pedidosFaturadosAll.length;
     const valorFaturado = pedidosFaturadosAll.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
 
