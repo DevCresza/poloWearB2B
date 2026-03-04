@@ -770,17 +770,13 @@ export default function MeuPerfil() {
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">Minhas Lojas</h3>
                     <p className="text-sm text-gray-500">
-                      {user.role === 'admin'
-                        ? 'Gerencie as lojas vinculadas à sua conta'
-                        : 'Visualize as lojas vinculadas à sua conta'}
+                      Gerencie as lojas vinculadas à sua conta
                     </p>
                   </div>
-                  {user.role === 'admin' && (
-                    <Button onClick={() => abrirModalLoja()} className="bg-blue-600 hover:bg-blue-700">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Adicionar Loja
-                    </Button>
-                  )}
+                  <Button onClick={() => abrirModalLoja()} className="bg-blue-600 hover:bg-blue-700">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Adicionar Loja
+                  </Button>
                 </div>
 
                 {lojas.length === 0 ? (
@@ -788,16 +784,12 @@ export default function MeuPerfil() {
                     <Store className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                     <p className="text-gray-600 mb-2">Nenhuma loja cadastrada</p>
                     <p className="text-sm text-gray-500 mb-4">
-                      {user.role === 'admin'
-                        ? 'Cadastre suas lojas para gerenciar pedidos e financeiro por unidade'
-                        : 'Entre em contato com o administrador para cadastrar lojas'}
+                      Cadastre suas lojas para gerenciar pedidos e financeiro por unidade
                     </p>
-                    {user.role === 'admin' && (
-                      <Button onClick={() => abrirModalLoja()} variant="outline">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Cadastrar primeira loja
-                      </Button>
-                    )}
+                    <Button onClick={() => abrirModalLoja()} variant="outline">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Cadastrar primeira loja
+                    </Button>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -814,22 +806,20 @@ export default function MeuPerfil() {
                                 <p className="text-xs text-gray-500">{loja.nome}</p>
                               )}
                             </div>
-                            {user.role === 'admin' && (
-                              <div className="flex gap-1">
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => abrirModalLoja(loja)}>
-                                  <Pencil className="w-3.5 h-3.5" />
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => abrirModalLoja(loja)}>
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                              {loja.ativa ? (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700" onClick={() => handleDesativarLoja(loja)}>
+                                  <Power className="w-3.5 h-3.5" />
                                 </Button>
-                                {loja.ativa ? (
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700" onClick={() => handleDesativarLoja(loja)}>
-                                    <Power className="w-3.5 h-3.5" />
-                                  </Button>
-                                ) : (
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500 hover:text-green-700" onClick={() => handleReativarLoja(loja)}>
-                                    <Power className="w-3.5 h-3.5" />
-                                  </Button>
-                                )}
-                              </div>
-                            )}
+                              ) : (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500 hover:text-green-700" onClick={() => handleReativarLoja(loja)}>
+                                  <Power className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                            </div>
                           </div>
                           <div className="space-y-1 text-sm text-gray-600">
                             {loja.categoria_cliente && <p><span className="text-gray-400">Tipo:</span> <span className="capitalize">{loja.categoria_cliente}</span></p>}
