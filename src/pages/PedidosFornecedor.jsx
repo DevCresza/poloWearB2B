@@ -1205,9 +1205,16 @@ export default function PedidosFornecedor() {
                         Fornecedor: {fornecedor?.nome_marca || 'Não identificado'}
                       </p>
                     </div>
-                    <Badge className={statusColors[pedido.status] || 'bg-gray-100 text-gray-800'}>
-                      {statusLabels[pedido.status] || pedido.status}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      {pedido.impresso && (
+                        <Badge className="bg-green-100 text-green-800 text-xs">
+                          Impresso
+                        </Badge>
+                      )}
+                      <Badge className={statusColors[pedido.status] || 'bg-gray-100 text-gray-800'}>
+                        {statusLabels[pedido.status] || pedido.status}
+                      </Badge>
+                    </div>
                   </div>
                 </CardHeader>
 

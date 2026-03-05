@@ -12,7 +12,8 @@ import { toast } from 'sonner';
 import {
   Package, MapPin, DollarSign, Calendar, FileText,
   Download, CheckCircle, Clock, Truck, User, Building,
-  Phone, Mail, CreditCard, Upload, AlertTriangle, Pencil, ChevronDown, ChevronUp
+  Phone, Mail, CreditCard, Upload, AlertTriangle, Pencil, ChevronDown, ChevronUp,
+  Printer
 } from 'lucide-react';
 import { Pedido } from '@/api/entities';
 import { Carteira } from '@/api/entities';
@@ -21,6 +22,8 @@ import { Loja } from '@/api/entities';
 import { UploadFile, SendEmail } from '@/api/integrations';
 import { formatDateTime, formatCurrency } from '@/utils/exportUtils';
 import { Store } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentUser, userMap, fornecedorMap }) {
   const [lojaInfo, setLojaInfo] = useState(null);
@@ -66,6 +69,8 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   const [valorFreteFOB, setValorFreteFOB] = useState(pedido.valor_frete_fob || '');
   const [salvandoFrete, setSalvandoFrete] = useState(false);
   const [marcandoEntregue, setMarcandoEntregue] = useState(false);
+
+  const [gerandoPdf, setGerandoPdf] = useState(false);
 
   // Verificar se é cliente (somente visualização)
   const isCliente = currentUser?.tipo_negocio === 'multimarca' || currentUser?.tipo_negocio === 'franqueado';
@@ -766,11 +771,249 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     }
   };
 
-  let itens = [];
+  let itensRaw = [];
   try {
-    itens = typeof pedido.itens === 'string' ? JSON.parse(pedido.itens) : pedido.itens;
+    itensRaw = typeof pedido.itens === 'string' ? JSON.parse(pedido.itens) : pedido.itens;
   } catch (_e) {
   }
+
+  // Expandir itens de cápsula em produtos individuais (backward compat com pedidos antigos)
+  const itens = (itensRaw || []).flatMap(item => {
+    if (item.tipo === 'capsula' && item.detalhes_produtos && item.detalhes_produtos.length > 0) {
+      const capsulaQtd = item.quantidade || 1;
+      return item.detalhes_produtos.flatMap(detalhe => {
+        const config = detalhe.configuracao;
+        let fotoUrl = null;
+        if (detalhe.foto) {
+          fotoUrl = typeof detalhe.foto === 'string' ? detalhe.foto : detalhe.foto?.url;
+        }
+
+        // Se tem variantes por cor, criar um item por cor
+        if (config && typeof config === 'object' && config.variantes && Array.isArray(config.variantes)) {
+          return config.variantes.map(variante => {
+            const qtd = (variante.quantidade || 1) * capsulaQtd;
+            return {
+              nome: detalhe.nome || 'Produto',
+              marca: '',
+              referencia: '',
+              tipo_venda: 'grade',
+              quantidade: qtd,
+              preco: item.preco ? (item.preco / (item.detalhes_produtos.length || 1)) / capsulaQtd : 0,
+              total: 0, // será recalculado abaixo se necessário
+              foto: fotoUrl,
+              cor_selecionada: {
+                cor_nome: variante.cor_nome,
+                cor_codigo_hex: variante.cor_codigo_hex || variante.cor_hex || '#000000'
+              }
+            };
+          });
+        }
+
+        // Quantidade simples
+        const qtdSimples = (typeof config === 'number' ? config : 1) * capsulaQtd;
+        return [{
+          nome: detalhe.nome || 'Produto',
+          marca: '',
+          referencia: '',
+          tipo_venda: 'avulso',
+          quantidade: qtdSimples,
+          preco: 0,
+          total: 0,
+          foto: fotoUrl,
+          cor_selecionada: null
+        }];
+      });
+    }
+    return [item];
+  });
+
+  // Gerar PDF do pedido
+  const gerarPdfPedido = async () => {
+    setGerandoPdf(true);
+    try {
+      const doc = new jsPDF();
+      const numPedido = pedido.id.slice(-8).toUpperCase();
+
+      // Header
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text('PEDIDO DE VENDA', 105, 18, { align: 'center' });
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Pedido Nº: #${numPedido}`, 195, 12, { align: 'right' });
+      doc.text(`Emissão: ${new Date(pedido.created_date).toLocaleDateString('pt-BR')}`, 195, 17, { align: 'right' });
+
+      doc.setDrawColor(0);
+      doc.line(14, 22, 196, 22);
+
+      // Dados do Cliente / Loja
+      let yPos = 28;
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text('DADOS DO CLIENTE', 14, yPos);
+      yPos += 6;
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+
+      const clienteNome = userMap?.get(pedido.comprador_user_id) || '';
+      if (clienteNome) {
+        doc.text(`Cliente: ${clienteNome}`, 14, yPos);
+        yPos += 5;
+      }
+
+      if (lojaInfo) {
+        if (lojaInfo.nome || lojaInfo.nome_fantasia) {
+          doc.text(`Razão Social: ${lojaInfo.nome || ''}`, 14, yPos);
+          if (lojaInfo.nome_fantasia) doc.text(`Nome Fantasia: ${lojaInfo.nome_fantasia}`, 110, yPos);
+          yPos += 5;
+        }
+        if (lojaInfo.cnpj) {
+          doc.text(`CNPJ: ${lojaInfo.cnpj}`, 14, yPos);
+          if (lojaInfo.inscricao_estadual) doc.text(`Insc. Est.: ${lojaInfo.inscricao_estadual}`, 110, yPos);
+          yPos += 5;
+        }
+        if (lojaInfo.endereco_completo) {
+          doc.text(`Endereço: ${lojaInfo.endereco_completo}`, 14, yPos);
+          yPos += 5;
+        }
+        if (lojaInfo.bairro) {
+          doc.text(`Bairro: ${lojaInfo.bairro}`, 14, yPos);
+        }
+        if (lojaInfo.cidade || lojaInfo.estado) {
+          doc.text(`Cidade: ${lojaInfo.cidade || ''}${lojaInfo.estado ? ' - ' + lojaInfo.estado : ''}`, 110, yPos);
+        }
+        if (lojaInfo.bairro || lojaInfo.cidade) yPos += 5;
+        if (lojaInfo.cep) {
+          doc.text(`CEP: ${lojaInfo.cep}`, 14, yPos);
+        }
+        if (lojaInfo.telefone) {
+          doc.text(`Telefone: ${lojaInfo.telefone}`, 110, yPos);
+        }
+        if (lojaInfo.cep || lojaInfo.telefone) yPos += 5;
+        if (lojaInfo.codigo_cliente) {
+          doc.text(`Pedido Cliente: ${lojaInfo.codigo_cliente}`, 14, yPos);
+          yPos += 5;
+        }
+        if (lojaInfo.transportadora_padrao) {
+          doc.text(`Transportadora: ${lojaInfo.transportadora_padrao}`, 14, yPos);
+          yPos += 5;
+        }
+      } else {
+        // Fallback: usar endereco_entrega do pedido
+        let endereco = pedido.endereco_entrega;
+        if (typeof endereco === 'string') {
+          try { endereco = JSON.parse(endereco); } catch (_e) { endereco = null; }
+        }
+        if (endereco) {
+          if (endereco.destinatario) { doc.text(`Destinatário: ${endereco.destinatario}`, 14, yPos); yPos += 5; }
+          if (endereco.endereco) { doc.text(`Endereço: ${endereco.endereco}`, 14, yPos); yPos += 5; }
+          if (endereco.cidade || endereco.estado) {
+            doc.text(`Cidade: ${endereco.cidade || ''}${endereco.estado ? ' - ' + endereco.estado : ''} ${endereco.cep ? '- CEP: ' + endereco.cep : ''}`, 14, yPos);
+            yPos += 5;
+          }
+          if (endereco.telefone) { doc.text(`Telefone: ${endereco.telefone}`, 14, yPos); yPos += 5; }
+        }
+      }
+
+      // Fornecedor
+      const fornecedorNome = fornecedorMap?.get(pedido.fornecedor_id) || '';
+      if (fornecedorNome) {
+        doc.text(`Fornecedor: ${fornecedorNome}`, 14, yPos);
+        yPos += 5;
+      }
+
+      // Método de pagamento e observações
+      if (pedido.metodo_pagamento) {
+        const metodos = { boleto: 'Boleto', a_vista: 'À Vista', cartao: 'Cartão', pix: 'PIX' };
+        doc.text(`Forma Pagto: ${metodos[pedido.metodo_pagamento] || pedido.metodo_pagamento}`, 14, yPos);
+        yPos += 5;
+      }
+
+      doc.line(14, yPos, 196, yPos);
+      yPos += 4;
+
+      // Tabela de produtos
+      const tableColumns = [
+        { header: 'Ref. Forn.', dataKey: 'ref_forn' },
+        { header: 'Produto', dataKey: 'nome' },
+        { header: 'Ref. Linx', dataKey: 'ref_linx' },
+        { header: 'Cor', dataKey: 'cor' },
+        { header: 'Qtde', dataKey: 'quantidade' },
+        { header: 'V. Unitário', dataKey: 'preco_unit' },
+        { header: 'Valor Total', dataKey: 'total' }
+      ];
+
+      const tableRows = itens.map(item => ({
+        ref_forn: item.referencia || '-',
+        nome: item.nome || '',
+        ref_linx: item.referencia_linx || item.codigo_linx || '-',
+        cor: item.cor_selecionada?.cor_nome || '-',
+        quantidade: item.quantidade || 0,
+        preco_unit: `R$ ${(item.preco || 0).toFixed(2)}`,
+        total: `R$ ${(item.total || 0).toFixed(2)}`
+      }));
+
+      const totalQtd = itens.reduce((sum, item) => sum + (item.quantidade || 0), 0);
+
+      autoTable(doc, {
+        columns: tableColumns,
+        body: tableRows,
+        startY: yPos,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        columnStyles: {
+          ref_forn: { cellWidth: 25 },
+          nome: { cellWidth: 50 },
+          ref_linx: { cellWidth: 25 },
+          cor: { cellWidth: 25 },
+          quantidade: { cellWidth: 18, halign: 'center' },
+          preco_unit: { cellWidth: 25, halign: 'right' },
+          total: { cellWidth: 25, halign: 'right' }
+        },
+        margin: { left: 14, right: 14 },
+        foot: [[
+          '', '', '', 'TOTAL:',
+          totalQtd.toString(),
+          '',
+          `R$ ${(pedido.valor_total || 0).toFixed(2)}`
+        ]],
+        footStyles: { fillColor: [230, 240, 255], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 }
+      });
+
+      // Observações
+      const finalY = doc.lastAutoTable.finalY + 8;
+      if (pedido.observacoes_comprador || pedido.observacoes) {
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Observações:', 14, finalY);
+        doc.setFont('helvetica', 'normal');
+        doc.text(pedido.observacoes_comprador || pedido.observacoes || '', 14, finalY + 5, { maxWidth: 180 });
+      }
+
+      doc.save(`pedido-${numPedido}.pdf`);
+
+      // Marcar pedido como impresso
+      if (!pedido.impresso) {
+        await Pedido.update(pedido.id, {
+          impresso: true,
+          data_impressao: new Date().toISOString()
+        });
+        pedido.impresso = true;
+        pedido.data_impressao = new Date().toISOString();
+        onUpdate?.();
+      }
+
+      toast.success('PDF do pedido gerado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      toast.error('Erro ao gerar PDF do pedido.');
+    } finally {
+      setGerandoPdf(false);
+    }
+  };
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
@@ -784,7 +1027,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
 
         <div className="space-y-6 py-4">
           {/* Status e Informações Principais */}
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             <Badge className={`${statusInfo.color} text-lg px-4 py-2`}>
               <StatusIcon className="w-5 h-5 mr-2" />
               {statusInfo.label}
@@ -797,6 +1040,21 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
               <Calendar className="w-5 h-5 mr-2" />
               {new Date(pedido.created_date).toLocaleDateString('pt-BR')}
             </Badge>
+            {pedido.impresso && (
+              <Badge className="bg-green-100 text-green-800 text-sm px-3 py-1">
+                <Printer className="w-4 h-4 mr-1" />
+                Impresso {pedido.data_impressao ? new Date(pedido.data_impressao).toLocaleDateString('pt-BR') : ''}
+              </Badge>
+            )}
+            <div className="flex-1" />
+            <Button
+              onClick={gerarPdfPedido}
+              disabled={gerandoPdf}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <Printer className="w-4 h-4 mr-2" />
+              {gerandoPdf ? 'Gerando...' : pedido.impresso ? 'Reimprimir PDF' : 'Imprimir PDF'}
+            </Button>
           </div>
 
           {/* Informações do Cliente e Fornecedor */}

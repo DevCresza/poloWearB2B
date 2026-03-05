@@ -313,24 +313,77 @@ export default function Carrinho() {
         }
       }
 
-      // Mapear itens
-      const itensPedido = grupoData.itens.map(item => {
+      // Mapear itens - expandir cápsulas em produtos individuais
+      const itensPedido = grupoData.itens.flatMap(item => {
         if (item.tipo === 'capsula') {
-          return {
-            tipo: 'capsula',
-            capsula_id: item.capsula_id,
-            produto_id: item.id,
-            nome: item.nome,
-            quantidade: item.quantidade,
-            preco: item.preco_unitario,
-            total: item.preco_unitario * item.quantidade,
-            foto: item.imagem_capa_url,
-            detalhes_produtos: item.detalhes_produtos || [],
-            produto_ids: item.produto_ids || [],
-            produtos_quantidades: item.produtos_quantidades || {}
-          };
+          // Expandir cápsula em produtos individuais
+          const detalhes = item.detalhes_produtos || [];
+          const capsulaQtd = item.quantidade || 1;
+
+          return detalhes.flatMap(detalhe => {
+            const produtoCompleto = produtos.find(p => p.id === detalhe.id);
+            if (!produtoCompleto) return [];
+
+            const config = detalhe.configuracao;
+            const tipoVenda = produtoCompleto.tipo_venda || 'avulso';
+            const precoPorPeca = tipoVenda === 'grade'
+              ? (produtoCompleto.preco_grade_completa || 0)
+              : (produtoCompleto.preco_por_peca || 0);
+
+            // Foto do produto
+            let fotoUrl = null;
+            if (detalhe.foto) {
+              fotoUrl = typeof detalhe.foto === 'string' ? detalhe.foto : detalhe.foto?.url;
+            }
+            if (!fotoUrl) {
+              fotoUrl = getPrimeiraFoto(produtoCompleto);
+            }
+
+            // Se tem variantes por cor, criar um item por cor
+            if (config && typeof config === 'object' && config.variantes && Array.isArray(config.variantes)) {
+              return config.variantes.map(variante => {
+                const qtd = (variante.quantidade || 1) * capsulaQtd;
+                return {
+                  produto_id: detalhe.id,
+                  nome: produtoCompleto.nome,
+                  marca: produtoCompleto.marca || '',
+                  referencia: produtoCompleto.referencia_polo || produtoCompleto.referencia_fornecedor || '',
+                  tipo_venda: tipoVenda,
+                  quantidade: qtd,
+                  total_pecas_grade: produtoCompleto.total_pecas_grade || 0,
+                  preco: precoPorPeca,
+                  total: precoPorPeca * qtd,
+                  foto: fotoUrl,
+                  grade_selecionada: null,
+                  cor_selecionada: {
+                    cor_nome: variante.cor_nome,
+                    cor_codigo_hex: variante.cor_codigo_hex || variante.cor_hex || '#000000'
+                  },
+                  origem_capsula: item.capsula_id
+                };
+              });
+            }
+
+            // Quantidade simples (sem variantes de cor)
+            const qtdSimples = (typeof config === 'number' ? config : 1) * capsulaQtd;
+            return [{
+              produto_id: detalhe.id,
+              nome: produtoCompleto.nome,
+              marca: produtoCompleto.marca || '',
+              referencia: produtoCompleto.referencia_polo || produtoCompleto.referencia_fornecedor || '',
+              tipo_venda: tipoVenda,
+              quantidade: qtdSimples,
+              total_pecas_grade: produtoCompleto.total_pecas_grade || 0,
+              preco: precoPorPeca,
+              total: precoPorPeca * qtdSimples,
+              foto: fotoUrl,
+              grade_selecionada: null,
+              cor_selecionada: null,
+              origem_capsula: item.capsula_id
+            }];
+          });
         }
-        return {
+        return [{
           produto_id: item.id,
           nome: item.nome,
           marca: item.marca,
@@ -343,7 +396,7 @@ export default function Carrinho() {
           foto: getPrimeiraFoto(item),
           grade_selecionada: item.grade_configuracao || null,
           cor_selecionada: item.cor_selecionada || null
-        };
+        }];
       });
 
       // Calcular total com base nos itens (pode ter sido editado no modal)

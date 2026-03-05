@@ -637,7 +637,12 @@ export default function PedidosAdmin() {
                             </span>
                           </td>
                           <td className="p-4">
-                            <Badge className={statusInfo.color}>{statusInfo.label}</Badge>
+                            <div className="flex items-center gap-1.5">
+                              <Badge className={statusInfo.color}>{statusInfo.label}</Badge>
+                              {pedido.impresso && (
+                                <Badge className="bg-green-100 text-green-800 text-xs">Impresso</Badge>
+                              )}
+                            </div>
                           </td>
                           <td className="p-4">
                             <Badge className={paymentStatusInfo.color}>{paymentStatusInfo.label}</Badge>
