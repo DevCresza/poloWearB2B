@@ -168,7 +168,7 @@ export default function DashboardAdmin() {
     const fimMesAnterior = new Date(anoSelecionado, mesSelecionado - 1, 0);
 
     // Faturamento - considerar pedidos faturados, em transporte, pendente de pagamento e finalizados
-    const FATURAMENTO_STATUSES = ['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'];
+    const FATURAMENTO_STATUSES = ['faturado', 'parcialmente_faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'];
     const pedidosParaFaturamento = pedidosList.filter(p =>
       FATURAMENTO_STATUSES.includes(p.status)
     );

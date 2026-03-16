@@ -710,7 +710,12 @@ export default function Catalogo() {
             >
               {produto.nome}
             </h3>
-            
+            {produto.referencia_fornecedor && (
+              <p className="text-[10px] sm:text-xs text-gray-500 -mt-1">
+                Ref: {produto.referencia_fornecedor}
+              </p>
+            )}
+
             <div className="flex items-center justify-between flex-wrap gap-2">
               <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] sm:text-xs truncate max-w-[120px]" title={fornecedorMap[produto.fornecedor_id] || 'Polo Wear'}>
                 {fornecedorMap[produto.fornecedor_id] || 'Polo Wear'}

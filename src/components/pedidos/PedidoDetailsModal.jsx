@@ -15,10 +15,11 @@ import {
   Phone, Mail, CreditCard, Upload, AlertTriangle, Pencil, ChevronDown, ChevronUp,
   Printer
 } from 'lucide-react';
-import { Pedido } from '@/api/entities';
+import { Pedido, Produto } from '@/api/entities';
 import { Carteira } from '@/api/entities';
 import { User as UserEntity } from '@/api/entities';
 import { Loja } from '@/api/entities';
+import { Faturamento } from '@/api/entities';
 import { UploadFile, SendEmail } from '@/api/integrations';
 import { formatDateTime, formatCurrency } from '@/utils/exportUtils';
 import { Store } from 'lucide-react';
@@ -71,6 +72,10 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   const [marcandoEntregue, setMarcandoEntregue] = useState(false);
 
   const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [itensExpandidos, setItensExpandidos] = useState([]);
+
+  const [faturamentos, setFaturamentos] = useState([]);
+  const [loadingFaturamentos, setLoadingFaturamentos] = useState(false);
 
   // Verificar se é cliente (somente visualização)
   const isCliente = currentUser?.tipo_negocio === 'multimarca' || currentUser?.tipo_negocio === 'franqueado';
@@ -109,6 +114,22 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       }
     };
     loadParcelas();
+  }, [pedido?.id]);
+
+  useEffect(() => {
+    const loadFaturamentos = async () => {
+      if (!pedido?.id) return;
+      setLoadingFaturamentos(true);
+      try {
+        const list = await Faturamento.filter({ pedido_id: pedido.id }, '-created_date');
+        setFaturamentos(list || []);
+      } catch (e) {
+        console.error('Erro ao carregar faturamentos:', e);
+      } finally {
+        setLoadingFaturamentos(false);
+      }
+    };
+    loadFaturamentos();
   }, [pedido?.id]);
 
   // Salvar frete FOB
@@ -469,6 +490,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     const statusMap = {
       novo_pedido: { label: 'Novo Pedido', color: 'bg-blue-100 text-blue-800', icon: Clock },
       em_producao: { label: 'Em Produção', color: 'bg-purple-100 text-purple-800', icon: Package },
+      parcialmente_faturado: { label: 'Parcialmente Faturado', color: 'bg-cyan-100 text-cyan-800', icon: Package },
       faturado: { label: 'Faturado', color: 'bg-indigo-100 text-indigo-800', icon: FileText },
       em_transporte: { label: 'Em Transporte', color: 'bg-orange-100 text-orange-800', icon: Truck },
       pendente_pagamento: { label: 'Aguardando Pagamento', color: 'bg-amber-100 text-amber-800', icon: Clock },
@@ -777,55 +799,113 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   } catch (_e) {
   }
 
-  // Expandir itens de cápsula em produtos individuais (backward compat com pedidos antigos)
-  const itens = (itensRaw || []).flatMap(item => {
-    if (item.tipo === 'capsula' && item.detalhes_produtos && item.detalhes_produtos.length > 0) {
-      const capsulaQtd = item.quantidade || 1;
-      return item.detalhes_produtos.flatMap(detalhe => {
-        const config = detalhe.configuracao;
-        let fotoUrl = null;
-        if (detalhe.foto) {
-          fotoUrl = typeof detalhe.foto === 'string' ? detalhe.foto : detalhe.foto?.url;
-        }
+  // Expandir itens de cápsula em produtos individuais, buscando dados reais dos produtos
+  useEffect(() => {
+    const expandirItens = async () => {
+      const raw = itensRaw || [];
+      const temCapsula = raw.some(item => item.tipo === 'capsula');
 
-        // Se tem variantes por cor, criar um item por cor
-        if (config && typeof config === 'object' && config.variantes && Array.isArray(config.variantes)) {
-          return config.variantes.map(variante => {
-            const qtd = (variante.quantidade || 1) * capsulaQtd;
-            return {
-              nome: detalhe.nome || 'Produto',
-              marca: '',
-              referencia: '',
-              tipo_venda: 'grade',
-              quantidade: qtd,
-              preco: item.preco ? (item.preco / (item.detalhes_produtos.length || 1)) / capsulaQtd : 0,
-              total: 0, // será recalculado abaixo se necessário
+      if (!temCapsula) {
+        setItensExpandidos(raw);
+        return;
+      }
+
+      // Coletar IDs de produtos de cápsulas para buscar dados reais
+      const produtoIds = new Set();
+      raw.forEach(item => {
+        if (item.tipo === 'capsula' && item.detalhes_produtos) {
+          item.detalhes_produtos.forEach(d => { if (d.id) produtoIds.add(d.id); });
+        }
+      });
+
+      // Buscar dados reais dos produtos
+      let produtosMap = {};
+      if (produtoIds.size > 0) {
+        try {
+          const allProdutos = await Produto.list();
+          allProdutos.forEach(p => { produtosMap[p.id] = p; });
+        } catch (_e) {
+          console.warn('Erro ao buscar produtos para expansão de cápsula');
+        }
+      }
+
+      const expandidos = raw.flatMap(item => {
+        if (item.tipo === 'capsula' && item.detalhes_produtos && item.detalhes_produtos.length > 0) {
+          const capsulaQtd = item.quantidade || 1;
+
+          return item.detalhes_produtos.flatMap(detalhe => {
+            const prod = produtosMap[detalhe.id];
+            const config = detalhe.configuracao;
+            let fotoUrl = null;
+            if (detalhe.foto) {
+              fotoUrl = typeof detalhe.foto === 'string' ? detalhe.foto : detalhe.foto?.url;
+            }
+            if (!fotoUrl && prod) {
+              try {
+                const fotos = typeof prod.fotos === 'string' ? JSON.parse(prod.fotos) : prod.fotos;
+                if (fotos && fotos.length > 0) fotoUrl = typeof fotos[0] === 'string' ? fotos[0] : fotos[0]?.url;
+              } catch (_e) {}
+            }
+
+            const tipoVenda = prod?.tipo_venda || 'grade';
+            const precoPorPeca = parseFloat(prod?.preco_por_peca) || 0;
+            const precoGrade = parseFloat(prod?.preco_grade_completa) || 0;
+            const pecasGrade = parseInt(prod?.total_pecas_grade) || 1;
+
+            if (config && typeof config === 'object' && config.variantes && Array.isArray(config.variantes)) {
+              return config.variantes.map(variante => {
+                const numGrades = (variante.quantidade || 1) * capsulaQtd;
+                const totalUnidades = tipoVenda === 'grade' ? numGrades * pecasGrade : numGrades;
+                const precoUnit = tipoVenda === 'grade' ? precoPorPeca : precoGrade || precoPorPeca;
+                const totalValor = precoUnit * totalUnidades;
+
+                return {
+                  produto_id: detalhe.id,
+                  nome: prod?.nome || detalhe.nome || 'Produto',
+                  marca: prod?.marca || '',
+                  referencia: prod?.referencia_polo || prod?.referencia_fornecedor || '',
+                  tipo_venda: tipoVenda,
+                  quantidade: totalUnidades,
+                  total_pecas_grade: pecasGrade,
+                  preco: precoUnit,
+                  total: totalValor,
+                  foto: fotoUrl,
+                  cor_selecionada: {
+                    cor_nome: variante.cor_nome,
+                    cor_codigo_hex: variante.cor_codigo_hex || variante.cor_hex || '#000000'
+                  }
+                };
+              });
+            }
+
+            const qtdSimples = (typeof config === 'number' ? config : 1) * capsulaQtd;
+            const totalUnidades = tipoVenda === 'grade' ? qtdSimples * pecasGrade : qtdSimples;
+            const precoUnit = precoPorPeca || precoGrade;
+            return [{
+              produto_id: detalhe.id,
+              nome: prod?.nome || detalhe.nome || 'Produto',
+              marca: prod?.marca || '',
+              referencia: prod?.referencia_polo || prod?.referencia_fornecedor || '',
+              tipo_venda: tipoVenda,
+              quantidade: totalUnidades,
+              total_pecas_grade: pecasGrade,
+              preco: precoUnit,
+              total: precoUnit * totalUnidades,
               foto: fotoUrl,
-              cor_selecionada: {
-                cor_nome: variante.cor_nome,
-                cor_codigo_hex: variante.cor_codigo_hex || variante.cor_hex || '#000000'
-              }
-            };
+              cor_selecionada: null
+            }];
           });
         }
-
-        // Quantidade simples
-        const qtdSimples = (typeof config === 'number' ? config : 1) * capsulaQtd;
-        return [{
-          nome: detalhe.nome || 'Produto',
-          marca: '',
-          referencia: '',
-          tipo_venda: 'avulso',
-          quantidade: qtdSimples,
-          preco: 0,
-          total: 0,
-          foto: fotoUrl,
-          cor_selecionada: null
-        }];
+        return [item];
       });
-    }
-    return [item];
-  });
+
+      setItensExpandidos(expandidos);
+    };
+
+    expandirItens();
+  }, [pedido?.id]);
+
+  const itens = itensExpandidos;
 
   // Gerar PDF do pedido
   const gerarPdfPedido = async () => {
@@ -945,17 +1025,30 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
         { header: 'Valor Total', dataKey: 'total' }
       ];
 
-      const tableRows = itens.map(item => ({
-        ref_forn: item.referencia || '-',
-        nome: item.nome || '',
-        ref_linx: item.referencia_linx || item.codigo_linx || '-',
-        cor: item.cor_selecionada?.cor_nome || '-',
-        quantidade: item.quantidade || 0,
-        preco_unit: `R$ ${(item.preco || 0).toFixed(2)}`,
-        total: `R$ ${(item.total || 0).toFixed(2)}`
-      }));
+      const tableRows = itens.map(item => {
+        // Para itens de grade, converter para unidades e preço por peça
+        const pecasGrade = parseInt(item.total_pecas_grade) || 0;
+        const isGrade = item.tipo_venda === 'grade' && pecasGrade > 0;
+        const qtdUnidades = isGrade ? (item.quantidade || 0) * pecasGrade : (item.quantidade || 0);
+        const precoUnitario = isGrade ? (item.preco || 0) / pecasGrade : (item.preco || 0);
+        const valorTotal = precoUnitario * qtdUnidades;
 
-      const totalQtd = itens.reduce((sum, item) => sum + (item.quantidade || 0), 0);
+        return {
+          ref_forn: item.referencia_fornecedor || item.referencia || '-',
+          nome: item.nome || '',
+          ref_linx: item.referencia_linx || item.codigo_linx || '-',
+          cor: item.cor_selecionada?.cor_nome || '-',
+          quantidade: qtdUnidades,
+          preco_unit: `R$ ${precoUnitario.toFixed(2)}`,
+          total: `R$ ${valorTotal.toFixed(2)}`
+        };
+      });
+
+      const totalQtd = itens.reduce((sum, item) => {
+        const pecasGrade = parseInt(item.total_pecas_grade) || 0;
+        const isGrade = item.tipo_venda === 'grade' && pecasGrade > 0;
+        return sum + (isGrade ? (item.quantidade || 0) * pecasGrade : (item.quantidade || 0));
+      }, 0);
 
       autoTable(doc, {
         columns: tableColumns,
@@ -1113,6 +1206,9 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                     {item.referencia && (
                       <p className="text-xs text-gray-500">Ref: {item.referencia}</p>
                     )}
+                    {item.referencia_fornecedor && item.referencia_fornecedor !== item.referencia && (
+                      <p className="text-xs text-gray-500">Ref. Fornecedor: {item.referencia_fornecedor}</p>
+                    )}
 
                     {/* Mostrar cor selecionada se houver */}
                     {item.cor_selecionada && item.cor_selecionada.cor_nome && (
@@ -1137,6 +1233,29 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                         Preço Unit: <strong>R$ {item.preco?.toFixed(2)}</strong>
                       </span>
                     </div>
+                    {/* Item faturamento status */}
+                    {(item.qtd_faturada > 0 || item.qtd_quebra > 0) && (
+                      <div className="mt-2 space-y-1">
+                        <div className="flex items-center gap-2">
+                          {item.status_item === 'faturado' && <Badge className="bg-green-100 text-green-700 text-xs"><CheckCircle className="w-3 h-3 mr-1" />Faturado</Badge>}
+                          {item.status_item === 'parcial' && <Badge className="bg-cyan-100 text-cyan-700 text-xs"><Clock className="w-3 h-3 mr-1" />Parcial ({item.qtd_faturada || 0}/{item.quantidade})</Badge>}
+                          {item.status_item === 'quebra' && <Badge className="bg-red-100 text-red-700 text-xs"><AlertTriangle className="w-3 h-3 mr-1" />Quebra</Badge>}
+                        </div>
+                        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden flex">
+                          {(item.qtd_faturada || 0) > 0 && (
+                            <div className="h-full bg-green-500" style={{ width: `${((item.qtd_faturada || 0) / item.quantidade) * 100}%` }} />
+                          )}
+                          {(item.qtd_quebra || 0) > 0 && (
+                            <div className="h-full bg-red-400" style={{ width: `${((item.qtd_quebra || 0) / item.quantidade) * 100}%` }} />
+                          )}
+                        </div>
+                        <div className="flex gap-3 text-xs text-gray-500">
+                          <span>Faturado: {item.qtd_faturada || 0}</span>
+                          {(item.qtd_quebra || 0) > 0 && <span className="text-red-600">Quebra: {item.qtd_quebra}</span>}
+                          <span>Saldo: {(item.quantidade || 0) - (item.qtd_faturada || 0) - (item.qtd_quebra || 0)}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="text-right">
                     <p className="text-xl font-bold text-green-600">
@@ -1146,6 +1265,55 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                 </div>
               );})}
 
+              {/* Histórico de Faturamentos */}
+              {faturamentos.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-gray-700 flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    Histórico de Faturamentos ({faturamentos.length})
+                  </h4>
+                  {faturamentos.map((fat, fi) => (
+                    <div key={fat.id || fi} className="border rounded-lg p-3 bg-white space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-indigo-100 text-indigo-800">NF #{fat.numero_nf}</Badge>
+                          <span className="text-sm text-gray-500">
+                            {fat.data_emissao ? new Date(fat.data_emissao + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}
+                          </span>
+                          <span className="font-semibold text-green-600">{formatCurrency(fat.valor_total)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {fat.status === 'faturado' && <Badge className="bg-indigo-100 text-indigo-700 text-xs">Faturado</Badge>}
+                          {fat.status === 'enviado' && <Badge className="bg-orange-100 text-orange-700 text-xs">Enviado</Badge>}
+                          {fat.status === 'entregue' && <Badge className="bg-green-100 text-green-700 text-xs">Entregue</Badge>}
+                          {fat.nf_url && (
+                            <Button variant="ghost" size="sm" onClick={() => window.open(fat.nf_url, '_blank')}>
+                              <Download className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      {/* Envio info */}
+                      {fat.transportadora && (
+                        <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded flex items-center gap-4">
+                          <span><Truck className="w-3 h-3 inline mr-1" />{fat.transportadora}</span>
+                          {fat.codigo_rastreio && <span>Rastreio: {fat.codigo_rastreio}</span>}
+                          {fat.data_envio && <span>Enviado: {new Date(fat.data_envio).toLocaleDateString('pt-BR')}</span>}
+                        </div>
+                      )}
+                      {/* Items in this faturamento */}
+                      <div className="text-xs text-gray-500">
+                        {(fat.itens || []).map((fi2, ii) => (
+                          <span key={ii} className="inline-block mr-3">
+                            {fi2.nome} {fi2.cor ? `(${fi2.cor})` : ''}: {fi2.qtd_faturada} un
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="bg-blue-50 p-4 rounded-lg">
                 <div className="flex justify-between items-center">
                   <span className="text-lg font-semibold">Valor Total:</span>
@@ -1153,6 +1321,32 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                     R$ {pedido.valor_total?.toFixed(2)}
                   </span>
                 </div>
+                {((pedido.valor_faturado || 0) > 0 || (pedido.valor_quebra || 0) > 0) && (
+                  <div className="mt-2 pt-2 border-t border-blue-200 space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Valor Faturado:</span>
+                      <span className="text-green-600 font-medium">{formatCurrency(pedido.valor_faturado || 0)}</span>
+                    </div>
+                    {(pedido.valor_quebra || 0) > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Quebra de Produção:</span>
+                        <span className="text-red-600 font-medium">- {formatCurrency(pedido.valor_quebra)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-semibold">
+                      <span>Saldo Pendente:</span>
+                      <span className="text-blue-600">
+                        {formatCurrency(Math.max(0, (pedido.valor_total || 0) - (pedido.valor_faturado || 0) - (pedido.valor_quebra || 0)))}
+                      </span>
+                    </div>
+                    {(pedido.valor_quebra || 0) > 0 && (
+                      <div className="flex justify-between font-bold pt-1 border-t border-blue-200">
+                        <span>Valor Final:</span>
+                        <span className="text-green-700">{formatCurrency(pedido.valor_final || (pedido.valor_total || 0) - (pedido.valor_quebra || 0))}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {pedido.observacoes_comprador && (
@@ -2294,6 +2488,51 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       <Download className="w-4 h-4 mr-2" />
                       Ver Comprovante
                     </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Todas as Notas Fiscais */}
+              {faturamentos.length > 0 && (
+                <div className="p-4 bg-indigo-50 rounded-lg">
+                  <div className="flex items-center gap-2 mb-3">
+                    <FileText className="w-5 h-5 text-indigo-600" />
+                    <h4 className="font-semibold">Notas Fiscais ({faturamentos.length})</h4>
+                  </div>
+                  <div className="space-y-2">
+                    {faturamentos.map((fat, fi) => (
+                      <div key={fat.id || fi} className="flex items-center justify-between bg-white p-3 rounded-lg border">
+                        <div>
+                          <p className="font-medium">NF #{fat.numero_nf}</p>
+                          <p className="text-xs text-gray-500">
+                            {fat.data_emissao ? new Date(fat.data_emissao + 'T00:00:00').toLocaleDateString('pt-BR') : '-'} • {formatCurrency(fat.valor_total)}
+                          </p>
+                          {fat.transportadora && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              <Truck className="w-3 h-3 inline mr-1" />
+                              {fat.transportadora} {fat.codigo_rastreio ? `• ${fat.codigo_rastreio}` : ''}
+                              {fat.status === 'enviado' && ' • Enviado'}
+                              {fat.status === 'entregue' && ' • Entregue'}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge className={
+                            fat.status === 'entregue' ? 'bg-green-100 text-green-700' :
+                            fat.status === 'enviado' ? 'bg-orange-100 text-orange-700' :
+                            'bg-indigo-100 text-indigo-700'
+                          }>
+                            {fat.status === 'entregue' ? 'Entregue' : fat.status === 'enviado' ? 'Enviado' : 'Faturado'}
+                          </Badge>
+                          {fat.nf_url && (
+                            <Button variant="outline" size="sm" onClick={() => window.open(fat.nf_url, '_blank')}>
+                              <Download className="w-4 h-4 mr-1" />
+                              Baixar NF
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

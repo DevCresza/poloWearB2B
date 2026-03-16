@@ -6,6 +6,7 @@ import { Produto } from '@/api/entities'; // Not used in this file, but kept fro
 import { User } from '@/api/entities';
 import { Carteira } from '@/api/entities';
 import { Fornecedor } from '@/api/entities'; // Added import for Fornecedor
+import { Faturamento } from '@/api/entities';
 import { SendEmail, UploadFile } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'; // Not used, but kept from original imports
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -74,6 +76,9 @@ export default function PedidosFornecedor() {
   const [tipoFrete, setTipoFrete] = useState('CIF');
   const [freteInclusoBoleto, setFreteInclusoBoleto] = useState(false);
   const [freteModoCobr, setFreteModoCobr] = useState('diluido');
+
+  // Faturamento parcial
+  const [itensFaturamento, setItensFaturamento] = useState([]);
 
   // Estados para parcelas do boleto
   const [qtdParcelas, setQtdParcelas] = useState(1);
@@ -257,48 +262,159 @@ export default function PedidosFornecedor() {
       return;
     }
 
-    const metodoPagamentoFinal = metodoPagamento || selectedPedido.metodo_pagamento;
-    const freteFOB = parseFloat(selectedPedido.valor_frete_fob) || 0;
+    // Validate at least one item selected
+    const itensSelecionados = itensFaturamento.filter(it => it._selected);
+    if (itensSelecionados.length === 0) {
+      toast.info('Selecione pelo menos um item para faturar ou marcar como quebra');
+      return;
+    }
 
-    // Calcular valor final (valor total + frete FOB já registrado)
-    const valorFinal = (selectedPedido.valor_total || 0) + freteFOB;
+    // Validate quantities
+    for (const item of itensSelecionados) {
+      if (!item._isQuebra && item._qtdFaturar <= 0) {
+        toast.error(`Informe a quantidade a faturar para "${item.nome}"`);
+        return;
+      }
+      if (item._isQuebra && item._qtdQuebra <= 0) {
+        toast.error(`Informe a quantidade de quebra para "${item.nome}"`);
+        return;
+      }
+      if (!item._isQuebra && item._qtdFaturar > item._saldo) {
+        toast.error(`Quantidade a faturar excede o saldo de "${item.nome}"`);
+        return;
+      }
+      if (item._isQuebra && item._qtdQuebra > item._saldo) {
+        toast.error(`Quantidade de quebra excede o saldo de "${item.nome}"`);
+        return;
+      }
+    }
 
     setUploading(true);
     try {
       // Upload NF
       const nfUpload = await UploadFile({ file: nfFile });
 
-      // Atualizar pedido
-      await Pedido.update(selectedPedido.id, {
-        status: 'faturado',
-        nf_url: nfUpload.file_url,
-        nf_numero: nfNumero,
-        nf_data_upload: nfDataEmissao + 'T00:00:00',
-        metodo_pagamento_original: selectedPedido.metodo_pagamento,
-        metodo_pagamento: metodoPagamentoFinal,
-        valor_final: valorFinal
+      // Build faturamento items (only invoiced, not quebra)
+      const itensFaturados = itensSelecionados
+        .filter(it => !it._isQuebra)
+        .map(it => ({
+          produto_id: it.produto_id || it.id,
+          nome: it.nome,
+          cor: it.cor_selecionada?.cor_nome || '',
+          referencia: it.referencia || '',
+          qtd_faturada: it._qtdFaturar,
+          preco_unitario: it.preco || 0,
+          total: (it._qtdFaturar) * (it.preco || 0)
+        }));
+
+      const valorFaturamento = itensFaturados.reduce((sum, it) => sum + it.total, 0);
+      const valorQuebra = itensSelecionados
+        .filter(it => it._isQuebra)
+        .reduce((sum, it) => sum + (it._qtdQuebra * (it.preco || 0)), 0);
+
+      // Create faturamento record (only if there are invoiced items)
+      if (itensFaturados.length > 0) {
+        await Faturamento.create({
+          pedido_id: selectedPedido.id,
+          numero_nf: nfNumero,
+          data_emissao: nfDataEmissao,
+          nf_url: nfUpload.file_url,
+          itens: itensFaturados,
+          valor_total: valorFaturamento,
+          status: 'faturado'
+        });
+      }
+
+      // Update pedido items with qtd_faturada/qtd_quebra
+      const updatedItens = [...(selectedPedido.itens || [])];
+      for (const item of itensSelecionados) {
+        const idx = item._index;
+        if (idx >= 0 && idx < updatedItens.length) {
+          if (item._isQuebra) {
+            updatedItens[idx] = {
+              ...updatedItens[idx],
+              qtd_quebra: (updatedItens[idx].qtd_quebra || 0) + item._qtdQuebra,
+              status_item: ((updatedItens[idx].qtd_faturada || 0) + (updatedItens[idx].qtd_quebra || 0) + item._qtdQuebra >= updatedItens[idx].quantidade)
+                ? 'quebra' : 'parcial'
+            };
+          } else {
+            const newQtdFaturada = (updatedItens[idx].qtd_faturada || 0) + item._qtdFaturar;
+            const newQtdQuebra = updatedItens[idx].qtd_quebra || 0;
+            const total = updatedItens[idx].quantidade || 0;
+            let statusItem = 'pendente';
+            if (newQtdFaturada + newQtdQuebra >= total) {
+              statusItem = newQtdQuebra > 0 ? 'faturado' : 'faturado';
+            } else if (newQtdFaturada > 0) {
+              statusItem = 'parcial';
+            }
+            updatedItens[idx] = {
+              ...updatedItens[idx],
+              qtd_faturada: newQtdFaturada,
+              status_item: statusItem
+            };
+          }
+        }
+      }
+
+      // Check if all items are resolved
+      const todosResolvidos = updatedItens.every(it => {
+        const faturado = it.qtd_faturada || 0;
+        const quebra = it.qtd_quebra || 0;
+        const total = it.quantidade || 0;
+        return faturado + quebra >= total;
       });
 
-      // Notificar cliente (separado para não bloquear faturamento)
+      const novoValorFaturado = (selectedPedido.valor_faturado || 0) + valorFaturamento;
+      const novoValorQuebra = (selectedPedido.valor_quebra || 0) + valorQuebra;
+      const novoStatus = todosResolvidos ? 'faturado' : 'parcialmente_faturado';
+
+      // Update pedido
+      await Pedido.update(selectedPedido.id, {
+        status: novoStatus,
+        itens: updatedItens,
+        valor_faturado: novoValorFaturado,
+        valor_quebra: novoValorQuebra,
+        valor_final: (selectedPedido.valor_total || 0) - novoValorQuebra,
+        // Keep legacy NF fields updated with latest
+        nf_url: nfUpload.file_url,
+        nf_numero: nfNumero,
+        nf_data_upload: nfDataEmissao + 'T00:00:00'
+      });
+
+      // Check if parcelas need adjustment warning
+      if (valorQuebra > 0) {
+        try {
+          const parcelasExistentes = await Carteira.filter({ pedido_id: selectedPedido.id });
+          const parcelasReais = (parcelasExistentes || []).filter(t => t.parcela_numero);
+          if (parcelasReais.length > 0) {
+            toast.warning('O valor do pedido foi reduzido por quebra. As parcelas existentes podem precisar de ajuste.', { duration: 8000 });
+          }
+        } catch (e) {
+          console.warn('Erro ao verificar parcelas:', e);
+        }
+      }
+
+      // Notify client
       try {
         const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
         if (cliente?.email) {
+          const tipoMsg = todosResolvidos ? 'Pedido Faturado' : 'Faturamento Parcial';
           await SendEmail({
             from_name: 'POLO B2B',
             to: cliente.email,
-            subject: `Pedido Faturado - NF #${nfNumero}`,
+            subject: `${tipoMsg} - NF #${nfNumero}`,
             body: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <div style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); padding: 30px; text-align: center;">
-                  <h1 style="color: white; margin: 0;">Pedido Faturado</h1>
+                  <h1 style="color: white; margin: 0;">${tipoMsg}</h1>
                 </div>
                 <div style="padding: 30px; background: white;">
-                  <p>Seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi faturado!</p>
+                  <p>Seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> teve itens faturados!</p>
                   <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
                     <p><strong>Nota Fiscal:</strong> #${nfNumero}</p>
-                    <p><strong>Valor dos Produtos:</strong> ${formatCurrency(selectedPedido.valor_total)}</p>
-                    ${freteFOB > 0 ? `<p><strong>Frete FOB:</strong> ${formatCurrency(freteFOB)}</p>` : ''}
-                    <p style="font-size: 18px; margin-top: 10px;"><strong>Valor Total:</strong> ${formatCurrency(valorFinal)}</p>
+                    <p><strong>Valor deste faturamento:</strong> ${formatCurrency(valorFaturamento)}</p>
+                    ${valorQuebra > 0 ? `<p style="color: #dc2626;"><strong>Quebra de produção:</strong> ${formatCurrency(valorQuebra)}</p>` : ''}
+                    ${!todosResolvidos ? `<p><strong>Saldo pendente:</strong> ${formatCurrency((selectedPedido.valor_total || 0) - novoValorFaturado - novoValorQuebra)}</p>` : ''}
                   </div>
                   <div style="text-align: center; margin-top: 30px;">
                     <a href="${nfUpload.file_url}" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px;">
@@ -314,7 +430,7 @@ export default function PedidosFornecedor() {
         console.warn('Erro ao enviar email de faturamento:', emailError);
       }
 
-      toast.success('Pedido faturado com sucesso!');
+      toast.success(todosResolvidos ? 'Pedido faturado por completo!' : 'Faturamento parcial registrado!');
       setShowFaturarModal(false);
       resetFaturarForm();
       loadPedidos();
@@ -897,6 +1013,7 @@ export default function PedidosFornecedor() {
     em_transporte: 'bg-orange-100 text-orange-800',
     pendente_pagamento: 'bg-amber-100 text-amber-800',
     finalizado: 'bg-green-100 text-green-800',
+    parcialmente_faturado: 'bg-cyan-100 text-cyan-800',
     cancelado: 'bg-gray-100 text-gray-800',
   };
 
@@ -907,6 +1024,7 @@ export default function PedidosFornecedor() {
     em_transporte: 'Em Transporte',
     pendente_pagamento: 'Aguardando Pagamento',
     finalizado: 'Finalizado',
+    parcialmente_faturado: 'Parcial. Faturado',
     cancelado: 'Cancelado',
   };
 
@@ -918,6 +1036,7 @@ export default function PedidosFornecedor() {
       em_transporte: { label: 'Em Transporte', color: 'bg-orange-100 text-orange-800' },
       pendente_pagamento: { label: 'Aguardando Pagamento', color: 'bg-amber-100 text-amber-800' },
       finalizado: { label: 'Finalizado', color: 'bg-green-100 text-green-800' },
+      parcialmente_faturado: { label: 'Parcialmente Faturado', color: 'bg-cyan-100 text-cyan-800' },
       cancelado: { label: 'Cancelado', color: 'bg-gray-100 text-gray-800' }
     };
     return badges[status] || badges.novo_pedido;
@@ -989,7 +1108,7 @@ export default function PedidosFornecedor() {
   // Alertas de pedidos urgentes não faturados
   const pedidosUrgentes = filteredPedidos.filter(p => 
     p.urgente && 
-    !['faturado', 'em_transporte', 'finalizado', 'cancelado'].includes(p.status)
+    !['faturado', 'parcialmente_faturado', 'em_transporte', 'finalizado', 'cancelado'].includes(p.status)
   );
 
   if (loading) {
@@ -1054,6 +1173,7 @@ export default function PedidosFornecedor() {
                 <SelectItem value="todos">Todos os Status</SelectItem>
                 <SelectItem value="novo_pedido">Novos</SelectItem>
                 <SelectItem value="em_producao">Em Produção</SelectItem>
+                <SelectItem value="parcialmente_faturado">Parcialmente Faturados</SelectItem>
                 <SelectItem value="faturado">Faturados</SelectItem>
                 <SelectItem value="em_transporte">Em Transporte</SelectItem>
                 <SelectItem value="pendente_pagamento">Aguardando Pagamento</SelectItem>
@@ -1324,7 +1444,7 @@ export default function PedidosFornecedor() {
                             </>
                           )}
 
-                          {pedido.status === 'em_producao' && !pedido.nf_url && (
+                          {(pedido.status === 'em_producao' || pedido.status === 'parcialmente_faturado') && (
                             <>
                               <Button
                                 onClick={() => {
@@ -1332,6 +1452,17 @@ export default function PedidosFornecedor() {
                                   setNfNumero('');
                                   setNfDataEmissao(new Date().toISOString().split('T')[0]);
                                   setNfFile(null);
+                                  // Initialize items for partial invoicing
+                                  const items = (pedido.itens || []).map((item, idx) => ({
+                                    ...item,
+                                    _index: idx,
+                                    _selected: false,
+                                    _qtdFaturar: 0,
+                                    _isQuebra: false,
+                                    _qtdQuebra: 0,
+                                    _saldo: (item.quantidade || 0) - (item.qtd_faturada || 0) - (item.qtd_quebra || 0)
+                                  }));
+                                  setItensFaturamento(items);
                                   setShowFaturarModal(true);
                                 }}
                                 className="bg-indigo-600 hover:bg-indigo-700"
@@ -1348,7 +1479,7 @@ export default function PedidosFornecedor() {
                             </>
                           )}
 
-                          {pedido.status === 'faturado' && (
+                          {(pedido.status === 'faturado' || pedido.status === 'parcialmente_faturado') && (
                             <Button
                               onClick={() => {
                                 setSelectedPedido(pedido);
@@ -1362,7 +1493,7 @@ export default function PedidosFornecedor() {
                           )}
 
                           {/* Botão para atualizar NF separadamente */}
-                          {['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && pedido.nf_url && (
+                          {['faturado', 'parcialmente_faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && pedido.nf_url && (
                             <Button
                               variant="outline"
                               onClick={() => {
@@ -1500,13 +1631,151 @@ export default function PedidosFornecedor() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Faturamento */}
+      {/* Modal de Faturamento Parcial */}
       <Dialog open={showFaturarModal} onOpenChange={setShowFaturarModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Faturar Pedido</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {/* Resumo do pedido */}
+            {selectedPedido && (
+              <div className="bg-gray-50 p-3 rounded-lg border">
+                <p className="text-sm text-gray-600">Pedido #{selectedPedido.id.slice(-8).toUpperCase()}</p>
+                <div className="grid grid-cols-3 gap-2 mt-2 text-sm">
+                  <div>
+                    <span className="text-gray-500">Valor Total:</span>
+                    <p className="font-bold">{formatCurrency(selectedPedido.valor_total || 0)}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Já Faturado:</span>
+                    <p className="font-bold text-green-600">{formatCurrency(selectedPedido.valor_faturado || 0)}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Saldo Pendente:</span>
+                    <p className="font-bold text-blue-600">
+                      {formatCurrency((selectedPedido.valor_total || 0) - (selectedPedido.valor_faturado || 0) - (selectedPedido.valor_quebra || 0))}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tabela de itens */}
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="p-2 text-left w-8"></th>
+                    <th className="p-2 text-left">Produto</th>
+                    <th className="p-2 text-center">Total</th>
+                    <th className="p-2 text-center">Faturado</th>
+                    <th className="p-2 text-center">Saldo</th>
+                    <th className="p-2 text-center">Faturar</th>
+                    <th className="p-2 text-center">Quebra</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {itensFaturamento.map((item, idx) => {
+                    const saldo = item._saldo;
+                    if (saldo <= 0) return (
+                      <tr key={idx} className="border-t bg-gray-50 opacity-50">
+                        <td className="p-2"></td>
+                        <td className="p-2">
+                          <span className="font-medium">{item.nome}</span>
+                          {item.cor_selecionada?.cor_nome && <span className="text-gray-500 ml-1">({item.cor_selecionada.cor_nome})</span>}
+                        </td>
+                        <td className="p-2 text-center">{item.quantidade}</td>
+                        <td className="p-2 text-center text-green-600">{item.qtd_faturada || 0}</td>
+                        <td className="p-2 text-center">0</td>
+                        <td className="p-2 text-center">-</td>
+                        <td className="p-2 text-center">
+                          {(item.qtd_quebra || 0) > 0 && <Badge className="bg-red-100 text-red-700 text-xs">Quebra: {item.qtd_quebra}</Badge>}
+                          {!item.qtd_quebra && <span>-</span>}
+                        </td>
+                      </tr>
+                    );
+                    return (
+                      <tr key={idx} className={`border-t ${item._selected ? 'bg-blue-50' : ''}`}>
+                        <td className="p-2">
+                          <input
+                            type="checkbox"
+                            checked={item._selected}
+                            onChange={(e) => {
+                              const updated = [...itensFaturamento];
+                              updated[idx] = { ...updated[idx], _selected: e.target.checked, _qtdFaturar: e.target.checked ? saldo : 0, _qtdQuebra: 0, _isQuebra: false };
+                              setItensFaturamento(updated);
+                            }}
+                            className="rounded"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <span className="font-medium">{item.nome}</span>
+                          {item.cor_selecionada?.cor_nome && <span className="text-gray-500 ml-1">({item.cor_selecionada.cor_nome})</span>}
+                          {item.referencia && <span className="text-gray-400 text-xs ml-1">Ref: {item.referencia}</span>}
+                        </td>
+                        <td className="p-2 text-center">{item.quantidade}</td>
+                        <td className="p-2 text-center text-green-600">{item.qtd_faturada || 0}</td>
+                        <td className="p-2 text-center font-medium">{saldo}</td>
+                        <td className="p-2 text-center">
+                          {item._selected && !item._isQuebra ? (
+                            <Input
+                              type="number"
+                              min={1}
+                              max={saldo}
+                              value={item._qtdFaturar}
+                              onChange={(e) => {
+                                const updated = [...itensFaturamento];
+                                updated[idx] = { ...updated[idx], _qtdFaturar: Math.min(parseInt(e.target.value) || 0, saldo) };
+                                setItensFaturamento(updated);
+                              }}
+                              className="w-20 h-8 text-center mx-auto"
+                            />
+                          ) : '-'}
+                        </td>
+                        <td className="p-2 text-center">
+                          {item._selected ? (
+                            <div className="flex items-center justify-center gap-1">
+                              <input
+                                type="checkbox"
+                                checked={item._isQuebra}
+                                onChange={(e) => {
+                                  const updated = [...itensFaturamento];
+                                  updated[idx] = {
+                                    ...updated[idx],
+                                    _isQuebra: e.target.checked,
+                                    _qtdQuebra: e.target.checked ? saldo : 0,
+                                    _qtdFaturar: e.target.checked ? 0 : saldo
+                                  };
+                                  setItensFaturamento(updated);
+                                }}
+                                className="rounded"
+                              />
+                              {item._isQuebra && (
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={saldo}
+                                  value={item._qtdQuebra}
+                                  onChange={(e) => {
+                                    const updated = [...itensFaturamento];
+                                    updated[idx] = { ...updated[idx], _qtdQuebra: Math.min(parseInt(e.target.value) || 0, saldo) };
+                                    setItensFaturamento(updated);
+                                  }}
+                                  className="w-16 h-8 text-center"
+                                />
+                              )}
+                            </div>
+                          ) : '-'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* NF fields */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="nfNumero">Número da NF *</Label>
@@ -1518,7 +1787,7 @@ export default function PedidosFornecedor() {
                 />
               </div>
               <div>
-                <Label htmlFor="nfDataEmissao">Data de Emissão/Faturamento *</Label>
+                <Label htmlFor="nfDataEmissao">Data de Emissão *</Label>
                 <Input
                   id="nfDataEmissao"
                   type="date"
@@ -1536,56 +1805,34 @@ export default function PedidosFornecedor() {
                 accept=".pdf,.jpg,.jpeg,.png,.crm"
                 onChange={(e) => setNfFile(e.target.files[0])}
               />
-              <p className="text-xs text-gray-500 mt-1">
-                <strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM
-              </p>
             </div>
 
-            <div>
-              <Label htmlFor="metodoPagamento">Método de Pagamento</Label>
-              <Select value={metodoPagamento} onValueChange={(value) => {
-                setMetodoPagamento(value);
-                // Se mudar para boleto, inicializar parcelas
-                if (value === 'boleto' || value === 'boleto_faturado') {
-                  handleQtdParcelasChange(1);
-                }
-              }}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Manter método original" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="boleto">Boleto</SelectItem>
-                  <SelectItem value="boleto_faturado">Boleto Faturado (30 dias)</SelectItem>
-                  <SelectItem value="a_vista">À Vista</SelectItem>
-                  <SelectItem value="pix">PIX</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-gray-500 mt-1">
-                Deixe em branco para manter o método original
-              </p>
-            </div>
-
-            {/* Resumo de valores */}
-            {selectedPedido && (
-              <div className="bg-gray-50 p-3 rounded-lg border">
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-600">Valor dos Produtos:</span>
-                  <span>{formatCurrency(selectedPedido.valor_total || 0)}</span>
-                </div>
-                {(selectedPedido.valor_frete_fob > 0) && (
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-600">Frete FOB:</span>
-                    <span>{formatCurrency(selectedPedido.valor_frete_fob)}</span>
+            {/* Real-time summary */}
+            {selectedPedido && (() => {
+              const selecionados = itensFaturamento.filter(it => it._selected);
+              const valorFat = selecionados.filter(it => !it._isQuebra).reduce((s, it) => s + (it._qtdFaturar * (it.preco || 0)), 0);
+              const valorQuebra = selecionados.filter(it => it._isQuebra).reduce((s, it) => s + (it._qtdQuebra * (it.preco || 0)), 0);
+              const saldoApos = (selectedPedido.valor_total || 0) - (selectedPedido.valor_faturado || 0) - (selectedPedido.valor_quebra || 0) - valorFat - valorQuebra;
+              return (
+                <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
+                  <h4 className="font-semibold text-indigo-900 mb-2">Resumo deste faturamento</h4>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-600">Valor a faturar:</span>
+                      <p className="font-bold text-green-600">{formatCurrency(valorFat)}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Valor da quebra:</span>
+                      <p className="font-bold text-red-600">{formatCurrency(valorQuebra)}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Saldo restante após:</span>
+                      <p className="font-bold text-blue-600">{formatCurrency(Math.max(0, saldoApos))}</p>
+                    </div>
                   </div>
-                )}
-                <div className="flex justify-between font-bold text-lg pt-2 border-t">
-                  <span>Valor Total:</span>
-                  <span className="text-green-600">
-                    {formatCurrency((selectedPedido.valor_total || 0) + (parseFloat(selectedPedido.valor_frete_fob) || 0))}
-                  </span>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => setShowFaturarModal(false)}>
@@ -1596,7 +1843,7 @@ export default function PedidosFornecedor() {
                 disabled={uploading}
                 className="bg-indigo-600 hover:bg-indigo-700"
               >
-                {uploading ? 'Enviando...' : 'Faturar Pedido'}
+                {uploading ? 'Processando...' : 'Faturar Selecionados'}
               </Button>
             </div>
           </div>

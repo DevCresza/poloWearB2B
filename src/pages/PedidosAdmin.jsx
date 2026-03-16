@@ -82,6 +82,7 @@ export default function PedidosAdmin() {
         const statusLabels = {
           novo_pedido: 'Novo Pedido',
           em_producao: 'Em Produção',
+          parcialmente_faturado: 'Parcialmente Faturado',
           faturado: 'Faturado',
           em_transporte: 'Em Transporte',
           pendente_pagamento: 'Aguardando Pagamento',
@@ -184,6 +185,7 @@ export default function PedidosAdmin() {
     const statusMap = {
       novo_pedido: { label: 'Novo Pedido', color: 'bg-blue-100 text-blue-800', icon: Clock },
       em_producao: { label: 'Em Produção', color: 'bg-yellow-100 text-yellow-800', icon: Package },
+      parcialmente_faturado: { label: 'Parc. Faturado', color: 'bg-cyan-100 text-cyan-800', icon: Package },
       faturado: { label: 'Faturado', color: 'bg-purple-100 text-purple-800', icon: FileText },
       em_transporte: { label: 'Em Transporte', color: 'bg-orange-100 text-orange-800', icon: Truck },
       pendente_pagamento: { label: 'Aguardando Pagamento', color: 'bg-amber-100 text-amber-800', icon: Clock },
@@ -336,6 +338,7 @@ export default function PedidosAdmin() {
   const statusColumns = [
     { key: 'novo_pedido', title: 'Novos Pedidos', color: 'border-blue-500' },
     { key: 'em_producao', title: 'Em Produção', color: 'border-yellow-500' },
+    { key: 'parcialmente_faturado', title: 'Parc. Faturados', color: 'border-cyan-500' },
     { key: 'faturado', title: 'Faturados', color: 'border-purple-500' },
     { key: 'em_transporte', title: 'Em Transporte', color: 'border-orange-500' },
     { key: 'pendente_pagamento', title: 'Aguardando Pagamento', color: 'border-amber-500' },

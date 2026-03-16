@@ -130,11 +130,17 @@ export default function MeusPedidos() {
         icon: X,
         description: 'Pedido recusado pelo fornecedor'
       },
-      em_producao: { 
-        label: 'Em Produção', 
-        color: 'bg-purple-100 text-purple-800', 
+      em_producao: {
+        label: 'Em Produção',
+        color: 'bg-purple-100 text-purple-800',
         icon: Package,
         description: 'Seu pedido está sendo produzido/separado'
+      },
+      parcialmente_faturado: {
+        label: 'Parcialmente Faturado',
+        color: 'bg-cyan-100 text-cyan-800',
+        icon: Package,
+        description: 'Parte do seu pedido foi faturado, o restante está pendente'
       },
       faturado: { 
         label: 'Faturado', 

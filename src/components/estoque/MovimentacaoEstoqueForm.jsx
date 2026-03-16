@@ -23,6 +23,17 @@ export default function MovimentacaoEstoqueForm({ produto, fornecedor, onClose, 
   const [salvando, setSalvando] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState(null);
+  const [selectedVariante, setSelectedVariante] = useState('produto');
+
+  let variantes = [];
+  if (produto.tem_variantes_cor) {
+    try {
+      variantes = typeof produto.variantes_cor === 'string' ? JSON.parse(produto.variantes_cor) : (produto.variantes_cor || []);
+      if (!Array.isArray(variantes)) variantes = [];
+    } catch (e) {
+      variantes = [];
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -39,9 +50,11 @@ export default function MovimentacaoEstoqueForm({ produto, fornecedor, onClose, 
     }
 
     // Validar saída
+    const estoqueCheck = selectedVariante !== 'produto'
+      ? (variantes.find(v => v.id === selectedVariante)?.estoque_grades || 0)
+      : produto.estoque_atual_grades;
     if ((formData.tipo_movimentacao === 'saida' || formData.tipo_movimentacao === 'perda') &&
-        Math.abs(quantidade) > produto.estoque_atual_grades) {
-      // Mostrar dialog de confirmação
+        Math.abs(quantidade) > estoqueCheck) {
       setPendingSubmit({ quantidade, formData });
       setShowConfirmDialog(true);
       return;
@@ -56,8 +69,7 @@ export default function MovimentacaoEstoqueForm({ produto, fornecedor, onClose, 
 
     try {
       const currentUser = await User.me();
-      
-      // Calcular nova quantidade
+
       let quantidadeMovimentacao = quantidade;
       if (formData.tipo_movimentacao === 'saida' || formData.tipo_movimentacao === 'perda') {
         quantidadeMovimentacao = -Math.abs(quantidade);
@@ -65,25 +77,57 @@ export default function MovimentacaoEstoqueForm({ produto, fornecedor, onClose, 
         quantidadeMovimentacao = Math.abs(quantidade);
       }
 
-      const estoqueAnterior = produto.estoque_atual_grades || 0;
-      const estoqueNovo = Math.max(0, estoqueAnterior + quantidadeMovimentacao);
+      if (selectedVariante !== 'produto' && variantes.length > 0) {
+        // Per-variant stock update
+        const varianteAtual = variantes.find(v => v.id === selectedVariante);
+        const estoqueAnteriorVar = varianteAtual?.estoque_grades || 0;
+        const estoqueNovoVar = Math.max(0, estoqueAnteriorVar + quantidadeMovimentacao);
 
-      // Criar movimentação
-      await MovimentacaoEstoque.create({
-        produto_id: produto.id,
-        tipo: formData.tipo_movimentacao,
-        quantidade_grades: quantidadeMovimentacao,
-        quantidade_anterior: estoqueAnterior,
-        quantidade_atual: estoqueNovo,
-        motivo: formData.motivo,
-        user_id: currentUser.id,
-        observacoes: formData.observacoes
-      });
+        // Update the variant in the array
+        const novasVariantes = variantes.map(v =>
+          v.id === selectedVariante ? { ...v, estoque_grades: estoqueNovoVar } : v
+        );
 
-      // Atualizar estoque do produto
-      await Produto.update(produto.id, {
-        estoque_atual_grades: estoqueNovo
-      });
+        // Recalculate product-level stock as sum of all variants
+        const novoProdutoEstoque = novasVariantes.reduce((sum, v) => sum + (v.estoque_grades || 0), 0);
+
+        // Create movement record
+        await MovimentacaoEstoque.create({
+          produto_id: produto.id,
+          tipo: formData.tipo_movimentacao,
+          quantidade_grades: quantidadeMovimentacao,
+          quantidade_anterior: estoqueAnteriorVar,
+          quantidade_atual: estoqueNovoVar,
+          motivo: formData.motivo,
+          user_id: currentUser.id,
+          observacoes: `[${varianteAtual?.cor_nome}] ${formData.observacoes || ''}`
+        });
+
+        // Update product with new variant data and recalculated total
+        await Produto.update(produto.id, {
+          variantes_cor: novasVariantes,
+          estoque_atual_grades: novoProdutoEstoque
+        });
+      } else {
+        // Product-level stock update (existing behavior)
+        const estoqueAnterior = produto.estoque_atual_grades || 0;
+        const estoqueNovo = Math.max(0, estoqueAnterior + quantidadeMovimentacao);
+
+        await MovimentacaoEstoque.create({
+          produto_id: produto.id,
+          tipo: formData.tipo_movimentacao,
+          quantidade_grades: quantidadeMovimentacao,
+          quantidade_anterior: estoqueAnterior,
+          quantidade_atual: estoqueNovo,
+          motivo: formData.motivo,
+          user_id: currentUser.id,
+          observacoes: formData.observacoes
+        });
+
+        await Produto.update(produto.id, {
+          estoque_atual_grades: estoqueNovo
+        });
+      }
 
       toast.success('Movimentação registrada com sucesso!');
       onSuccess();
@@ -123,7 +167,13 @@ export default function MovimentacaoEstoqueForm({ produto, fornecedor, onClose, 
 
   const calcularNovoEstoque = () => {
     const quantidade = parseInt(formData.quantidade) || 0;
-    const estoqueAtual = produto.estoque_atual_grades || 0;
+    let estoqueAtual;
+    if (selectedVariante !== 'produto') {
+      const v = variantes.find(v => v.id === selectedVariante);
+      estoqueAtual = v?.estoque_grades || 0;
+    } else {
+      estoqueAtual = produto.estoque_atual_grades || 0;
+    }
 
     if (formData.tipo_movimentacao === 'saida' || formData.tipo_movimentacao === 'perda') {
       return Math.max(0, estoqueAtual - Math.abs(quantidade));
@@ -155,11 +205,46 @@ export default function MovimentacaoEstoqueForm({ produto, fornecedor, onClose, 
               </div>
               <div className="text-right">
                 <p className="text-sm text-gray-600">Estoque Atual</p>
-                <p className="text-2xl font-bold text-blue-600">{produto.estoque_atual_grades || 0}</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {selectedVariante !== 'produto'
+                    ? (variantes.find(v => v.id === selectedVariante)?.estoque_grades || 0)
+                    : (produto.estoque_atual_grades || 0)
+                  }
+                </p>
                 <p className="text-xs text-gray-600">grades</p>
+                {selectedVariante !== 'produto' && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    {variantes.find(v => v.id === selectedVariante)?.cor_nome}
+                  </p>
+                )}
               </div>
             </div>
           </div>
+
+          {/* Seletor de Variante */}
+          {variantes.length > 0 && (
+            <div className="space-y-2">
+              <Label>Aplicar movimentação em</Label>
+              <Select value={selectedVariante} onValueChange={setSelectedVariante}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="produto">
+                    <span>Produto inteiro (todas as cores)</span>
+                  </SelectItem>
+                  {variantes.map(v => (
+                    <SelectItem key={v.id} value={v.id}>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full border" style={{ backgroundColor: v.cor_codigo_hex || v.cor_hex || '#000' }} />
+                        <span>{v.cor_nome} ({v.estoque_grades || 0} grades)</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Tipo de Movimentação */}
           <div className="space-y-2">
@@ -265,9 +350,9 @@ export default function MovimentacaoEstoqueForm({ produto, fornecedor, onClose, 
           </div>
 
           {/* Alerta de Estoque Baixo */}
-          {(formData.tipo_movimentacao === 'saida' || formData.tipo_movimentacao === 'perda') && 
-           formData.quantidade && 
-           calcularNovoEstoque() <= produto.estoque_minimo_grades && (
+          {(formData.tipo_movimentacao === 'saida' || formData.tipo_movimentacao === 'perda') &&
+           formData.quantidade &&
+           calcularNovoEstoque() <= (selectedVariante !== 'produto' ? (variantes.find(v => v.id === selectedVariante)?.estoque_minimo || 0) : produto.estoque_minimo_grades) && (
             <Alert className="border-orange-200 bg-orange-50">
               <AlertTriangle className="h-4 w-4 text-orange-600" />
               <AlertDescription className="text-orange-800">

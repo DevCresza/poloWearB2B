@@ -270,6 +270,7 @@ export default function PortalDashboard() {
       em_analise: { label: 'Em Análise', color: 'bg-yellow-100 text-yellow-800', icon: Clock },
       aprovado: { label: 'Aprovado', color: 'bg-green-100 text-green-800', icon: CheckCircle },
       em_producao: { label: 'Produção', color: 'bg-purple-100 text-purple-800', icon: Package },
+      parcialmente_faturado: { label: 'Parc. Faturado', color: 'bg-cyan-100 text-cyan-800', icon: Clock },
       faturado: { label: 'Faturado', color: 'bg-indigo-100 text-indigo-800', icon: FileText },
       em_transporte: { label: 'Enviado', color: 'bg-orange-100 text-orange-800', icon: Truck },
       finalizado: { label: 'Finalizado', color: 'bg-green-100 text-green-800', icon: CheckCircle },

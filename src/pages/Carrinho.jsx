@@ -326,9 +326,9 @@ export default function Carrinho() {
 
             const config = detalhe.configuracao;
             const tipoVenda = produtoCompleto.tipo_venda || 'avulso';
-            const precoPorPeca = tipoVenda === 'grade'
-              ? (produtoCompleto.preco_grade_completa || 0)
-              : (produtoCompleto.preco_por_peca || 0);
+            const pecasGrade = parseInt(produtoCompleto.total_pecas_grade) || 1;
+            const precoUnitario = parseFloat(produtoCompleto.preco_por_peca) || 0;
+            const precoGrade = parseFloat(produtoCompleto.preco_grade_completa) || 0;
 
             // Foto do produto
             let fotoUrl = null;
@@ -342,17 +342,22 @@ export default function Carrinho() {
             // Se tem variantes por cor, criar um item por cor
             if (config && typeof config === 'object' && config.variantes && Array.isArray(config.variantes)) {
               return config.variantes.map(variante => {
-                const qtd = (variante.quantidade || 1) * capsulaQtd;
+                const numGrades = (variante.quantidade || 1) * capsulaQtd;
+                // Quantidade em unidades e preço por peça
+                const totalUnidades = tipoVenda === 'grade' ? numGrades * pecasGrade : numGrades;
+                const preco = tipoVenda === 'grade' ? precoUnitario : (precoUnitario || precoGrade);
                 return {
                   produto_id: detalhe.id,
                   nome: produtoCompleto.nome,
                   marca: produtoCompleto.marca || '',
                   referencia: produtoCompleto.referencia_polo || produtoCompleto.referencia_fornecedor || '',
+                  referencia_fornecedor: produtoCompleto.referencia_fornecedor || '',
+                  referencia_linx: produtoCompleto.referencia_polo || '',
                   tipo_venda: tipoVenda,
-                  quantidade: qtd,
-                  total_pecas_grade: produtoCompleto.total_pecas_grade || 0,
-                  preco: precoPorPeca,
-                  total: precoPorPeca * qtd,
+                  quantidade: totalUnidades,
+                  total_pecas_grade: pecasGrade,
+                  preco: preco,
+                  total: preco * totalUnidades,
                   foto: fotoUrl,
                   grade_selecionada: null,
                   cor_selecionada: {
@@ -366,16 +371,20 @@ export default function Carrinho() {
 
             // Quantidade simples (sem variantes de cor)
             const qtdSimples = (typeof config === 'number' ? config : 1) * capsulaQtd;
+            const totalUnidades = tipoVenda === 'grade' ? qtdSimples * pecasGrade : qtdSimples;
+            const preco = tipoVenda === 'grade' ? precoUnitario : (precoUnitario || precoGrade);
             return [{
               produto_id: detalhe.id,
               nome: produtoCompleto.nome,
               marca: produtoCompleto.marca || '',
               referencia: produtoCompleto.referencia_polo || produtoCompleto.referencia_fornecedor || '',
+              referencia_fornecedor: produtoCompleto.referencia_fornecedor || '',
+              referencia_linx: produtoCompleto.referencia_polo || '',
               tipo_venda: tipoVenda,
-              quantidade: qtdSimples,
-              total_pecas_grade: produtoCompleto.total_pecas_grade || 0,
-              preco: precoPorPeca,
-              total: precoPorPeca * qtdSimples,
+              quantidade: totalUnidades,
+              total_pecas_grade: pecasGrade,
+              preco: preco,
+              total: preco * totalUnidades,
               foto: fotoUrl,
               grade_selecionada: null,
               cor_selecionada: null,
@@ -388,6 +397,8 @@ export default function Carrinho() {
           nome: item.nome,
           marca: item.marca,
           referencia: item.referencia_polo || item.referencia_fornecedor || '',
+          referencia_fornecedor: item.referencia_fornecedor || '',
+          referencia_linx: item.referencia_polo || '',
           tipo_venda: item.tipo_venda,
           quantidade: item.quantidade,
           total_pecas_grade: item.total_pecas_grade || 0,

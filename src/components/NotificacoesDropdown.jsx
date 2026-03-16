@@ -312,8 +312,12 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
 
       // Para fornecedores: verificar novos pedidos
       if (userTipoNegocio === 'fornecedor' || userRole === 'admin') {
-        // Buscar pedidos novos das últimas 24h
-        const pedidosNovos = await Pedido.filter({ status: 'novo_pedido' }, '-created_date', 10);
+        // Buscar pedidos novos das últimas 24h (filtrar por fornecedor se não for admin)
+        const filtroNovos = { status: 'novo_pedido' };
+        if (userTipoNegocio === 'fornecedor' && userFornecedorId) {
+          filtroNovos.fornecedor_id = userFornecedorId;
+        }
+        const pedidosNovos = await Pedido.filter(filtroNovos, '-created_date', 10);
         const umDiaAtras = new Date(hoje.getTime() - 24 * 60 * 60 * 1000);
 
         pedidosNovos.forEach(pedido => {
@@ -395,55 +399,61 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
           // Ignora erro
         }
 
-        // Verificar produtos com estoque baixo (apenas pronta_entrega, ignora programação/sob_encomenda)
-        try {
-          const produtos = await Produto.list();
-          const produtosEstoque = produtos.filter(p => p.disponibilidade === 'pronta_entrega');
+        // Verificar produtos com estoque baixo (apenas para admin, não para fornecedores)
+        if (userRole === 'admin') {
+          try {
+            const produtos = await Produto.list();
+            const produtosEstoque = produtos.filter(p => p.disponibilidade === 'pronta_entrega');
 
-          const produtosBaixoEstoque = produtosEstoque.filter(p => {
-            const estoqueAtual = p.estoque_atual_grades || 0;
-            const estoqueMinimo = p.estoque_minimo || 5;
-            return estoqueAtual <= estoqueMinimo && estoqueAtual > 0;
-          }).slice(0, 5);
+            const produtosBaixoEstoque = produtosEstoque.filter(p => {
+              const estoqueAtual = p.estoque_atual_grades || 0;
+              const estoqueMinimo = p.estoque_minimo || 5;
+              return estoqueAtual <= estoqueMinimo && estoqueAtual > 0;
+            }).slice(0, 5);
 
-          produtosBaixoEstoque.forEach(produto => {
-            notificacoesAuto.push({
-              id: `estoque-baixo-${produto.id}`,
-              tipo: 'aviso',
-              titulo: 'Estoque Baixo',
-              mensagem: `${produto.nome} está com estoque baixo (${produto.estoque_atual_grades || 0} un.)`,
-              icone: 'estoque',
-              lida: false,
-              data: new Date().toISOString(),
-              link: '/GestaoEstoque',
-              autogerada: true
+            produtosBaixoEstoque.forEach(produto => {
+              notificacoesAuto.push({
+                id: `estoque-baixo-${produto.id}`,
+                tipo: 'aviso',
+                titulo: 'Estoque Baixo',
+                mensagem: `${produto.nome} está com estoque baixo (${produto.estoque_atual_grades || 0} un.)`,
+                icone: 'estoque',
+                lida: false,
+                data: new Date().toISOString(),
+                link: '/GestaoEstoque',
+                autogerada: true
+              });
             });
-          });
 
-          // Produtos sem estoque (apenas pronta_entrega)
-          const produtosSemEstoque = produtosEstoque.filter(p => (p.estoque_atual_grades || 0) === 0 && p.ativo).slice(0, 3);
-          produtosSemEstoque.forEach(produto => {
-            notificacoesAuto.push({
-              id: `sem-estoque-${produto.id}`,
-              tipo: 'alerta',
-              titulo: 'Produto Sem Estoque',
-              mensagem: `${produto.nome} está sem estoque`,
-              icone: 'estoque',
-              lida: false,
-              data: new Date().toISOString(),
-              link: '/GestaoEstoque',
-              autogerada: true
+            // Produtos sem estoque (apenas pronta_entrega)
+            const produtosSemEstoque = produtosEstoque.filter(p => (p.estoque_atual_grades || 0) === 0 && p.ativo).slice(0, 3);
+            produtosSemEstoque.forEach(produto => {
+              notificacoesAuto.push({
+                id: `sem-estoque-${produto.id}`,
+                tipo: 'alerta',
+                titulo: 'Produto Sem Estoque',
+                mensagem: `${produto.nome} está sem estoque`,
+                icone: 'estoque',
+                lida: false,
+                data: new Date().toISOString(),
+                link: '/GestaoEstoque',
+                autogerada: true
+              });
             });
-          });
-        } catch (e) {
-          // Ignora erro de produtos
+          } catch (e) {
+            // Ignora erro de produtos
+          }
         }
       }
 
       // Para admin e fornecedor: verificar comprovantes pendentes de análise (individual por título)
       if (userRole === 'admin' || userTipoNegocio === 'fornecedor') {
         try {
-          const comprovantesPendentes = await Carteira.filter({ status: 'em_analise' }, '-created_at', 15);
+          const filtroComprovantes = { status: 'em_analise' };
+          if (userTipoNegocio === 'fornecedor' && userFornecedorId) {
+            filtroComprovantes.fornecedor_id = userFornecedorId;
+          }
+          const comprovantesPendentes = await Carteira.filter(filtroComprovantes, '-created_at', 15);
           comprovantesPendentes.forEach(titulo => {
             const uploadKey = titulo.comprovante_data_upload ? titulo.comprovante_data_upload.slice(0, 16) : '';
             const valorStr = titulo.valor ? `R$ ${titulo.valor.toFixed(2)}` : '';

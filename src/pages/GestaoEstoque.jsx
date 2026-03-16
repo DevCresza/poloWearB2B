@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Produto } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { MovimentacaoEstoque } from '@/api/entities';
@@ -19,8 +19,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { 
-  Package, AlertTriangle, TrendingUp, TrendingDown, 
-  Search, Filter, Download, Plus, History, BarChart3
+  Package, AlertTriangle, TrendingUp, TrendingDown,
+  Search, Filter, Download, Plus, History, BarChart3,
+  ChevronDown, ChevronUp
 } from 'lucide-react';
 import MovimentacaoEstoqueForm from '../components/estoque/MovimentacaoEstoqueForm';
 import { formatCurrency } from '@/utils/exportUtils';
@@ -37,6 +38,7 @@ export default function GestaoEstoque() {
   const [showMovimentacaoForm, setShowMovimentacaoForm] = useState(false);
   const [selectedProduto, setSelectedProduto] = useState(null);
   const [activeTab, setActiveTab] = useState('produtos');
+  const [expandedProdutos, setExpandedProdutos] = useState({});
 
   useEffect(() => {
     loadData();
@@ -347,43 +349,86 @@ export default function GestaoEstoque() {
                       filteredProdutos.map(produto => {
                         const status = getStatusEstoque(produto);
                         const StatusIcon = status.icon;
+                        let prodVariantes = [];
+                        if (produto.tem_variantes_cor) {
+                          try { prodVariantes = typeof produto.variantes_cor === 'string' ? JSON.parse(produto.variantes_cor) : (produto.variantes_cor || []); } catch(e) { prodVariantes = []; }
+                          if (!Array.isArray(prodVariantes)) prodVariantes = [];
+                        }
 
                         return (
-                          <TableRow key={produto.id}>
-                            <TableCell>
-                              <div>
-                                <p className="font-semibold">{produto.nome}</p>
-                                <p className="text-xs text-gray-600">
-                                  Ref: {produto.referencia_polo || produto.referencia_fornecedor || 'N/A'}
-                                </p>
-                              </div>
-                            </TableCell>
-                            <TableCell>{getFornecedorNome(produto.fornecedor_id)}</TableCell>
-                            <TableCell className="text-center">
-                              <span className="text-lg font-bold">{produto.estoque_atual_grades || 0}</span>
-                              <span className="text-xs text-gray-600"> grades</span>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <span className="text-sm">{produto.estoque_minimo_grades || 0}</span>
-                              <span className="text-xs text-gray-600"> grades</span>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Badge className={`${status.color} gap-1`}>
-                                <StatusIcon className="w-3 h-3" />
-                                {status.label}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleMovimentacao(produto)}
-                              >
-                                <Plus className="w-4 h-4 mr-1" />
-                                Movimentar
-                              </Button>
-                            </TableCell>
-                          </TableRow>
+                          <React.Fragment key={produto.id}>
+                            <TableRow>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  {prodVariantes.length > 0 && (
+                                    <Button variant="ghost" size="sm" className="p-0 h-6 w-6" onClick={() => setExpandedProdutos(prev => ({...prev, [produto.id]: !prev[produto.id]}))}>
+                                      {expandedProdutos[produto.id] ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                    </Button>
+                                  )}
+                                  <div>
+                                    <p className="font-semibold">{produto.nome}</p>
+                                    <p className="text-xs text-gray-600">
+                                      Ref: {produto.referencia_polo || produto.referencia_fornecedor || 'N/A'}
+                                    </p>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell>{getFornecedorNome(produto.fornecedor_id)}</TableCell>
+                              <TableCell className="text-center">
+                                <span className="text-lg font-bold">{produto.estoque_atual_grades || 0}</span>
+                                <span className="text-xs text-gray-600"> grades</span>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className="text-sm">{produto.estoque_minimo_grades || 0}</span>
+                                <span className="text-xs text-gray-600"> grades</span>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge className={`${status.color} gap-1`}>
+                                  <StatusIcon className="w-3 h-3" />
+                                  {status.label}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleMovimentacao(produto)}
+                                >
+                                  <Plus className="w-4 h-4 mr-1" />
+                                  Movimentar
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                            {expandedProdutos[produto.id] && prodVariantes.map((v, vi) => (
+                              <TableRow key={`${produto.id}-var-${vi}`} className="bg-gray-50">
+                                <TableCell className="pl-12">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded-full border" style={{ backgroundColor: v.cor_codigo_hex || v.cor_hex || '#000' }} />
+                                    <span className="text-sm">{v.cor_nome}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell></TableCell>
+                                <TableCell className="text-center">
+                                  <span className="text-sm font-medium">{v.estoque_grades || 0}</span>
+                                  <span className="text-xs text-gray-600"> grades</span>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <span className="text-xs">{v.estoque_minimo || 0}</span>
+                                  <span className="text-xs text-gray-600"> grades</span>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  {(() => {
+                                    const est = v.estoque_grades || 0;
+                                    const min = v.estoque_minimo || 0;
+                                    if (est === 0) return <Badge className="bg-red-100 text-red-800 text-xs">Sem Estoque</Badge>;
+                                    if (est <= min) return <Badge className="bg-orange-100 text-orange-800 text-xs">Baixo</Badge>;
+                                    return <Badge className="bg-green-100 text-green-800 text-xs">Normal</Badge>;
+                                  })()}
+                                </TableCell>
+                                <TableCell></TableCell>
+                              </TableRow>
+                            ))}
+                          </React.Fragment>
                         );
                       })
                     )}
