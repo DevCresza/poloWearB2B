@@ -326,7 +326,12 @@ export default function PedidosFornecedor() {
       }
 
       // Update pedido items with qtd_faturada/qtd_quebra
-      const updatedItens = [...(selectedPedido.itens || [])];
+      // Parse itens safely (may be string or array depending on Supabase response)
+      let parsedItens = selectedPedido.itens || [];
+      if (typeof parsedItens === 'string') {
+        try { parsedItens = JSON.parse(parsedItens); } catch (e) { parsedItens = []; }
+      }
+      const updatedItens = [...parsedItens];
       for (const item of itensSelecionados) {
         const idx = item._index;
         if (idx >= 0 && idx < updatedItens.length) {
@@ -368,10 +373,22 @@ export default function PedidosFornecedor() {
       const novoValorQuebra = (selectedPedido.valor_quebra || 0) + valorQuebra;
       const novoStatus = todosResolvidos ? 'faturado' : 'parcialmente_faturado';
 
+      // Clean itens before saving (remove any internal _fields)
+      const cleanItens = updatedItens.map(it => {
+        const clean = { ...it };
+        delete clean._index;
+        delete clean._selected;
+        delete clean._qtdFaturar;
+        delete clean._isQuebra;
+        delete clean._qtdQuebra;
+        delete clean._saldo;
+        return clean;
+      });
+
       // Update pedido
       await Pedido.update(selectedPedido.id, {
         status: novoStatus,
-        itens: updatedItens,
+        itens: cleanItens,
         valor_faturado: novoValorFaturado,
         valor_quebra: novoValorQuebra,
         valor_final: (selectedPedido.valor_total || 0) - novoValorQuebra,
@@ -1457,7 +1474,9 @@ export default function PedidosFornecedor() {
                                   setNfDataEmissao(new Date().toISOString().split('T')[0]);
                                   setNfFile(null);
                                   // Initialize items for partial invoicing
-                                  const items = (pedido.itens || []).map((item, idx) => ({
+                                  let rawItens = pedido.itens || [];
+                                  if (typeof rawItens === 'string') { try { rawItens = JSON.parse(rawItens); } catch(e) { rawItens = []; } }
+                                  const items = rawItens.map((item, idx) => ({
                                     ...item,
                                     _index: idx,
                                     _selected: false,
