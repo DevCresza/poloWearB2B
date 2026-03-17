@@ -295,6 +295,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
             pedido_id: pedido.id,
             cliente_user_id: pedido.comprador_user_id,
             fornecedor_id: pedido.fornecedor_id,
+            loja_id: pedido.loja_id,
             tipo: 'a_receber',
             valor: valorParcela,
             data_vencimento: parcelasBoletoConfig[i].dataVencimento,
