@@ -77,6 +77,13 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   const [faturamentos, setFaturamentos] = useState([]);
   const [loadingFaturamentos, setLoadingFaturamentos] = useState(false);
 
+  // Boleto por faturamento
+  const [boletoFatId, setBoletoFatId] = useState(null); // which faturamento is being edited
+  const [boletoFatFile, setBoletoFatFile] = useState(null);
+  const [boletoFatQtdParcelas, setBoletoFatQtdParcelas] = useState(1);
+  const [boletoFatParcelas, setBoletoFatParcelas] = useState([{ dataVencimento: '' }]);
+  const [uploadingBoletoFat, setUploadingBoletoFat] = useState(false);
+
   // Verificar se é cliente (somente visualização)
   const isCliente = currentUser?.tipo_negocio === 'multimarca' || currentUser?.tipo_negocio === 'franqueado';
 
@@ -131,6 +138,93 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     };
     loadFaturamentos();
   }, [pedido?.id]);
+
+  // Helpers for boleto-per-faturamento parcelas
+  const handleBoletoFatQtdChange = (value) => {
+    const num = parseInt(value) || 1;
+    setBoletoFatQtdParcelas(num);
+    const novas = Array.from({ length: num }, (_, i) => ({
+      dataVencimento: boletoFatParcelas[i]?.dataVencimento || ''
+    }));
+    setBoletoFatParcelas(novas);
+  };
+
+  const handleBoletoFatDataChange = (index, value) => {
+    const novas = [...boletoFatParcelas];
+    novas[index] = { ...novas[index], dataVencimento: value };
+    setBoletoFatParcelas(novas);
+  };
+
+  const handleOpenBoletoFat = (fatId) => {
+    setBoletoFatId(fatId);
+    setBoletoFatFile(null);
+    setBoletoFatQtdParcelas(1);
+    setBoletoFatParcelas([{ dataVencimento: '' }]);
+  };
+
+  const handleUploadBoletoFat = async (fat) => {
+    if (!boletoFatFile) {
+      toast.info('Selecione o arquivo do boleto');
+      return;
+    }
+    const temParcelasConfiguradas = boletoFatParcelas.some(p => p.dataVencimento);
+    if (temParcelasConfiguradas && boletoFatParcelas.some(p => !p.dataVencimento)) {
+      toast.info('Preencha todas as datas de vencimento');
+      return;
+    }
+    setUploadingBoletoFat(true);
+    try {
+      const result = await UploadFile({ file: boletoFatFile });
+      // Update faturamento with boleto info
+      await Faturamento.update(fat.id, {
+        boleto_url: result.file_url,
+        boleto_data_upload: new Date().toISOString(),
+        qtd_parcelas: boletoFatQtdParcelas
+      });
+
+      // Create parcelas in carteira linked to this faturamento
+      if (temParcelasConfiguradas) {
+        const valorBase = fat.valor_total || 0;
+        const valorParcela = valorBase / boletoFatQtdParcelas;
+        for (let i = 0; i < boletoFatQtdParcelas; i++) {
+          await Carteira.create({
+            pedido_id: pedido.id,
+            faturamento_id: fat.id,
+            tipo: 'a_receber',
+            status: 'pendente',
+            valor: valorParcela,
+            data_vencimento: boletoFatParcelas[i].dataVencimento,
+            parcela_numero: i + 1,
+            total_parcelas: boletoFatQtdParcelas,
+            boleto_url: result.file_url,
+            descricao: boletoFatQtdParcelas > 1
+              ? `Parcela ${i + 1}/${boletoFatQtdParcelas} - NF #${fat.numero_nf}`
+              : `Boleto - NF #${fat.numero_nf}`,
+            loja_id: pedido.loja_id || null,
+            comprador_user_id: pedido.comprador_user_id || null,
+            fornecedor_id: pedido.fornecedor_id || null
+          });
+        }
+      }
+
+      toast.success('Boleto enviado para NF #' + fat.numero_nf);
+      setBoletoFatId(null);
+      setBoletoFatFile(null);
+      // Reload faturamentos
+      const list = await Faturamento.filter({ pedido_id: pedido.id }, '-created_date');
+      setFaturamentos(list || []);
+      // Reload parcelas
+      const titulosList = await Carteira.filter({ pedido_id: pedido.id });
+      const parcelasReais = (titulosList || []).filter(t => t.parcela_numero);
+      setParcelas(parcelasReais.sort((a, b) => new Date(a.data_vencimento) - new Date(b.data_vencimento)));
+      if (onUpdate) onUpdate();
+    } catch (error) {
+      console.error('Erro ao enviar boleto para faturamento:', error);
+      toast.error('Erro ao enviar boleto');
+    } finally {
+      setUploadingBoletoFat(false);
+    }
+  };
 
   // Salvar frete FOB
   const handleSalvarFrete = async () => {
@@ -2493,45 +2587,148 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                 </div>
               )}
 
-              {/* Todas as Notas Fiscais */}
+              {/* Notas Fiscais com Boleto por Faturamento */}
               {faturamentos.length > 0 && (
                 <div className="p-4 bg-indigo-50 rounded-lg">
                   <div className="flex items-center gap-2 mb-3">
                     <FileText className="w-5 h-5 text-indigo-600" />
                     <h4 className="font-semibold">Notas Fiscais ({faturamentos.length})</h4>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {faturamentos.map((fat, fi) => (
-                      <div key={fat.id || fi} className="flex items-center justify-between bg-white p-3 rounded-lg border">
-                        <div>
-                          <p className="font-medium">NF #{fat.numero_nf}</p>
-                          <p className="text-xs text-gray-500">
-                            {fat.data_emissao ? new Date(fat.data_emissao + 'T00:00:00').toLocaleDateString('pt-BR') : '-'} • {formatCurrency(fat.valor_total)}
-                          </p>
-                          {fat.transportadora && (
-                            <p className="text-xs text-gray-500 mt-1">
-                              <Truck className="w-3 h-3 inline mr-1" />
-                              {fat.transportadora} {fat.codigo_rastreio ? `• ${fat.codigo_rastreio}` : ''}
-                              {fat.status === 'enviado' && ' • Enviado'}
-                              {fat.status === 'entregue' && ' • Entregue'}
+                      <div key={fat.id || fi} className="bg-white p-3 rounded-lg border space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium">NF #{fat.numero_nf}</p>
+                            <p className="text-xs text-gray-500">
+                              {fat.data_emissao ? new Date(fat.data_emissao + 'T00:00:00').toLocaleDateString('pt-BR') : '-'} • {formatCurrency(fat.valor_total)}
                             </p>
-                          )}
+                            {fat.transportadora && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                <Truck className="w-3 h-3 inline mr-1" />
+                                {fat.transportadora} {fat.codigo_rastreio ? `• ${fat.codigo_rastreio}` : ''}
+                                {fat.status === 'enviado' && ' • Enviado'}
+                                {fat.status === 'entregue' && ' • Entregue'}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge className={
+                              fat.status === 'entregue' ? 'bg-green-100 text-green-700' :
+                              fat.status === 'enviado' ? 'bg-orange-100 text-orange-700' :
+                              'bg-indigo-100 text-indigo-700'
+                            }>
+                              {fat.status === 'entregue' ? 'Entregue' : fat.status === 'enviado' ? 'Enviado' : 'Faturado'}
+                            </Badge>
+                            {fat.nf_url && (
+                              <Button variant="outline" size="sm" onClick={() => window.open(fat.nf_url, '_blank')}>
+                                <Download className="w-4 h-4 mr-1" />
+                                Baixar NF
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge className={
-                            fat.status === 'entregue' ? 'bg-green-100 text-green-700' :
-                            fat.status === 'enviado' ? 'bg-orange-100 text-orange-700' :
-                            'bg-indigo-100 text-indigo-700'
-                          }>
-                            {fat.status === 'entregue' ? 'Entregue' : fat.status === 'enviado' ? 'Enviado' : 'Faturado'}
-                          </Badge>
-                          {fat.nf_url && (
-                            <Button variant="outline" size="sm" onClick={() => window.open(fat.nf_url, '_blank')}>
-                              <Download className="w-4 h-4 mr-1" />
-                              Baixar NF
+
+                        {/* Boleto info for this faturamento */}
+                        {fat.boleto_url ? (
+                          <div className="bg-blue-50 p-2 rounded border border-blue-200">
+                            <div className="flex items-center justify-between">
+                              <div className="text-xs text-blue-800">
+                                <span className="font-medium">Boleto anexado</span>
+                                {fat.boleto_data_upload && (
+                                  <span className="ml-2 text-blue-600">
+                                    ({formatDateTime(fat.boleto_data_upload)})
+                                  </span>
+                                )}
+                                {fat.qtd_parcelas > 0 && (
+                                  <span className="ml-2">• {fat.qtd_parcelas} parcela(s)</span>
+                                )}
+                              </div>
+                              <Button variant="outline" size="sm" onClick={() => window.open(fat.boleto_url, '_blank')}>
+                                <Download className="w-3 h-3 mr-1" />
+                                Boleto
+                              </Button>
+                            </div>
+                          </div>
+                        ) : canUpload ? (
+                          boletoFatId === fat.id ? (
+                            <div className="bg-blue-50 p-3 rounded border border-blue-200 space-y-3">
+                              <p className="text-sm font-semibold text-blue-800">Enviar Boleto para NF #{fat.numero_nf}</p>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <Label className="text-xs">Quantidade de Parcelas</Label>
+                                  <Select value={String(boletoFatQtdParcelas)} onValueChange={handleBoletoFatQtdChange}>
+                                    <SelectTrigger className="h-9">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
+                                        <SelectItem key={n} value={String(n)}>{n}x</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="flex items-end">
+                                  <div className="text-xs text-blue-800">
+                                    <p><strong>Valor NF:</strong> {formatCurrency(fat.valor_total)}</p>
+                                    <p><strong>Por parcela:</strong> {formatCurrency(fat.valor_total / boletoFatQtdParcelas)}</p>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-xs">Datas de Vencimento</Label>
+                                {boletoFatParcelas.map((parcela, index) => (
+                                  <div key={index} className="flex items-center gap-2 bg-white p-2 rounded border border-blue-200">
+                                    <Badge variant="outline" className="text-xs shrink-0">{index + 1}/{boletoFatQtdParcelas}</Badge>
+                                    <span className="text-xs text-gray-500 shrink-0">{formatCurrency(fat.valor_total / boletoFatQtdParcelas)}</span>
+                                    <Input
+                                      type="date"
+                                      value={parcela.dataVencimento}
+                                      onChange={(e) => handleBoletoFatDataChange(index, e.target.value)}
+                                      className="h-8 text-sm"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                              <div>
+                                <Label className="text-xs">Arquivo do Boleto *</Label>
+                                <Input
+                                  type="file"
+                                  accept=".pdf,.jpg,.jpeg,.png,.crm"
+                                  onChange={(e) => setBoletoFatFile(e.target.files[0])}
+                                />
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setBoletoFatId(null)}
+                                >
+                                  Cancelar
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleUploadBoletoFat(fat)}
+                                  disabled={uploadingBoletoFat || !boletoFatFile}
+                                  className="bg-blue-600 hover:bg-blue-700"
+                                >
+                                  <Upload className="w-4 h-4 mr-1" />
+                                  {uploadingBoletoFat ? 'Enviando...' : 'Enviar Boleto'}
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenBoletoFat(fat.id)}
+                              className="w-full text-blue-700 border-blue-300 hover:bg-blue-50"
+                            >
+                              <Upload className="w-4 h-4 mr-1" />
+                              Enviar Boleto para esta NF
                             </Button>
-                          )}
-                        </div>
+                          )
+                        ) : null}
                       </div>
                     ))}
                   </div>

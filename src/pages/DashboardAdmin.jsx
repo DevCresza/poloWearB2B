@@ -51,6 +51,9 @@ export default function DashboardAdmin() {
     pedidosFaturados: 0,
     qtdFaturada: 0,
     valorFaturado: 0,
+    valorQuebraTotal: 0,
+    saldoPendente: 0,
+    valorTotalPedidos: 0,
     clientesAtivos: 0,
     clientesBloqueados: 0,
     clientesNovos: 0,
@@ -172,19 +175,20 @@ export default function DashboardAdmin() {
     const pedidosParaFaturamento = pedidosList.filter(p =>
       FATURAMENTO_STATUSES.includes(p.status)
     );
-    const faturamentoTotal = pedidosParaFaturamento.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
+    // Use valor_faturado (real invoiced amount) instead of valor_final/valor_total
+    const faturamentoTotal = pedidosParaFaturamento.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
 
     const pedidosMes = pedidosParaFaturamento.filter(p => {
       const data = new Date(p.created_date);
       return data >= inicioMes && data <= fimMes;
     });
-    const faturamentoMes = pedidosMes.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
+    const faturamentoMes = pedidosMes.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
 
     const pedidosMesAnterior = pedidosParaFaturamento.filter(p => {
       const data = new Date(p.created_date);
       return data >= mesAnterior && data <= fimMesAnterior;
     });
-    const faturamentoMesAnterior = pedidosMesAnterior.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
+    const faturamentoMesAnterior = pedidosMesAnterior.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
 
     const crescimentoMensal = faturamentoMesAnterior > 0
       ? ((faturamentoMes - faturamentoMesAnterior) / faturamentoMesAnterior) * 100
@@ -203,10 +207,23 @@ export default function DashboardAdmin() {
     trintaDiasAtras.setDate(hoje.getDate() - 30);
     const clientesNovos = clientesList.filter(c => new Date(c.created_date) >= trintaDiasAtras).length;
 
-    // Faturado (KPI padronizado) - usa mesma lista de status
+    // Faturado (KPI padronizado) - usa valor_faturado real
     const pedidosFaturadosAll = pedidosList.filter(p => FATURAMENTO_STATUSES.includes(p.status));
     const qtdFaturada = pedidosFaturadosAll.length;
-    const valorFaturado = pedidosFaturadosAll.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
+    const valorFaturado = pedidosFaturadosAll.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
+
+    // Quebra total
+    const valorQuebraTotal = pedidosList.reduce((sum, p) => sum + (p.valor_quebra || 0), 0);
+
+    // Saldo Pendente: pedidos em_producao/parcialmente_faturado that still have uninvoiced value
+    const saldoPendente = pedidosList
+      .filter(p => ['em_producao', 'parcialmente_faturado'].includes(p.status))
+      .reduce((sum, p) => sum + ((p.valor_total || 0) - (p.valor_faturado || 0) - (p.valor_quebra || 0)), 0);
+
+    // Valor total dos pedidos (referência original)
+    const valorTotalPedidos = pedidosList
+      .filter(p => p.status !== 'cancelado')
+      .reduce((sum, p) => sum + (p.valor_total || 0), 0);
 
     // Financeiro
     const hojeZero = new Date();
@@ -234,7 +251,7 @@ export default function DashboardAdmin() {
       p.controla_estoque && p.estoque_atual_grades <= p.estoque_minimo_grades
     ).length;
 
-    // Ticket Médio
+    // Ticket Médio (baseado no valor faturado)
     const ticketMedio = pedidosParaFaturamento.length > 0
       ? faturamentoTotal / pedidosParaFaturamento.length
       : 0;
@@ -250,6 +267,9 @@ export default function DashboardAdmin() {
       pedidosFaturados,
       qtdFaturada,
       valorFaturado,
+      valorQuebraTotal,
+      saldoPendente,
+      valorTotalPedidos,
       clientesAtivos,
       clientesBloqueados,
       clientesNovos,
@@ -280,7 +300,7 @@ export default function DashboardAdmin() {
         return data >= inicioMes && data <= fimMes;
       });
 
-      const valor = pedidosMes.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
+      const valor = pedidosMes.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
 
       faturamentoMensal.push({
         mes: mes.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
@@ -311,7 +331,7 @@ export default function DashboardAdmin() {
       const pedidosFornecedor = pedidosList.filter(p =>
         p.fornecedor_id === fornecedor.id && statusFaturamento.includes(p.status)
       );
-      const valor = pedidosFornecedor.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
+      const valor = pedidosFornecedor.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
 
       return {
         nome: fornecedor.nome_marca || fornecedor.razao_social || fornecedor.nome_fantasia,
@@ -325,7 +345,7 @@ export default function DashboardAdmin() {
       const pedidosCliente = pedidosList.filter(p =>
         p.comprador_user_id === cliente.id && statusFaturamento.includes(p.status)
       );
-      const valor = pedidosCliente.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
+      const valor = pedidosCliente.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
 
       return {
         nome: cliente.empresa || cliente.razao_social || cliente.nome_marca || cliente.full_name,
@@ -539,13 +559,14 @@ export default function DashboardAdmin() {
             role="admin"
             kpis={{
               totalPedidos: stats.pedidosTotal,
-              valorTotal: stats.faturamentoTotal,
+              valorTotal: stats.valorTotalPedidos,
               valorFaturado: stats.valorFaturado,
               qtdFaturada: stats.qtdFaturada,
-              pendenteFaturamento: stats.faturamentoTotal - stats.valorFaturado,
+              pendenteFaturamento: stats.saldoPendente,
               qtdPendenteFaturamento: stats.pedidosTotal - stats.qtdFaturada,
               valorAVencer: stats.valorAVencer,
               valorVencido: stats.valorVencido,
+              valorQuebra: stats.valorQuebraTotal,
             }}
           />
 

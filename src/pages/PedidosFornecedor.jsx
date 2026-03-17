@@ -260,15 +260,19 @@ export default function PedidosFornecedor() {
     // Prevent double-clicks
     if (uploading) return;
 
-    if (!nfFile || !nfNumero || !nfDataEmissao) {
-      toast.info('Preencha o número, a data de emissão e envie a nota fiscal');
-      return;
-    }
-
     // Validate at least one item selected
     const itensSelecionados = itensFaturamento.filter(it => it._selected);
     if (itensSelecionados.length === 0) {
       toast.info('Selecione pelo menos um item para faturar ou marcar como quebra');
+      return;
+    }
+
+    // Check if this is quebra-only (all selected items are quebra)
+    const isQuebraOnly = itensSelecionados.every(it => it._isQuebra);
+
+    // NF is required only if there are items being invoiced (not quebra-only)
+    if (!isQuebraOnly && (!nfFile || !nfNumero || !nfDataEmissao)) {
+      toast.info('Preencha o número, a data de emissão e envie a nota fiscal');
       return;
     }
 
@@ -294,8 +298,11 @@ export default function PedidosFornecedor() {
 
     setUploading(true);
     try {
-      // Upload NF
-      const nfUpload = await UploadFile({ file: nfFile });
+      // Upload NF only if not quebra-only
+      let nfUpload = null;
+      if (!isQuebraOnly) {
+        nfUpload = await UploadFile({ file: nfFile });
+      }
 
       // Build faturamento items (only invoiced, not quebra)
       const itensFaturados = itensSelecionados
@@ -315,8 +322,8 @@ export default function PedidosFornecedor() {
         .filter(it => it._isQuebra)
         .reduce((sum, it) => sum + (it._qtdQuebra * (it.preco || 0)), 0);
 
-      // Create faturamento record (only if there are invoiced items)
-      if (itensFaturados.length > 0) {
+      // Create faturamento record (only if there are invoiced items — skip for quebra-only)
+      if (itensFaturados.length > 0 && nfUpload) {
         await Faturamento.create({
           pedido_id: selectedPedido.id,
           numero_nf: nfNumero,
@@ -324,7 +331,8 @@ export default function PedidosFornecedor() {
           nf_url: nfUpload.file_url,
           itens: itensFaturados,
           valor_total: valorFaturamento,
-          status: 'faturado'
+          status: 'faturado',
+          metodo_pagamento: metodoPagamento || selectedPedido.metodo_pagamento || null
         });
       }
 
@@ -390,15 +398,23 @@ export default function PedidosFornecedor() {
 
       // Update pedido - split into two updates for reliability
       // First: update status and financial values
-      await Pedido.update(selectedPedido.id, {
+      const pedidoUpdate = {
         status: novoStatus,
         valor_faturado: novoValorFaturado,
         valor_quebra: novoValorQuebra,
         valor_final: (selectedPedido.valor_total || 0) - novoValorQuebra,
-        nf_url: nfUpload.file_url,
-        nf_numero: nfNumero,
-        nf_data_upload: nfDataEmissao + 'T00:00:00'
-      });
+      };
+      // Only set NF fields if we have a NF (not quebra-only)
+      if (nfUpload) {
+        pedidoUpdate.nf_url = nfUpload.file_url;
+        pedidoUpdate.nf_numero = nfNumero;
+        pedidoUpdate.nf_data_upload = nfDataEmissao + 'T00:00:00';
+      }
+      // Save método de pagamento if changed
+      if (metodoPagamento) {
+        pedidoUpdate.metodo_pagamento = metodoPagamento;
+      }
+      await Pedido.update(selectedPedido.id, pedidoUpdate);
 
       // Second: update itens JSONB separately
       try {
@@ -424,29 +440,32 @@ export default function PedidosFornecedor() {
       try {
         const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
         if (cliente?.email) {
-          const tipoMsg = todosResolvidos ? 'Pedido Faturado' : 'Faturamento Parcial';
+          const tipoMsg = isQuebraOnly ? 'Quebra de Produção' : (todosResolvidos ? 'Pedido Faturado' : 'Faturamento Parcial');
+          const subject = isQuebraOnly
+            ? `Quebra de Produção - Pedido #${selectedPedido.id.slice(-8).toUpperCase()}`
+            : `${tipoMsg} - NF #${nfNumero}`;
           await SendEmail({
             from_name: 'POLO B2B',
             to: cliente.email,
-            subject: `${tipoMsg} - NF #${nfNumero}`,
+            subject,
             body: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <div style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); padding: 30px; text-align: center;">
                   <h1 style="color: white; margin: 0;">${tipoMsg}</h1>
                 </div>
                 <div style="padding: 30px; background: white;">
-                  <p>Seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> teve itens faturados!</p>
+                  <p>Seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi atualizado.</p>
                   <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                    <p><strong>Nota Fiscal:</strong> #${nfNumero}</p>
-                    <p><strong>Valor deste faturamento:</strong> ${formatCurrency(valorFaturamento)}</p>
+                    ${!isQuebraOnly ? `<p><strong>Nota Fiscal:</strong> #${nfNumero}</p>` : ''}
+                    ${valorFaturamento > 0 ? `<p><strong>Valor deste faturamento:</strong> ${formatCurrency(valorFaturamento)}</p>` : ''}
                     ${valorQuebra > 0 ? `<p style="color: #dc2626;"><strong>Quebra de produção:</strong> ${formatCurrency(valorQuebra)}</p>` : ''}
                     ${!todosResolvidos ? `<p><strong>Saldo pendente:</strong> ${formatCurrency((selectedPedido.valor_total || 0) - novoValorFaturado - novoValorQuebra)}</p>` : ''}
                   </div>
-                  <div style="text-align: center; margin-top: 30px;">
+                  ${nfUpload ? `<div style="text-align: center; margin-top: 30px;">
                     <a href="${nfUpload.file_url}" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px;">
                       Baixar Nota Fiscal
                     </a>
-                  </div>
+                  </div>` : ''}
                 </div>
               </div>
             `
@@ -456,7 +475,7 @@ export default function PedidosFornecedor() {
         console.warn('Erro ao enviar email de faturamento:', emailError);
       }
 
-      toast.success(todosResolvidos ? 'Pedido faturado por completo!' : 'Faturamento parcial registrado!');
+      toast.success(isQuebraOnly ? 'Quebra registrada com sucesso!' : (todosResolvidos ? 'Pedido faturado por completo!' : 'Faturamento parcial registrado!'));
       setShowFaturarModal(false);
       resetFaturarForm();
       loadPedidos();
@@ -1483,6 +1502,7 @@ export default function PedidosFornecedor() {
                                   setNfNumero('');
                                   setNfDataEmissao(new Date().toISOString().split('T')[0]);
                                   setNfFile(null);
+                                  setMetodoPagamento(pedido.metodo_pagamento || '');
                                   // Initialize items for partial invoicing
                                   let rawItens = pedido.itens || [];
                                   if (typeof rawItens === 'string') { try { rawItens = JSON.parse(rawItens); } catch(e) { rawItens = []; } }
@@ -1543,13 +1563,13 @@ export default function PedidosFornecedor() {
                             </Button>
                           )}
 
-                          {/* Botão para enviar boleto separadamente */}
-                          {['em_producao', 'faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && (
+                          {/* Botão para enviar boleto — abre modal detalhes na aba documentos */}
+                          {['em_producao', 'faturado', 'parcialmente_faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && (
                             <Button
                               variant="outline"
                               onClick={() => {
                                 setSelectedPedido(pedido);
-                                setShowBoletoModal(true);
+                                setShowDetailsModal(true);
                               }}
                               className={pedido.boleto_url ? 'border-green-300 text-green-700' : ''}
                             >
@@ -1694,6 +1714,38 @@ export default function PedidosFornecedor() {
               </div>
             )}
 
+            {/* Selecionar Todos / Limpar Seleção */}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const updated = itensFaturamento.map(item => {
+                    const saldo = item._saldo;
+                    if (saldo <= 0) return item;
+                    return { ...item, _selected: true, _qtdFaturar: saldo, _isQuebra: false, _qtdQuebra: 0 };
+                  });
+                  setItensFaturamento(updated);
+                }}
+              >
+                <CheckCircle className="w-4 h-4 mr-1" />
+                Selecionar Todos
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const updated = itensFaturamento.map(item => ({
+                    ...item, _selected: false, _qtdFaturar: 0, _isQuebra: false, _qtdQuebra: 0
+                  }));
+                  setItensFaturamento(updated);
+                }}
+              >
+                <XCircle className="w-4 h-4 mr-1" />
+                Limpar Seleção
+              </Button>
+            </div>
+
             {/* Tabela de itens */}
             <div className="border rounded-lg overflow-hidden">
               <table className="w-full text-sm">
@@ -1808,37 +1860,79 @@ export default function PedidosFornecedor() {
               </table>
             </div>
 
-            {/* NF fields */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="nfNumero">Número da NF *</Label>
-                <Input
-                  id="nfNumero"
-                  value={nfNumero}
-                  onChange={(e) => setNfNumero(e.target.value)}
-                  placeholder="Ex: 12345"
-                />
-              </div>
-              <div>
-                <Label htmlFor="nfDataEmissao">Data de Emissão *</Label>
-                <Input
-                  id="nfDataEmissao"
-                  type="date"
-                  value={nfDataEmissao}
-                  onChange={(e) => setNfDataEmissao(e.target.value)}
-                />
-              </div>
+            {/* Quebra-only alert */}
+            {(() => {
+              const selecionados = itensFaturamento.filter(it => it._selected);
+              const isQuebraOnly = selecionados.length > 0 && selecionados.every(it => it._isQuebra);
+              return isQuebraOnly ? (
+                <Alert className="border-amber-300 bg-amber-50">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  <AlertDescription className="text-amber-800">
+                    Somente quebra — NF não necessária. Apenas as quantidades de quebra serão atualizadas.
+                  </AlertDescription>
+                </Alert>
+              ) : null;
+            })()}
+
+            {/* Método de Pagamento */}
+            <div>
+              <Label>Método de Pagamento</Label>
+              <Select
+                value={metodoPagamento || selectedPedido?.metodo_pagamento || ''}
+                onValueChange={(value) => setMetodoPagamento(value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o método" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="boleto">Boleto</SelectItem>
+                  <SelectItem value="a_vista">À Vista</SelectItem>
+                  <SelectItem value="pix">PIX</SelectItem>
+                  <SelectItem value="transferencia">Transferência</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
-            <div>
-              <Label htmlFor="nfFile">Upload da Nota Fiscal *</Label>
-              <Input
-                id="nfFile"
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png,.crm"
-                onChange={(e) => setNfFile(e.target.files[0])}
-              />
-            </div>
+            {/* NF fields — hidden when quebra-only */}
+            {(() => {
+              const selecionados = itensFaturamento.filter(it => it._selected);
+              const isQuebraOnly = selecionados.length > 0 && selecionados.every(it => it._isQuebra);
+              if (isQuebraOnly) return null;
+              return (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="nfNumero">Número da NF *</Label>
+                      <Input
+                        id="nfNumero"
+                        value={nfNumero}
+                        onChange={(e) => setNfNumero(e.target.value)}
+                        placeholder="Ex: 12345"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="nfDataEmissao">Data de Emissão *</Label>
+                      <Input
+                        id="nfDataEmissao"
+                        type="date"
+                        value={nfDataEmissao}
+                        onChange={(e) => setNfDataEmissao(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="nfFile">Upload da Nota Fiscal *</Label>
+                    <Input
+                      id="nfFile"
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,.crm"
+                      onChange={(e) => setNfFile(e.target.files[0])}
+                    />
+                  </div>
+                </>
+              );
+            })()}
 
             {/* Real-time summary */}
             {selectedPedido && (() => {

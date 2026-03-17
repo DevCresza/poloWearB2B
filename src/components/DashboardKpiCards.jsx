@@ -1,6 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Package, DollarSign, FileText, TrendingUp, Calendar, AlertTriangle } from 'lucide-react';
+import { Package, DollarSign, FileText, TrendingUp, Calendar, AlertTriangle, XCircle } from 'lucide-react';
 import { formatCurrency } from '@/utils/exportUtils';
 
 const CARD_CONFIG = [
@@ -21,7 +21,7 @@ const CARD_CONFIG = [
     badgeClass: 'bg-green-100 text-green-800',
     badgeLabel: 'Vendas',
     labelCliente: 'Valor Total Comprado',
-    labelOutros: 'Valor Total Vendido',
+    labelOutros: 'Valor dos Pedidos',
     format: 'currency',
   },
   {
@@ -32,7 +32,7 @@ const CARD_CONFIG = [
     badgeClass: 'bg-indigo-100 text-indigo-800',
     badgeLabel: 'Faturado',
     labelCliente: 'Valor Faturado',
-    labelOutros: 'Valor Faturado',
+    labelOutros: 'Faturamento Real',
     format: 'currency',
     subFormat: 'pedidos',
   },
@@ -44,9 +44,20 @@ const CARD_CONFIG = [
     badgeClass: 'bg-purple-100 text-purple-800',
     badgeLabel: 'Pendente',
     labelCliente: 'Pendente de Faturamento',
-    labelOutros: 'Pendente de Faturamento',
+    labelOutros: 'Saldo Pendente',
     format: 'currency',
     subFormat: 'pedidos',
+  },
+  {
+    key: 'valorQuebra',
+    icon: XCircle,
+    iconColor: 'text-orange-600',
+    badgeClass: 'bg-orange-100 text-orange-800',
+    badgeLabel: 'Quebra',
+    labelCliente: 'Quebra de Produção',
+    labelOutros: 'Quebra Total',
+    format: 'currency',
+    adminOnly: true,
   },
   {
     key: 'valorAVencer',
@@ -77,10 +88,16 @@ function formatValue(value, format) {
 
 export default function DashboardKpiCards({ role, kpis }) {
   const isCliente = role === 'cliente';
+  const isAdmin = role === 'admin';
+
+  const visibleCards = CARD_CONFIG.filter(card => {
+    if (card.adminOnly && !isAdmin) return false;
+    return true;
+  });
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-      {CARD_CONFIG.map((card) => {
+    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+      {visibleCards.map((card) => {
         const Icon = card.icon;
         const label = isCliente ? card.labelCliente : card.labelOutros;
         const value = kpis[card.key] ?? 0;
