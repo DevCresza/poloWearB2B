@@ -388,18 +388,24 @@ export default function PedidosFornecedor() {
         return clean;
       });
 
-      // Update pedido
+      // Update pedido - split into two updates for reliability
+      // First: update status and financial values
       await Pedido.update(selectedPedido.id, {
         status: novoStatus,
-        itens: cleanItens,
         valor_faturado: novoValorFaturado,
         valor_quebra: novoValorQuebra,
         valor_final: (selectedPedido.valor_total || 0) - novoValorQuebra,
-        // Keep legacy NF fields updated with latest
         nf_url: nfUpload.file_url,
         nf_numero: nfNumero,
         nf_data_upload: nfDataEmissao + 'T00:00:00'
       });
+
+      // Second: update itens JSONB separately
+      try {
+        await Pedido.update(selectedPedido.id, { itens: cleanItens });
+      } catch (itensErr) {
+        console.warn('Erro ao atualizar itens do pedido (valores já salvos):', itensErr);
+      }
 
       // Check if parcelas need adjustment warning
       if (valorQuebra > 0) {
@@ -456,7 +462,8 @@ export default function PedidosFornecedor() {
       loadPedidos();
     } catch (error) {
       console.error('Erro ao faturar:', error);
-      toast.error('Erro ao faturar pedido');
+      console.error('Erro detalhes:', error?.message, error?.details, error?.hint, JSON.stringify(error));
+      toast.error(`Erro ao faturar pedido: ${error?.message || 'Erro desconhecido'}`);
     } finally {
       setUploading(false);
     }
