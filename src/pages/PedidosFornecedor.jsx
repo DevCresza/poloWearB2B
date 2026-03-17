@@ -257,6 +257,9 @@ export default function PedidosFornecedor() {
   };
 
   const handleFaturar = async () => {
+    // Prevent double-clicks
+    if (uploading) return;
+
     if (!nfFile || !nfNumero || !nfDataEmissao) {
       toast.info('Preencha o número, a data de emissão e envie a nota fiscal');
       return;
