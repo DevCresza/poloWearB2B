@@ -23,10 +23,10 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Switch } from '@/components/ui/switch';
 import {
   Package, Clock, CheckCircle, XCircle, Calendar, DollarSign,
-  FileText, Upload, Download, Filter, Eye, Edit, Truck, AlertTriangle
+  FileText, Upload, Download, Filter, Eye, Edit, Truck, AlertTriangle, BarChart3
 } from 'lucide-react';
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
-import { formatCurrency, exportToPDF, formatDate } from '@/utils/exportUtils';
+import { formatCurrency, exportToPDF, exportToCSV, formatDate } from '@/utils/exportUtils';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
 
@@ -53,6 +53,7 @@ export default function PedidosFornecedor() {
   const [showFaturarModal, setShowFaturarModal] = useState(false);
   const [showEnvioModal, setShowEnvioModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [detailsDefaultTab, setDetailsDefaultTab] = useState('itens');
   const [showBoletoModal, setShowBoletoModal] = useState(false);
   const [showAtualizarNFModal, setShowAtualizarNFModal] = useState(false);
   const [showCancelarModal, setShowCancelarModal] = useState(false);
@@ -931,6 +932,20 @@ export default function PedidosFornecedor() {
         motivo_recusa: motivoCancelamento
       });
 
+      // Cancelar todos os títulos/parcelas pendentes na carteira
+      try {
+        const titulosDoPedido = await Carteira.filter({ pedido_id: selectedPedido.id });
+        const titulosPendentes = (titulosDoPedido || []).filter(t => t.status === 'pendente');
+        for (const titulo of titulosPendentes) {
+          await Carteira.update(titulo.id, { status: 'cancelado' });
+        }
+        if (titulosPendentes.length > 0) {
+          toast.info(`${titulosPendentes.length} parcela(s) cancelada(s) na carteira`);
+        }
+      } catch (carteiraErr) {
+        console.warn('Erro ao cancelar títulos da carteira:', carteiraErr);
+      }
+
       // Notificar cliente
       const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
       await SendEmail({
@@ -998,6 +1013,84 @@ export default function PedidosFornecedor() {
     }));
 
     exportToPDF(data, columns, 'Relatório de Pedidos', `pedidos-${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
+  // Relatório de Produção — agrega quantidade total por produto/cor
+  const handleExportRelatorioProducao = () => {
+    // Pedidos em produção ou aprovados (ainda não faturados por completo)
+    const statusProducao = ['aprovado', 'em_producao', 'parcialmente_faturado'];
+    let pedidosParaRelatorio = pedidos.filter(p => statusProducao.includes(p.status));
+
+    // Se fornecedor, filtrar somente seus pedidos
+    if (user?.role !== 'admin' && fornecedorAtual) {
+      pedidosParaRelatorio = pedidosParaRelatorio.filter(p => p.fornecedor_id === fornecedorAtual.id);
+    }
+
+    if (pedidosParaRelatorio.length === 0) {
+      toast.info('Nenhum pedido em produção para gerar relatório');
+      return;
+    }
+
+    // Agregar itens por produto + cor
+    const agregado = {};
+    pedidosParaRelatorio.forEach(pedido => {
+      let itens = pedido.itens || [];
+      if (typeof itens === 'string') {
+        try { itens = JSON.parse(itens); } catch (e) { itens = []; }
+      }
+
+      // Mês de entrega = data_prevista_entrega ou mês de criação
+      const mesEntrega = pedido.data_prevista_entrega
+        ? new Date(pedido.data_prevista_entrega + 'T00:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+        : new Date(pedido.created_date).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+      itens.forEach(item => {
+        const cor = item.cor_selecionada?.cor_nome || 'Sem cor';
+        const key = `${item.produto_id || item.nome}_${cor}_${mesEntrega}`;
+
+        if (!agregado[key]) {
+          agregado[key] = {
+            nome: item.nome || '',
+            referencia_fornecedor: item.referencia_fornecedor || item.referencia || '',
+            referencia_linx: item.referencia_linx || item.referencia_polo || '',
+            cor: cor,
+            preco_unitario: item.preco || 0,
+            mes_entrega: mesEntrega,
+            qtd_total: 0
+          };
+        }
+        // Soma quantidade ainda pendente (total - já faturado - quebra)
+        const qtdPendente = (item.quantidade || 0) - (item.qtd_faturada || 0) - (item.qtd_quebra || 0);
+        agregado[key].qtd_total += Math.max(0, qtdPendente);
+      });
+    });
+
+    const data = Object.values(agregado)
+      .filter(r => r.qtd_total > 0)
+      .sort((a, b) => a.nome.localeCompare(b.nome) || a.cor.localeCompare(b.cor));
+
+    if (data.length === 0) {
+      toast.info('Nenhum item pendente de produção');
+      return;
+    }
+
+    const columns = [
+      { key: 'nome', label: 'Produto' },
+      { key: 'referencia_fornecedor', label: 'Ref. Fornecedor' },
+      { key: 'referencia_linx', label: 'Ref. Linx' },
+      { key: 'cor', label: 'Cor / Variante' },
+      { key: 'preco_unitario_fmt', label: 'Preço Unit.' },
+      { key: 'mes_entrega', label: 'Mês Entrega' },
+      { key: 'qtd_total', label: 'Qtd. Total' }
+    ];
+
+    const dataFormatted = data.map(r => ({
+      ...r,
+      preco_unitario_fmt: formatCurrency(r.preco_unitario)
+    }));
+
+    exportToCSV(dataFormatted, columns, `relatorio-producao-${new Date().toISOString().split('T')[0]}.csv`);
+    toast.success(`Relatório gerado com ${data.length} produto(s)`);
   };
 
   const resetFaturarForm = () => {
@@ -1184,10 +1277,16 @@ export default function PedidosFornecedor() {
           </h1>
           <p className="text-gray-600">Gerencie pedidos recebidos e faturamento</p>
         </div>
-        <Button onClick={handleExportPDF} variant="outline">
-          <Download className="w-4 h-4 mr-2" />
-          Exportar PDF
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={handleExportRelatorioProducao} variant="outline" className="border-indigo-300 text-indigo-700 hover:bg-indigo-50">
+            <BarChart3 className="w-4 h-4 mr-2" />
+            Relatório Produção
+          </Button>
+          <Button onClick={handleExportPDF} variant="outline">
+            <Download className="w-4 h-4 mr-2" />
+            Exportar PDF
+          </Button>
+        </div>
       </div>
 
       {/* Alertas de Pedidos Urgentes */}
@@ -1569,6 +1668,7 @@ export default function PedidosFornecedor() {
                               variant="outline"
                               onClick={() => {
                                 setSelectedPedido(pedido);
+                                setDetailsDefaultTab('documentos');
                                 setShowDetailsModal(true);
                               }}
                               className={pedido.boleto_url ? 'border-green-300 text-green-700' : ''}
@@ -1596,6 +1696,7 @@ export default function PedidosFornecedor() {
                         variant="outline"
                         onClick={() => {
                           setSelectedPedido(pedido);
+                          setDetailsDefaultTab('itens');
                           setShowDetailsModal(true);
                         }}
                       >
@@ -2168,11 +2269,13 @@ export default function PedidosFornecedor() {
           onClose={() => {
             setShowDetailsModal(false);
             setSelectedPedido(null);
+            setDetailsDefaultTab('itens');
           }}
           onUpdate={loadPedidos}
           currentUser={user}
           userMap={new Map(clientes.map(c => [c.id, c.full_name || c.empresa || c.razao_social || c.nome_marca]))}
           fornecedorMap={new Map(fornecedores.map(f => [f.id, f.razao_social || f.nome_fantasia]))}
+          defaultTab={detailsDefaultTab}
         />
       )}
 

@@ -56,6 +56,7 @@ export default function MeusPedidos() {
   const [tipoConfirmacao, setTipoConfirmacao] = useState('');
   const [pedidoConfirmacao, setPedidoConfirmacao] = useState(null);
   const [dataConfirmacao, setDataConfirmacao] = useState('');
+  const [observacaoRecebimento, setObservacaoRecebimento] = useState('');
 
   useEffect(() => {
     if (lojasLoading) return;
@@ -213,6 +214,9 @@ export default function MeusPedidos() {
       } else if (tipoConfirmacao === 'recebimento') {
         updateData.cliente_confirmou_recebimento = true;
         updateData.data_confirmacao_recebimento = dataConfirmacao;
+        if (observacaoRecebimento.trim()) {
+          updateData.observacao_recebimento = observacaoRecebimento.trim();
+        }
 
         // Transição de status: em_transporte → pendente_pagamento ou finalizado
         if (pedidoConfirmacao.status === 'em_transporte') {
@@ -231,6 +235,7 @@ export default function MeusPedidos() {
       setPedidoConfirmacao(null);
       setTipoConfirmacao('');
       setDataConfirmacao('');
+      setObservacaoRecebimento('');
       loadData();
 
       if (showDetailsModal) {
@@ -1144,6 +1149,24 @@ export default function MeusPedidos() {
               </p>
             </div>
 
+            {/* Campo de observação — só aparece para recebimento de produto */}
+            {tipoConfirmacao === 'recebimento' && (
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Observação (opcional)
+                </label>
+                <textarea
+                  value={observacaoRecebimento}
+                  onChange={(e) => setObservacaoRecebimento(e.target.value)}
+                  className="w-full rounded-xl border border-gray-300 p-3 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ex: Produto recebido com defeito na embalagem, peça com risco no tecido..."
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Use este campo para relatar problemas como defeitos, peças faltando ou avarias.
+                </p>
+              </div>
+            )}
+
             <Alert>
               <AlertDescription className="text-sm">
                 Esta data serve como registro oficial de recebimento. Preencha com a data correta para evitar divergências.
@@ -1158,6 +1181,7 @@ export default function MeusPedidos() {
                   setPedidoConfirmacao(null);
                   setTipoConfirmacao('');
                   setDataConfirmacao('');
+                  setObservacaoRecebimento('');
                 }}
                 className="rounded-xl"
               >

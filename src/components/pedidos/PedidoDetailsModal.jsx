@@ -26,7 +26,7 @@ import { Store } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentUser, userMap, fornecedorMap }) {
+export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentUser, userMap, fornecedorMap, defaultTab = 'itens' }) {
   const [lojaInfo, setLojaInfo] = useState(null);
   const [confirmando, setConfirmando] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -143,9 +143,13 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   const handleBoletoFatQtdChange = (value) => {
     const num = parseInt(value) || 1;
     setBoletoFatQtdParcelas(num);
-    const novas = Array.from({ length: num }, (_, i) => ({
-      dataVencimento: boletoFatParcelas[i]?.dataVencimento || ''
-    }));
+    const hoje = new Date();
+    const novas = Array.from({ length: num }, (_, i) => {
+      if (boletoFatParcelas[i]?.dataVencimento) return boletoFatParcelas[i];
+      const data = new Date(hoje);
+      data.setDate(data.getDate() + 30 * (i + 1));
+      return { dataVencimento: data.toISOString().split('T')[0] };
+    });
     setBoletoFatParcelas(novas);
   };
 
@@ -159,7 +163,9 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     setBoletoFatId(fatId);
     setBoletoFatFile(null);
     setBoletoFatQtdParcelas(1);
-    setBoletoFatParcelas([{ dataVencimento: '' }]);
+    const data = new Date();
+    data.setDate(data.getDate() + 30);
+    setBoletoFatParcelas([{ dataVencimento: data.toISOString().split('T')[0] }]);
   };
 
   const handleUploadBoletoFat = async (fat) => {
@@ -201,7 +207,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
               ? `Parcela ${i + 1}/${boletoFatQtdParcelas} - NF #${fat.numero_nf}`
               : `Boleto - NF #${fat.numero_nf}`,
             loja_id: pedido.loja_id || null,
-            comprador_user_id: pedido.comprador_user_id || null,
+            cliente_user_id: pedido.comprador_user_id || null,
             fornecedor_id: pedido.fornecedor_id || null
           });
         }
@@ -287,9 +293,13 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   const handleQtdParcelasBoletoChange = (value) => {
     const num = parseInt(value);
     setQtdParcelasBoleto(num);
-    const novasParcelas = Array.from({ length: num }, (_, i) => ({
-      dataVencimento: parcelasBoletoConfig[i]?.dataVencimento || ''
-    }));
+    const hoje = new Date();
+    const novasParcelas = Array.from({ length: num }, (_, i) => {
+      if (parcelasBoletoConfig[i]?.dataVencimento) return parcelasBoletoConfig[i];
+      const data = new Date(hoje);
+      data.setDate(data.getDate() + 30 * (i + 1));
+      return { dataVencimento: data.toISOString().split('T')[0] };
+    });
     setParcelasBoletoConfig(novasParcelas);
   };
 
@@ -1273,7 +1283,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
             </div>
           )}
 
-          <Tabs defaultValue="itens" className="w-full">
+          <Tabs defaultValue={defaultTab} className="w-full">
             <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="itens">Itens do Pedido</TabsTrigger>
               <TabsTrigger value="entrega">Entrega</TabsTrigger>
@@ -1506,6 +1516,74 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                     <span className="font-semibold">Data Prevista de Entrega:</span>
                     <span>{new Date(pedido.data_prevista_entrega + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
                   </div>
+                  {/* Fornecedor/Admin pode alterar data prevista */}
+                  {canUpload && ['em_producao', 'faturado', 'parcialmente_faturado'].includes(pedido.status) && (
+                    <div className="mt-3 pt-3 border-t border-blue-200 flex items-end gap-3">
+                      <div className="flex-1">
+                        <Label className="text-xs text-blue-700">Alterar Data Prevista</Label>
+                        <Input
+                          type="date"
+                          defaultValue={pedido.data_prevista_entrega}
+                          id="nova_data_prevista"
+                          className="h-9"
+                          min={new Date().toISOString().split('T')[0]}
+                        />
+                      </div>
+                      <Button
+                        size="sm"
+                        className="bg-blue-600 hover:bg-blue-700"
+                        onClick={async () => {
+                          const novaData = document.getElementById('nova_data_prevista').value;
+                          if (!novaData) return;
+                          try {
+                            await Pedido.update(pedido.id, { data_prevista_entrega: novaData });
+                            toast.success('Data prevista atualizada!');
+                            if (onUpdate) onUpdate();
+                          } catch (e) {
+                            toast.error('Erro ao atualizar data');
+                          }
+                        }}
+                      >
+                        Salvar
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {/* Se não tem data prevista mas fornecedor pode definir */}
+              {!pedido.data_prevista_entrega && canUpload && ['em_producao', 'faturado', 'parcialmente_faturado'].includes(pedido.status) && (
+                <div className="p-4 bg-blue-50 rounded-lg border-2 border-dashed border-blue-300">
+                  <div className="flex items-end gap-3">
+                    <div className="flex-1">
+                      <Label className="text-xs text-blue-700 flex items-center gap-1">
+                        <Calendar className="w-4 h-4" />
+                        Definir Data Prevista de Entrega
+                      </Label>
+                      <Input
+                        type="date"
+                        id="nova_data_prevista"
+                        className="h-9 mt-1"
+                        min={new Date().toISOString().split('T')[0]}
+                      />
+                    </div>
+                    <Button
+                      size="sm"
+                      className="bg-blue-600 hover:bg-blue-700"
+                      onClick={async () => {
+                        const novaData = document.getElementById('nova_data_prevista').value;
+                        if (!novaData) { toast.info('Selecione uma data'); return; }
+                        try {
+                          await Pedido.update(pedido.id, { data_prevista_entrega: novaData });
+                          toast.success('Data prevista definida!');
+                          if (onUpdate) onUpdate();
+                        } catch (e) {
+                          toast.error('Erro ao salvar data');
+                        }
+                      }}
+                    >
+                      Salvar
+                    </Button>
+                  </div>
                 </div>
               )}
 
@@ -1697,6 +1775,16 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                         ) : (
                           <span className="text-blue-600">Aguardando recebimento</span>
                         )}
+                      </div>
+                    )}
+                    {/* Observação de recebimento do cliente */}
+                    {pedido.observacao_recebimento && (
+                      <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-xs font-semibold text-amber-800 mb-1 flex items-center gap-1">
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          Observação do cliente no recebimento:
+                        </p>
+                        <p className="text-sm text-amber-900">{pedido.observacao_recebimento}</p>
                       </div>
                     )}
                   </div>

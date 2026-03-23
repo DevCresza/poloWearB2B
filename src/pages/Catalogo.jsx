@@ -13,9 +13,10 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
-import { 
+import {
   Search, ShoppingCart, Eye, Package, Calendar, Star, X,
-  Plus, Minus, Check, AlertTriangle, Filter, SlidersHorizontal, Sparkles, Truck, Clock
+  Plus, Minus, Check, AlertTriangle, Filter, SlidersHorizontal, Sparkles, Truck, Clock,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { formatCurrency } from '@/utils/exportUtils';
@@ -396,19 +397,25 @@ export default function Catalogo() {
     return product.estoque_atual_grades || 0;
   };
 
+  // Estado para rastrear índice de foto atual por produto
+  const [cardFotoIndex, setCardFotoIndex] = useState({});
+
+  // Helper para parsear todas as fotos do produto
+  const getTodasFotos = (produto) => {
+    try {
+      if (!produto.fotos) return [];
+      const fotos = typeof produto.fotos === 'string' ? JSON.parse(produto.fotos) : produto.fotos;
+      if (!Array.isArray(fotos) || fotos.length === 0) return [];
+      return fotos.map(f => typeof f === 'string' ? f : f?.url || null).filter(Boolean);
+    } catch (e) {
+      return [];
+    }
+  };
+
   // Helper para parsear fotos do produto (vem como JSON string do banco)
   const getPrimeiraFoto = (produto) => {
-    try {
-      if (!produto.fotos) return null;
-      const fotos = typeof produto.fotos === 'string' ? JSON.parse(produto.fotos) : produto.fotos;
-      if (!fotos || fotos.length === 0) return null;
-
-      // Suporta fotos como strings ou objetos com metadados
-      const primeiraFoto = fotos[0];
-      return typeof primeiraFoto === 'string' ? primeiraFoto : primeiraFoto?.url || null;
-    } catch (e) {
-      return null;
-    }
+    const fotos = getTodasFotos(produto);
+    return fotos.length > 0 ? fotos[0] : null;
   };
 
   const isLancamento = (produto) => {
@@ -658,20 +665,59 @@ export default function Catalogo() {
             className="aspect-[3/4] bg-gray-100 rounded-xl overflow-hidden mb-4 relative cursor-pointer"
             onClick={() => openProductDetails(produto)}
           >
-            {getPrimeiraFoto(produto) ? (
-              <img
-                src={getPrimeiraFoto(produto)}
-                alt={produto.nome}
-                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                onError={(e) => {
-                  e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23f0f0f0" width="200" height="200"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="14" fill="%23999"%3ESem imagem%3C/text%3E%3C/svg%3E';
-                }}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <Package className="w-16 h-16 text-gray-300" />
-              </div>
-            )}
+            {(() => {
+              const fotos = getTodasFotos(produto);
+              const currentIdx = cardFotoIndex[produto.id] || 0;
+              const fotoAtual = fotos.length > 0 ? fotos[currentIdx % fotos.length] : null;
+              return fotoAtual ? (
+                <>
+                  <img
+                    src={fotoAtual}
+                    alt={produto.nome}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    onError={(e) => {
+                      e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23f0f0f0" width="200" height="200"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="14" fill="%23999"%3ESem imagem%3C/text%3E%3C/svg%3E';
+                    }}
+                  />
+                  {/* Setas de navegação — só aparece se tiver mais de 1 foto */}
+                  {fotos.length > 1 && (
+                    <>
+                      <button
+                        className="absolute left-1 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCardFotoIndex(prev => ({ ...prev, [produto.id]: (currentIdx - 1 + fotos.length) % fotos.length }));
+                        }}
+                      >
+                        <ChevronLeft className="w-4 h-4 text-gray-700" />
+                      </button>
+                      <button
+                        className="absolute right-1 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCardFotoIndex(prev => ({ ...prev, [produto.id]: (currentIdx + 1) % fotos.length }));
+                        }}
+                      >
+                        <ChevronRight className="w-4 h-4 text-gray-700" />
+                      </button>
+                      {/* Indicador de posição */}
+                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1 z-10">
+                        {fotos.map((_, i) => (
+                          <span
+                            key={i}
+                            className={`w-1.5 h-1.5 rounded-full transition-all ${i === currentIdx % fotos.length ? 'bg-white w-3' : 'bg-white/50'}`}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <Package className="w-16 h-16 text-gray-300" />
+                </div>
+              );
+            })()}
             
             {/* Badges no canto superior */}
             <div className="absolute top-2 left-2 right-2 flex flex-wrap gap-1.5">
