@@ -55,6 +55,14 @@ export default function PedidosFornecedor() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [detailsDefaultTab, setDetailsDefaultTab] = useState('itens');
   const [showBoletoModal, setShowBoletoModal] = useState(false);
+  const [showBoletoNFModal, setShowBoletoNFModal] = useState(false);
+  const [boletoNFList, setBoletoNFList] = useState([]);
+  const [boletoNFSelected, setBoletoNFSelected] = useState(null);
+  const [boletoNFFile, setBoletoNFFile] = useState(null);
+  const [boletoNFQtdParcelas, setBoletoNFQtdParcelas] = useState(1);
+  const [boletoNFParcelas, setBoletoNFParcelas] = useState([{ dataVencimento: '' }]);
+  const [boletoNFUploading, setBoletoNFUploading] = useState(false);
+  const [boletoNFLoading, setBoletoNFLoading] = useState(false);
   const [showAtualizarNFModal, setShowAtualizarNFModal] = useState(false);
   const [showCancelarModal, setShowCancelarModal] = useState(false);
   
@@ -1105,6 +1113,98 @@ export default function PedidosFornecedor() {
     setValorFreteFOB('');
   };
 
+  // --- Boleto por NF (modal dedicado) ---
+  const handleOpenBoletoNFModal = async (pedido) => {
+    setSelectedPedido(pedido);
+    setBoletoNFSelected(null);
+    setBoletoNFFile(null);
+    setBoletoNFQtdParcelas(1);
+    const hoje = new Date();
+    hoje.setDate(hoje.getDate() + 30);
+    setBoletoNFParcelas([{ dataVencimento: hoje.toISOString().split('T')[0] }]);
+    setBoletoNFLoading(true);
+    setShowBoletoNFModal(true);
+    try {
+      const list = await Faturamento.filter({ pedido_id: pedido.id }, '-created_date');
+      setBoletoNFList(list || []);
+    } catch (e) {
+      toast.error('Erro ao carregar notas fiscais');
+      setBoletoNFList([]);
+    } finally {
+      setBoletoNFLoading(false);
+    }
+  };
+
+  const handleBoletoNFQtdChange = (value) => {
+    const num = parseInt(value) || 1;
+    setBoletoNFQtdParcelas(num);
+    const hoje = new Date();
+    const novas = Array.from({ length: num }, (_, i) => {
+      if (boletoNFParcelas[i]?.dataVencimento) return boletoNFParcelas[i];
+      const data = new Date(hoje);
+      data.setDate(data.getDate() + 30 * (i + 1));
+      return { dataVencimento: data.toISOString().split('T')[0] };
+    });
+    setBoletoNFParcelas(novas);
+  };
+
+  const handleBoletoNFDataChange = (index, value) => {
+    const novas = [...boletoNFParcelas];
+    novas[index] = { ...novas[index], dataVencimento: value };
+    setBoletoNFParcelas(novas);
+  };
+
+  const handleEnviarBoletoNF = async () => {
+    if (!boletoNFSelected) { toast.info('Selecione uma Nota Fiscal'); return; }
+    if (!boletoNFFile) { toast.info('Selecione o arquivo do boleto'); return; }
+    const temDatas = boletoNFParcelas.some(p => p.dataVencimento);
+    if (temDatas && boletoNFParcelas.some(p => !p.dataVencimento)) {
+      toast.info('Preencha todas as datas de vencimento');
+      return;
+    }
+    setBoletoNFUploading(true);
+    try {
+      const result = await UploadFile({ file: boletoNFFile });
+      await Faturamento.update(boletoNFSelected.id, {
+        boleto_url: result.file_url,
+        boleto_data_upload: new Date().toISOString(),
+        qtd_parcelas: boletoNFQtdParcelas
+      });
+      // Criar parcelas na carteira
+      if (temDatas) {
+        const valorBase = boletoNFSelected.valor_total || 0;
+        const valorParcela = valorBase / boletoNFQtdParcelas;
+        for (let i = 0; i < boletoNFQtdParcelas; i++) {
+          await Carteira.create({
+            pedido_id: selectedPedido.id,
+            faturamento_id: boletoNFSelected.id,
+            tipo: 'a_receber',
+            status: 'pendente',
+            valor: valorParcela,
+            data_vencimento: boletoNFParcelas[i].dataVencimento,
+            parcela_numero: i + 1,
+            total_parcelas: boletoNFQtdParcelas,
+            boleto_url: result.file_url,
+            descricao: boletoNFQtdParcelas > 1
+              ? `Parcela ${i + 1}/${boletoNFQtdParcelas} - NF #${boletoNFSelected.numero_nf}`
+              : `Boleto - NF #${boletoNFSelected.numero_nf}`,
+            loja_id: selectedPedido.loja_id || null,
+            cliente_user_id: selectedPedido.comprador_user_id || null,
+            fornecedor_id: selectedPedido.fornecedor_id || null
+          });
+        }
+      }
+      toast.success(`Boleto enviado para NF #${boletoNFSelected.numero_nf}!`);
+      setShowBoletoNFModal(false);
+      loadPedidos();
+    } catch (error) {
+      console.error('Erro ao enviar boleto:', error);
+      toast.error('Erro ao enviar boleto: ' + (error?.message || 'Erro desconhecido'));
+    } finally {
+      setBoletoNFUploading(false);
+    }
+  };
+
   // Função para atualizar quantidade de parcelas
   const handleQtdParcelasChange = (qtd) => {
     const novaQtd = parseInt(qtd) || 1;
@@ -1662,15 +1762,11 @@ export default function PedidosFornecedor() {
                             </Button>
                           )}
 
-                          {/* Botão para enviar boleto — abre modal detalhes na aba documentos */}
-                          {['em_producao', 'faturado', 'parcialmente_faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && (
+                          {/* Botão para enviar boleto — abre modal dedicado com seleção de NF */}
+                          {['faturado', 'parcialmente_faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && (
                             <Button
                               variant="outline"
-                              onClick={() => {
-                                setSelectedPedido(pedido);
-                                setDetailsDefaultTab('documentos');
-                                setShowDetailsModal(true);
-                              }}
+                              onClick={() => handleOpenBoletoNFModal(pedido)}
                               className={pedido.boleto_url ? 'border-green-300 text-green-700' : ''}
                             >
                               <Upload className="w-4 h-4 mr-2" />
@@ -2258,6 +2354,141 @@ export default function PedidosFornecedor() {
                 Confirmar Envio
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Boleto por NF (dedicado) */}
+      <Dialog open={showBoletoNFModal} onOpenChange={setShowBoletoNFModal}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="w-5 h-5 text-blue-600" />
+              Enviar Boleto
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {selectedPedido && (
+              <div className="bg-gray-50 p-3 rounded-lg border text-sm">
+                <p>Pedido <strong>#{selectedPedido.id?.slice(-8).toUpperCase()}</strong></p>
+                <p className="text-gray-500">Valor: {formatCurrency(selectedPedido.valor_total || 0)}</p>
+              </div>
+            )}
+
+            {/* Passo 1: Selecionar NF */}
+            <div>
+              <Label className="text-sm font-semibold">1. Selecione a Nota Fiscal</Label>
+              {boletoNFLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                </div>
+              ) : boletoNFList.length === 0 ? (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg mt-2">
+                  <p className="text-sm text-amber-800">Nenhuma NF encontrada para este pedido. Fature o pedido primeiro.</p>
+                </div>
+              ) : (
+                <div className="space-y-2 mt-2">
+                  {boletoNFList.map((fat) => (
+                    <div
+                      key={fat.id}
+                      onClick={() => setBoletoNFSelected(fat)}
+                      className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                        boletoNFSelected?.id === fat.id
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">NF #{fat.numero_nf}</p>
+                          <p className="text-xs text-gray-500">
+                            {fat.data_emissao ? new Date(fat.data_emissao + 'T00:00:00').toLocaleDateString('pt-BR') : '-'} • {formatCurrency(fat.valor_total)}
+                          </p>
+                        </div>
+                        <div>
+                          {fat.boleto_url ? (
+                            <Badge className="bg-green-100 text-green-700 text-xs">Boleto enviado</Badge>
+                          ) : (
+                            <Badge className="bg-gray-100 text-gray-600 text-xs">Sem boleto</Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Passo 2: Configurar parcelas e upload — só aparece após selecionar NF */}
+            {boletoNFSelected && (
+              <>
+                <div className="border-t pt-4">
+                  <Label className="text-sm font-semibold">2. Configure as parcelas</Label>
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div>
+                      <Label className="text-xs">Quantidade de Parcelas</Label>
+                      <Select value={String(boletoNFQtdParcelas)} onValueChange={handleBoletoNFQtdChange}>
+                        <SelectTrigger className="h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
+                            <SelectItem key={n} value={String(n)}>{n}x</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-end">
+                      <div className="text-xs text-blue-800">
+                        <p><strong>Valor NF:</strong> {formatCurrency(boletoNFSelected.valor_total)}</p>
+                        <p><strong>Por parcela:</strong> {formatCurrency(boletoNFSelected.valor_total / boletoNFQtdParcelas)}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 mt-3">
+                    <Label className="text-xs">Datas de Vencimento</Label>
+                    {boletoNFParcelas.map((parcela, index) => (
+                      <div key={index} className="flex items-center gap-2 bg-gray-50 p-2 rounded border">
+                        <Badge variant="outline" className="text-xs shrink-0">{index + 1}/{boletoNFQtdParcelas}</Badge>
+                        <span className="text-xs text-gray-500 shrink-0">{formatCurrency(boletoNFSelected.valor_total / boletoNFQtdParcelas)}</span>
+                        <Input
+                          type="date"
+                          value={parcela.dataVencimento}
+                          onChange={(e) => handleBoletoNFDataChange(index, e.target.value)}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <Label className="text-sm font-semibold">3. Envie o arquivo do boleto</Label>
+                  <Input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,.crm"
+                    onChange={(e) => setBoletoNFFile(e.target.files[0])}
+                    className="mt-2"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Formatos: PDF, JPG, PNG</p>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <Button variant="outline" onClick={() => setShowBoletoNFModal(false)}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={handleEnviarBoletoNF}
+                    disabled={boletoNFUploading || !boletoNFFile}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    {boletoNFUploading ? 'Enviando...' : 'Enviar Boleto'}
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>
