@@ -212,13 +212,13 @@ export default function DashboardAdmin() {
     const qtdFaturada = pedidosFaturadosAll.length;
     const valorFaturado = pedidosFaturadosAll.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
 
-    // Quebra total
-    const valorQuebraTotal = pedidosList.reduce((sum, p) => sum + (p.valor_quebra || 0), 0);
+    // Quebra total (parseFloat because Supabase returns numeric as string)
+    const valorQuebraTotal = pedidosList.reduce((sum, p) => sum + (parseFloat(p.valor_quebra) || 0), 0);
 
     // Saldo Pendente: pedidos em_producao/parcialmente_faturado that still have uninvoiced value
     const saldoPendente = pedidosList
       .filter(p => ['em_producao', 'parcialmente_faturado'].includes(p.status))
-      .reduce((sum, p) => sum + ((p.valor_total || 0) - (p.valor_faturado || 0) - (p.valor_quebra || 0)), 0);
+      .reduce((sum, p) => sum + ((parseFloat(p.valor_total) || 0) - (parseFloat(p.valor_faturado) || 0) - (parseFloat(p.valor_quebra) || 0)), 0);
 
     // Valor total dos pedidos (referência original)
     const valorTotalPedidos = pedidosList

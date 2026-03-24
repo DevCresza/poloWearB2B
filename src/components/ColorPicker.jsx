@@ -131,6 +131,7 @@ export default function ColorPicker({ value, onChange, label = "Cor" }) {
             {presetColors.map((color) => (
               <div key={color.hex} className="relative group">
                 <button
+                  type="button"
                   onClick={() => handlePresetClick(color.hex)}
                   className={`w-full aspect-square rounded-lg border-2 transition-all hover:scale-110 hover:shadow-lg ${
                     value === color.hex ? 'border-blue-500 ring-2 ring-blue-300' : 'border-gray-300'

@@ -27,6 +27,7 @@ export default function GestaoProdutos() {
   const [filterFornecedor, setFilterFornecedor] = useState('all');
   const [filterCategoria, setFilterCategoria] = useState('all');
   const [filterGenero, setFilterGenero] = useState('all');
+  const [filterMesEntrega, setFilterMesEntrega] = useState('all');
 
   const categorias = [
     'Camisetas', 'Polos', 'Camisas', 'Shorts', 'Calças',
@@ -275,7 +276,14 @@ export default function GestaoProdutos() {
     const matchesCategoria = filterCategoria === 'all' || produto.categoria === filterCategoria;
     const matchesGenero = filterGenero === 'all' || produto.genero === filterGenero;
 
-    return matchesSearch && matchesFornecedor && matchesCategoria && matchesGenero;
+    let matchesMesEntrega = true;
+    if (filterMesEntrega !== 'all' && produto.data_prevista_entrega) {
+      matchesMesEntrega = produto.data_prevista_entrega.slice(0, 7) === filterMesEntrega;
+    } else if (filterMesEntrega !== 'all' && !produto.data_prevista_entrega) {
+      matchesMesEntrega = false;
+    }
+
+    return matchesSearch && matchesFornecedor && matchesCategoria && matchesGenero && matchesMesEntrega;
   });
 
   if (loading) {
@@ -372,6 +380,26 @@ export default function GestaoProdutos() {
                         {genero}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={filterMesEntrega} onValueChange={setFilterMesEntrega}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="Mês Entrega" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os Meses</SelectItem>
+                    {(() => {
+                      const meses = new Set();
+                      (produtos || []).forEach(p => {
+                        if (p.data_prevista_entrega) meses.add(p.data_prevista_entrega.slice(0, 7));
+                      });
+                      return [...meses].sort().map(m => {
+                        const [ano, mes] = m.split('-');
+                        const label = new Date(parseInt(ano), parseInt(mes) - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                        return <SelectItem key={m} value={m}>{label}</SelectItem>;
+                      });
+                    })()}
                   </SelectContent>
                 </Select>
               </div>

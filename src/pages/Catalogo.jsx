@@ -36,6 +36,7 @@ export default function Catalogo() {
   const [selectedGenero, setSelectedGenero] = useState('all');
   const [selectedDisponibilidade, setSelectedDisponibilidade] = useState('all');
   const [filtroEstoque, setFiltroEstoque] = useState('all');
+  const [filtroMesEntrega, setFiltroMesEntrega] = useState('all');
   const [ordenacao, setOrdenacao] = useState('estoque_desc');
   const [selectedCapsula, setSelectedCapsula] = useState(null);
   const [selectedProduto, setSelectedProduto] = useState(null);
@@ -455,7 +456,16 @@ export default function Catalogo() {
       }
     }
 
-    return matchesSearch && matchesFornecedor && matchesCategoria && matchesGenero && matchesDisponibilidade && matchesEstoque;
+    // Filtro por mês de entrega (data_prevista_entrega do produto)
+    let matchesMesEntrega = true;
+    if (filtroMesEntrega !== 'all' && produto.data_prevista_entrega) {
+      const mesAno = produto.data_prevista_entrega.slice(0, 7); // "YYYY-MM"
+      matchesMesEntrega = mesAno === filtroMesEntrega;
+    } else if (filtroMesEntrega !== 'all' && !produto.data_prevista_entrega) {
+      matchesMesEntrega = false;
+    }
+
+    return matchesSearch && matchesFornecedor && matchesCategoria && matchesGenero && matchesDisponibilidade && matchesEstoque && matchesMesEntrega;
   });
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
@@ -997,6 +1007,26 @@ export default function Catalogo() {
                   <SelectItem value="baixo">Estoque Baixo</SelectItem>
                 </SelectContent>
               </Select>
+
+              <Select value={filtroMesEntrega} onValueChange={setFiltroMesEntrega}>
+                <SelectTrigger className="h-8 sm:h-9 text-xs sm:text-sm">
+                  <SelectValue placeholder="Mês Entrega" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Meses</SelectItem>
+                  {(() => {
+                    const meses = new Set();
+                    (produtos || []).forEach(p => {
+                      if (p.data_prevista_entrega) meses.add(p.data_prevista_entrega.slice(0, 7));
+                    });
+                    return [...meses].sort().map(m => {
+                      const [ano, mes] = m.split('-');
+                      const label = new Date(parseInt(ano), parseInt(mes) - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                      return <SelectItem key={m} value={m}>{label}</SelectItem>;
+                    });
+                  })()}
+                </SelectContent>
+              </Select>
             </div>
           )}
         </div>
@@ -1148,7 +1178,7 @@ export default function Catalogo() {
                     return (
                       <>
                         {/* Foto/Vídeo Principal */}
-                        <div className="aspect-square bg-gray-100 rounded-xl overflow-hidden">
+                        <div className="aspect-square bg-gray-100 rounded-xl overflow-hidden relative group">
                           {fotoAtualIndex < fotosParaMostrar.length ? (
                             <img
                               src={getFotoUrl(fotosParaMostrar[fotoAtualIndex] || fotosParaMostrar[0])}
@@ -1165,6 +1195,25 @@ export default function Catalogo() {
                               allowFullScreen
                             />
                           ) : null}
+                          {/* Setas de navegação */}
+                          {totalMedias > 1 && (
+                            <>
+                              <button
+                                type="button"
+                                className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-1.5 shadow-md opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                onClick={() => setFotoAtualIndex((fotoAtualIndex - 1 + totalMedias) % totalMedias)}
+                              >
+                                <ChevronLeft className="w-5 h-5 text-gray-700" />
+                              </button>
+                              <button
+                                type="button"
+                                className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-1.5 shadow-md opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                onClick={() => setFotoAtualIndex((fotoAtualIndex + 1) % totalMedias)}
+                              >
+                                <ChevronRight className="w-5 h-5 text-gray-700" />
+                              </button>
+                            </>
+                          )}
                         </div>
 
                         {/* Miniaturas - TODAS as fotos + vídeo */}

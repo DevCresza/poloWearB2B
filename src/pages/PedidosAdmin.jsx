@@ -10,9 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { 
-  Package, Clock, CheckCircle, Truck, X, Eye, Edit, FileText, DollarSign, Download, 
-  CreditCard, Calendar, MapPin, Receipt, Search, Filter, List, Columns
+import {
+  Package, Clock, CheckCircle, Truck, X, Eye, Edit, FileText, DollarSign, Download,
+  CreditCard, Calendar, MapPin, Receipt, Search, Filter, List, Columns, BarChart3
 } from 'lucide-react';
 import PedidoCard from '../components/pedidos/PedidoCard';
 import PedidoDetailsModal from '../components/pedidos/PedidoDetailsModal';
@@ -141,6 +141,71 @@ export default function PedidosAdmin() {
       console.error('Erro ao exportar:', error);
       toast.error('Erro ao exportar dados.');
     }
+  };
+
+  // Relatório de Produção (admin)
+  const handleExportRelatorioProducao = () => {
+    const statusProducao = ['aprovado', 'em_producao', 'parcialmente_faturado'];
+    const pedidosParaRelatorio = pedidos.filter(p => statusProducao.includes(p.status));
+
+    if (pedidosParaRelatorio.length === 0) {
+      toast.info('Nenhum pedido em produção para gerar relatório');
+      return;
+    }
+
+    const agregado = {};
+    pedidosParaRelatorio.forEach(pedido => {
+      let itens = pedido.itens || [];
+      if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch (e) { itens = []; } }
+
+      const mesEntrega = pedido.data_prevista_entrega
+        ? new Date(pedido.data_prevista_entrega + 'T00:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+        : new Date(pedido.created_date).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+      itens.forEach(item => {
+        const cor = item.cor_selecionada?.cor_nome || 'Sem cor';
+        const key = `${item.produto_id || item.nome}_${cor}_${mesEntrega}`;
+        if (!agregado[key]) {
+          agregado[key] = {
+            nome: item.nome || '',
+            referencia_fornecedor: item.referencia_fornecedor || item.referencia || '',
+            referencia_linx: item.referencia_linx || item.referencia_polo || '',
+            cor,
+            preco_unitario: item.preco || 0,
+            mes_entrega: mesEntrega,
+            qtd_total_pecas: 0,
+            qtd_grades: 0
+          };
+        }
+        const qtdPendente = Math.max(0, (item.quantidade || 0) - (item.qtd_faturada || 0) - (item.qtd_quebra || 0));
+        const isGrade = item.tipo_venda === 'grade' && (item.total_pecas_grade || 0) > 0;
+        if (isGrade) {
+          agregado[key].qtd_grades += qtdPendente;
+          agregado[key].qtd_total_pecas += qtdPendente * (item.total_pecas_grade || 1);
+        } else {
+          agregado[key].qtd_total_pecas += qtdPendente;
+        }
+      });
+    });
+
+    const data = Object.values(agregado).filter(r => r.qtd_total_pecas > 0)
+      .sort((a, b) => a.nome.localeCompare(b.nome) || a.cor.localeCompare(b.cor));
+
+    if (data.length === 0) { toast.info('Nenhum item pendente de produção'); return; }
+
+    const columns = [
+      { key: 'nome', label: 'Produto' },
+      { key: 'referencia_fornecedor', label: 'Ref. Fornecedor' },
+      { key: 'referencia_linx', label: 'Ref. Linx' },
+      { key: 'cor', label: 'Cor / Variante' },
+      { key: 'preco_unitario_fmt', label: 'Preço Unit.' },
+      { key: 'mes_entrega', label: 'Mês Entrega' },
+      { key: 'qtd_total_pecas', label: 'Qtd. Total Peças' },
+      { key: 'qtd_grades', label: 'Qtd. Grades' }
+    ];
+
+    exportToCSV(data.map(r => ({ ...r, preco_unitario_fmt: formatCurrency(r.preco_unitario) })), columns, `relatorio-producao-${new Date().toISOString().split('T')[0]}.csv`);
+    toast.success(`Relatório gerado com ${data.length} produto(s)`);
   };
 
   const handleStatusChange = async (pedidoId, newStatus) => {
@@ -366,7 +431,11 @@ export default function PedidosAdmin() {
           <p className="text-gray-600">Acompanhe e gerencie todos os pedidos do sistema</p>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={handleExportRelatorioProducao} variant="outline" className="border-indigo-300 text-indigo-700 hover:bg-indigo-50">
+            <BarChart3 className="w-4 h-4 mr-2" />
+            Relatório Produção
+          </Button>
           <Button variant="outline" onClick={() => handleExport('pdf')}>
             <Download className="w-4 h-4 mr-2" />
             Exportar PDF

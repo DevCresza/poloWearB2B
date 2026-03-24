@@ -1023,6 +1023,44 @@ export default function PedidosFornecedor() {
     exportToPDF(data, columns, 'Relatório de Pedidos', `pedidos-${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
+  const handleExportCSV = () => {
+    let pedidosParaExportar = pedidos;
+    if (user?.role !== 'admin' && fornecedorAtual) {
+      pedidosParaExportar = pedidos.filter(p => p.fornecedor_id === fornecedorAtual.id);
+    }
+    if (filtroStatus !== 'todos') {
+      pedidosParaExportar = pedidosParaExportar.filter(p => p.status === filtroStatus);
+    }
+
+    const columns = [
+      { key: 'id_formatado', label: 'Pedido' },
+      { key: 'cliente_nome', label: 'Cliente' },
+      { key: 'status', label: 'Status' },
+      { key: 'valor_formatado', label: 'Valor Total' },
+      { key: 'valor_faturado', label: 'Valor Faturado' },
+      { key: 'data_formatada', label: 'Data Pedido' },
+      { key: 'data_prevista', label: 'Previsão Entrega' },
+      { key: 'nf_numero', label: 'NF' },
+      { key: 'data_faturamento', label: 'Data Faturamento' },
+      { key: 'metodo_pagamento', label: 'Método Pagamento' }
+    ];
+
+    const data = pedidosParaExportar.map(p => ({
+      id_formatado: `#${p.id?.slice(-8).toUpperCase() || 'N/A'}`,
+      cliente_nome: clientes.find(c => c.id === p.comprador_user_id)?.full_name || clientes.find(c => c.id === p.comprador_user_id)?.empresa || 'N/A',
+      status: p.status?.charAt(0).toUpperCase() + p.status?.slice(1) || 'N/A',
+      valor_formatado: formatCurrency(p.valor_total),
+      valor_faturado: formatCurrency(p.valor_faturado || 0),
+      data_formatada: formatDate(p.created_date),
+      data_prevista: p.data_prevista_entrega ? formatDate(p.data_prevista_entrega) : '-',
+      nf_numero: p.nf_numero || '-',
+      data_faturamento: p.nf_data_upload ? formatDate(p.nf_data_upload) : '-',
+      metodo_pagamento: p.metodo_pagamento || '-'
+    }));
+
+    exportToCSV(data, columns, `pedidos-${new Date().toISOString().split('T')[0]}.csv`);
+  };
+
   // Relatório de Produção — agrega quantidade total por produto/cor
   const handleExportRelatorioProducao = () => {
     // Pedidos em produção ou aprovados (ainda não faturados por completo)
@@ -1064,17 +1102,26 @@ export default function PedidosFornecedor() {
             cor: cor,
             preco_unitario: item.preco || 0,
             mes_entrega: mesEntrega,
-            qtd_total: 0
+            qtd_total_pecas: 0,
+            qtd_grades: 0
           };
         }
-        // Soma quantidade ainda pendente (total - já faturado - quebra)
+        // Quantidade pendente em unidades de venda (grades ou peças avulsas)
         const qtdPendente = (item.quantidade || 0) - (item.qtd_faturada || 0) - (item.qtd_quebra || 0);
-        agregado[key].qtd_total += Math.max(0, qtdPendente);
+        const pendente = Math.max(0, qtdPendente);
+        // Se venda por grade, calcular total de peças = grades * peças_por_grade
+        const isGrade = item.tipo_venda === 'grade' && (item.total_pecas_grade || 0) > 0;
+        if (isGrade) {
+          agregado[key].qtd_grades += pendente;
+          agregado[key].qtd_total_pecas += pendente * (item.total_pecas_grade || 1);
+        } else {
+          agregado[key].qtd_total_pecas += pendente;
+        }
       });
     });
 
     const data = Object.values(agregado)
-      .filter(r => r.qtd_total > 0)
+      .filter(r => r.qtd_total_pecas > 0)
       .sort((a, b) => a.nome.localeCompare(b.nome) || a.cor.localeCompare(b.cor));
 
     if (data.length === 0) {
@@ -1089,7 +1136,8 @@ export default function PedidosFornecedor() {
       { key: 'cor', label: 'Cor / Variante' },
       { key: 'preco_unitario_fmt', label: 'Preço Unit.' },
       { key: 'mes_entrega', label: 'Mês Entrega' },
-      { key: 'qtd_total', label: 'Qtd. Total' }
+      { key: 'qtd_total_pecas', label: 'Qtd. Total Peças' },
+      { key: 'qtd_grades', label: 'Qtd. Grades' }
     ];
 
     const dataFormatted = data.map(r => ({
@@ -1377,10 +1425,14 @@ export default function PedidosFornecedor() {
           </h1>
           <p className="text-gray-600">Gerencie pedidos recebidos e faturamento</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button onClick={handleExportRelatorioProducao} variant="outline" className="border-indigo-300 text-indigo-700 hover:bg-indigo-50">
             <BarChart3 className="w-4 h-4 mr-2" />
             Relatório Produção
+          </Button>
+          <Button onClick={handleExportCSV} variant="outline">
+            <Download className="w-4 h-4 mr-2" />
+            Exportar CSV
           </Button>
           <Button onClick={handleExportPDF} variant="outline">
             <Download className="w-4 h-4 mr-2" />
