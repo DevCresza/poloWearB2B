@@ -33,6 +33,7 @@ export default function PortalDashboard() {
     valorTotalComprado: 0,
     qtdFaturada: 0,
     valorFaturado: 0,
+    valorQuebra: 0,
     valorAVencer: 0,
     valorVencido: 0,
     produtosAtivos: 0,
@@ -78,7 +79,8 @@ export default function PortalDashboard() {
 
         const pedidosFaturados = pedidosAtivos.filter(p => FATURADO_STATUSES.includes(p.status));
         const qtdFaturada = pedidosFaturados.length;
-        const valorFaturado = pedidosFaturados.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
+        const valorFaturado = pedidosFaturados.reduce((sum, p) => sum + (parseFloat(p.valor_faturado) || 0), 0);
+        const valorQuebraTotal = pedidosAtivos.reduce((sum, p) => sum + (parseFloat(p.valor_quebra) || 0), 0);
 
         const hoje = new Date();
         hoje.setHours(0, 0, 0, 0);
@@ -88,13 +90,13 @@ export default function PortalDashboard() {
             const vencimento = new Date(t.data_vencimento);
             return vencimento >= hoje;
           })
-          .reduce((sum, t) => sum + (t.valor || 0), 0);
+          .reduce((sum, t) => sum + (parseFloat(t.valor) || 0), 0);
         const valorVencido = pendentes
           .filter(t => {
             const vencimento = new Date(t.data_vencimento);
             return vencimento < hoje;
           })
-          .reduce((sum, t) => sum + (t.valor || 0), 0);
+          .reduce((sum, t) => sum + (parseFloat(t.valor) || 0), 0);
 
         setStats({
           totalPedidos,
@@ -103,6 +105,7 @@ export default function PortalDashboard() {
           valorTotalComprado,
           qtdFaturada,
           valorFaturado,
+          valorQuebra: valorQuebraTotal,
           valorAVencer,
           valorVencido,
           produtosAtivos: 0,
@@ -147,7 +150,8 @@ export default function PortalDashboard() {
 
           const pedidosFaturados = pedidosAtivos.filter(p => FATURADO_STATUSES.includes(p.status));
           const qtdFaturada = pedidosFaturados.length;
-          const valorFaturado = pedidosFaturados.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
+          const valorFaturado = pedidosFaturados.reduce((sum, p) => sum + (parseFloat(p.valor_faturado) || 0), 0);
+          const valorQuebraTotal = pedidosAtivos.reduce((sum, p) => sum + (parseFloat(p.valor_quebra) || 0), 0);
 
           const hoje = new Date();
           hoje.setHours(0, 0, 0, 0);
@@ -157,13 +161,13 @@ export default function PortalDashboard() {
               const vencimento = new Date(t.data_vencimento);
               return vencimento >= hoje;
             })
-            .reduce((sum, t) => sum + (t.valor || 0), 0);
+            .reduce((sum, t) => sum + (parseFloat(t.valor) || 0), 0);
           const valorVencido = pendentes
             .filter(t => {
               const vencimento = new Date(t.data_vencimento);
               return vencimento < hoje;
             })
-            .reduce((sum, t) => sum + (t.valor || 0), 0);
+            .reduce((sum, t) => sum + (parseFloat(t.valor) || 0), 0);
 
           const produtosAtivos = produtosList.filter(p => p.ativo).length;
           const estoqueBaixo = produtosList.filter(p =>
@@ -178,6 +182,7 @@ export default function PortalDashboard() {
             valorTotalComprado,
             qtdFaturada,
             valorFaturado,
+            valorQuebra: valorQuebraTotal,
             valorAVencer,
             valorVencido,
             produtosAtivos,
@@ -191,6 +196,7 @@ export default function PortalDashboard() {
             valorTotalComprado: 0,
             qtdFaturada: 0,
             valorFaturado: 0,
+            valorQuebra: 0,
             valorAVencer: 0,
             valorVencido: 0,
             produtosAtivos: 0,
@@ -216,7 +222,8 @@ export default function PortalDashboard() {
 
         const pedidosFaturados = pedidosAtivos.filter(p => FATURADO_STATUSES.includes(p.status));
         const qtdFaturada = pedidosFaturados.length;
-        const valorFaturado = pedidosFaturados.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
+        const valorFaturado = pedidosFaturados.reduce((sum, p) => sum + (parseFloat(p.valor_faturado) || 0), 0);
+        const valorQuebraTotal = pedidosAtivos.reduce((sum, p) => sum + (parseFloat(p.valor_quebra) || 0), 0);
 
         const hoje = new Date();
         hoje.setHours(0, 0, 0, 0);
@@ -226,13 +233,13 @@ export default function PortalDashboard() {
             const vencimento = new Date(t.data_vencimento);
             return vencimento >= hoje;
           })
-          .reduce((sum, t) => sum + (t.valor || 0), 0);
+          .reduce((sum, t) => sum + (parseFloat(t.valor) || 0), 0);
         const valorVencido = pendentes
           .filter(t => {
             const vencimento = new Date(t.data_vencimento);
             return vencimento < hoje;
           })
-          .reduce((sum, t) => sum + (t.valor || 0), 0);
+          .reduce((sum, t) => sum + (parseFloat(t.valor) || 0), 0);
 
         const produtosAtivos = produtosList.filter(p => p.ativo).length;
         const estoqueBaixo = produtosList.filter(p =>
@@ -247,6 +254,7 @@ export default function PortalDashboard() {
           valorTotalComprado,
           qtdFaturada,
           valorFaturado,
+          valorQuebra: valorQuebraTotal,
           valorAVencer,
           valorVencido,
           produtosAtivos,
@@ -349,6 +357,7 @@ export default function PortalDashboard() {
           qtdPendenteFaturamento: stats.totalPedidos - stats.qtdFaturada,
           valorAVencer: stats.valorAVencer,
           valorVencido: stats.valorVencido,
+          valorQuebra: stats.valorQuebra,
         }}
       />
 

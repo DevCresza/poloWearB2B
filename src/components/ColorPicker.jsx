@@ -13,7 +13,7 @@ import { Palette, Hash, Droplet } from 'lucide-react';
  * @param {function} props.onChange - Callback quando a cor muda
  * @param {string} props.label - Label do campo
  */
-export default function ColorPicker({ value, onChange, label = "Cor" }) {
+export default function ColorPicker({ value, onChange, label = "Cor", compact = false }) {
   const [activeTab, setActiveTab] = useState('preset');
 
   // Paleta de cores pré-definidas (cores comuns em roupas)
@@ -111,29 +111,26 @@ export default function ColorPicker({ value, onChange, label = "Cor" }) {
         </TabsList>
 
         {/* Preview da cor atual */}
-        <div className="mt-4 flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+        <div className={`${compact ? 'mt-2' : 'mt-4'} flex items-center gap-3 p-2 bg-gray-50 rounded-lg`}>
           <div
-            className="w-16 h-16 rounded-lg border-2 border-gray-300 shadow-inner"
+            className={`${compact ? 'w-8 h-8' : 'w-16 h-16'} rounded-lg border-2 border-gray-300 shadow-inner shrink-0`}
             style={{ backgroundColor: validHex }}
           />
           <div>
-            <p className="text-sm font-semibold text-gray-700">Cor Selecionada</p>
+            {!compact && <p className="text-sm font-semibold text-gray-700">Cor Selecionada</p>}
             <p className="text-xs text-gray-500">{validHex}</p>
-            <p className="text-xs text-gray-500">
-              RGB({currentRgb.r}, {currentRgb.g}, {currentRgb.b})
-            </p>
           </div>
         </div>
 
         {/* Paleta de cores pré-definidas */}
-        <TabsContent value="preset" className="space-y-3 mt-4">
-          <div className="grid grid-cols-8 gap-2 max-h-80 overflow-y-auto p-2 relative">
+        <TabsContent value="preset" className={`space-y-2 ${compact ? 'mt-2' : 'mt-4'}`}>
+          <div className={`grid ${compact ? 'grid-cols-11 gap-1' : 'grid-cols-8 gap-2'} max-h-48 overflow-y-auto p-1 relative`}>
             {presetColors.map((color) => (
               <div key={color.hex} className="relative group">
                 <button
                   type="button"
                   onClick={() => handlePresetClick(color.hex)}
-                  className={`w-full aspect-square rounded-lg border-2 transition-all hover:scale-110 hover:shadow-lg ${
+                  className={`w-full aspect-square ${compact ? 'rounded' : 'rounded-lg'} border-2 transition-all hover:scale-110 hover:shadow-lg ${
                     value === color.hex ? 'border-blue-500 ring-2 ring-blue-300' : 'border-gray-300'
                   }`}
                   style={{ backgroundColor: color.hex }}

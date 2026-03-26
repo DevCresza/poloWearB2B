@@ -57,7 +57,7 @@ const CARD_CONFIG = [
     labelCliente: 'Quebra de Produção',
     labelOutros: 'Quebra Total',
     format: 'currency',
-    adminOnly: true,
+    hideForCliente: true,
   },
   {
     key: 'valorAVencer',
@@ -92,6 +92,7 @@ export default function DashboardKpiCards({ role, kpis }) {
 
   const visibleCards = CARD_CONFIG.filter(card => {
     if (card.adminOnly && !isAdmin) return false;
+    if (card.hideForCliente && isCliente) return false;
     return true;
   });
 

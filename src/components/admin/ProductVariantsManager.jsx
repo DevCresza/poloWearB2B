@@ -169,12 +169,8 @@ export default function ProductVariantsManager({ variantes = [], onChange, grade
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center justify-between">
+        <CardTitle>
           <span>Variantes de Cor com Estoque Separado</span>
-          <Button onClick={addVariante} size="sm">
-            <Plus className="w-4 h-4 mr-2" />
-            Adicionar Cor
-          </Button>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -217,6 +213,7 @@ export default function ProductVariantsManager({ variantes = [], onChange, grade
                       value={variante.cor_codigo_hex || '#000000'}
                       onChange={(color) => updateVariante(variante.id, 'cor_codigo_hex', color)}
                       label="Cor da Variante"
+                      compact
                     />
                   </div>
 
@@ -385,6 +382,12 @@ export default function ProductVariantsManager({ variantes = [], onChange, grade
             </Card>
           ))
         )}
+
+        {/* Botão Adicionar Cor — sempre no final */}
+        <Button type="button" onClick={addVariante} className="w-full" variant="outline">
+          <Plus className="w-4 h-4 mr-2" />
+          Adicionar Cor
+        </Button>
       </CardContent>
 
       {/* Editor de Imagem */}
