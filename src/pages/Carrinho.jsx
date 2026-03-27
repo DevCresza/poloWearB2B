@@ -180,6 +180,24 @@ export default function Carrinho() {
     }
   };
 
+  // Verificar quais itens do carrinho estão indisponíveis (produto excluído ou desativado)
+  const getItensIndisponiveis = () => {
+    if (produtos.length === 0) return new Set();
+    const indisponiveis = new Set();
+    carrinho.forEach(item => {
+      if (item.tipo === 'capsula') return; // cápsulas tratadas separadamente
+      const produtoAtual = produtos.find(p => p.id === item.id);
+      if (!produtoAtual || produtoAtual.ativo === false) {
+        const itemKey = `${item.id}_${item.cor_selecionada?.cor_nome || 'default'}`;
+        indisponiveis.add(itemKey);
+      }
+    });
+    return indisponiveis;
+  };
+
+  const itensIndisponiveis = getItensIndisponiveis();
+  const temIndisponivel = itensIndisponiveis.size > 0;
+
   const agruparPorFornecedor = () => {
     const grupos = {};
     carrinho.forEach(item => {
@@ -739,6 +757,16 @@ export default function Carrinho() {
             )}
 
 
+            {/* Alerta de produtos indisponíveis */}
+            {temIndisponivel && (
+              <Alert className="bg-red-50 border-red-300">
+                <XCircle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-800 text-sm sm:text-base">
+                  <strong>Atenção:</strong> Alguns produtos no seu carrinho não estão mais disponíveis. Remova-os para poder finalizar a compra.
+                </AlertDescription>
+              </Alert>
+            )}
+
             {/* Alerta sobre endereço (apenas para users sem lojas) */}
             {hasNoLojas && (() => {
               const semEndereco = !user?.endereco_completo || !user?.cep || !user?.cidade || !user?.estado;
@@ -1012,9 +1040,16 @@ export default function Carrinho() {
                           ? item.preco_grade_completa
                           : item.preco_por_peca;
                         const itemKey = `${item.id}_${item.cor_selecionada?.cor_nome || 'default'}`;
+                        const indisponivel = itensIndisponiveis.has(itemKey);
 
                         return (
-                          <div key={itemKey} className="flex flex-col sm:flex-row gap-4 p-4 bg-gray-50 rounded-lg">
+                          <div key={itemKey} className={`flex flex-col sm:flex-row gap-4 p-4 rounded-lg ${indisponivel ? 'bg-red-50 border-2 border-red-300' : 'bg-gray-50'}`}>
+                            {indisponivel && (
+                              <div className="sm:hidden flex items-center gap-2 text-red-700 text-sm font-medium mb-2">
+                                <XCircle className="w-4 h-4" />
+                                Produto indisponível — remova do carrinho
+                              </div>
+                            )}
                             {getPrimeiraFoto(item) ? (
                               <img
                                 src={getPrimeiraFoto(item)}
@@ -1030,8 +1065,16 @@ export default function Carrinho() {
                               </div>
                             )}
 
-                            <div className="flex-1 min-w-0">
-                              <h3 className="font-semibold text-base sm:text-lg text-gray-900 line-clamp-2">{item.nome}</h3>
+                            <div className={`flex-1 min-w-0 ${indisponivel ? 'opacity-60' : ''}`}>
+                              <h3 className="font-semibold text-base sm:text-lg text-gray-900 line-clamp-2">
+                                {item.nome}
+                              </h3>
+                              {indisponivel && (
+                                <div className="hidden sm:flex items-center gap-1 text-red-600 text-sm font-medium mt-1">
+                                  <XCircle className="w-4 h-4" />
+                                  Produto indisponível — remova do carrinho
+                                </div>
+                              )}
                               <div className="flex flex-wrap gap-2 mt-2">
                                 <Badge variant="outline">{item.marca}</Badge>
                                 <Badge variant="outline">
@@ -1223,9 +1266,10 @@ export default function Carrinho() {
                             !atingiuMinimo ||
                             !metodoPagamento[grupo.fornecedor_id] ||
                             enderecoIncompleto ||
-                            user?.bloqueado
+                            user?.bloqueado ||
+                            temIndisponivel
                           }
-                          title={user?.bloqueado ? 'Sua conta está bloqueada.' : ''}
+                          title={temIndisponivel ? 'Remova os produtos indisponíveis para finalizar.' : user?.bloqueado ? 'Sua conta está bloqueada.' : ''}
                           className="w-full h-12 sm:h-14 bg-green-600 hover:bg-green-700 text-base sm:text-lg font-semibold"
                         >
                           {finalizando[grupo.fornecedor_id] ? (
@@ -1243,7 +1287,7 @@ export default function Carrinho() {
                       {!hasNoLojas && selectedCount >= 2 && (
                         <Button
                           onClick={() => abrirMultiLojaModal(grupo, selectedLojas)}
-                          disabled={finalizando[grupo.fornecedor_id] || !atingiuMinimo || user?.bloqueado}
+                          disabled={finalizando[grupo.fornecedor_id] || !atingiuMinimo || user?.bloqueado || temIndisponivel}
                           className="w-full h-12 sm:h-14 bg-green-600 hover:bg-green-700 text-base sm:text-lg font-semibold"
                         >
                           Finalizar para {selectedCount} Lojas
