@@ -651,7 +651,7 @@ export default function Catalogo() {
     setShowDetailsModal(true);
   };
 
-  const categorias = ['Camisetas', 'Polos', 'Camisas', 'Shorts', 'Calças', 'Vestidos', 'Blusas', 'Jaquetas', 'Acessórios', 'Calçados', 'Chinelos', 'Perfumes'];
+  const categorias = ['Camisetas', 'Polos', 'Camisas', 'Shorts', 'Bermudas', 'Calças', 'Vestidos', 'Blusas', 'Regatas', 'Coletes', 'Saias', 'Jaquetas', 'Meias', 'Acessórios', 'Calçados', 'Chinelos', 'Garrafas', 'Perfumes'];
   const generos = ['Feminino', 'Masculino', 'Unissex'];
 
   const ProductCard = ({ produto }) => {

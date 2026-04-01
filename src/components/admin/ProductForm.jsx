@@ -71,19 +71,38 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
   const [tamanhoSelecionado, setTamanhoSelecionado] = useState([]);
 
   const categorias = [
-    'Camisetas', 'Polos', 'Camisas', 'Shorts', 'Calças',
-    'Vestidos', 'Blusas', 'Jaquetas', 'Acessórios', 'Calçados', 'Chinelos', 'Perfumes'
+    'Camisetas', 'Polos', 'Camisas', 'Shorts', 'Bermudas', 'Calças',
+    'Vestidos', 'Blusas', 'Regatas', 'Coletes', 'Saias', 'Jaquetas',
+    'Meias', 'Acessórios', 'Calçados', 'Chinelos', 'Garrafas', 'Perfumes'
   ];
 
   const generos = ['Feminino', 'Masculino', 'Unissex'];
 
-  const tamanhos = ['PP', 'P', 'M', 'G', 'GG', 'G1', 'G2', 'G3', 'G4', 'G5'];
+  // Grades por tipo de categoria
+  const tamanhosRoupa = ['PP', 'P', 'M', 'G', 'GG', 'G1', 'G2', 'G3', 'G4', 'G5'];
+  const tamanhosCalcaBermuda = ['36', '38', '40', '42', '44', '46', '48', '50', '52', '54'];
+  const tamanhosCalcados = ['34', '35', '36', '37', '38', '39', '40', '41', '42', '43'];
+
+  const categoriasCalcaBermuda = ['Calças', 'Bermudas'];
+  const categoriasCalcados = ['Calçados', 'Chinelos'];
+
+  // Selecionar grade baseada na categoria
+  const getTamanhosPorCategoria = (categoria) => {
+    if (categoriasCalcaBermuda.includes(categoria)) return tamanhosCalcaBermuda;
+    if (categoriasCalcados.includes(categoria)) return tamanhosCalcados;
+    return tamanhosRoupa;
+  };
+
+  const tamanhos = getTamanhosPorCategoria(formData.categoria);
 
   // Função para ordenar tamanhos de acordo com a ordem padrão
   const ordenarTamanhos = (tamanhosParaOrdenar) => {
     return tamanhosParaOrdenar.sort((a, b) => {
       const indexA = tamanhos.indexOf(a);
       const indexB = tamanhos.indexOf(b);
+      if (indexA === -1 && indexB === -1) return a.localeCompare(b, undefined, { numeric: true });
+      if (indexA === -1) return 1;
+      if (indexB === -1) return -1;
       return indexA - indexB;
     });
   };

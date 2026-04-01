@@ -30,8 +30,9 @@ export default function GestaoProdutos() {
   const [filterMesEntrega, setFilterMesEntrega] = useState('all');
 
   const categorias = [
-    'Camisetas', 'Polos', 'Camisas', 'Shorts', 'Calças',
-    'Vestidos', 'Blusas', 'Jaquetas', 'Acessórios', 'Calçados', 'Chinelos', 'Perfumes'
+    'Camisetas', 'Polos', 'Camisas', 'Shorts', 'Bermudas', 'Calças',
+    'Vestidos', 'Blusas', 'Regatas', 'Coletes', 'Saias', 'Jaquetas',
+    'Meias', 'Acessórios', 'Calçados', 'Chinelos', 'Garrafas', 'Perfumes'
   ];
 
   const generos = ['Feminino', 'Masculino', 'Unissex'];
