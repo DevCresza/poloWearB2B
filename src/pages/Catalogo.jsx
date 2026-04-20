@@ -21,6 +21,7 @@ import {
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { formatCurrency } from '@/utils/exportUtils';
 import { useLojaContext } from '@/contexts/LojaContext';
+import { getPrecoPeca, getPrecoGrade, isProdutoVisivelParaCliente, isCapsulaVisivelParaCliente } from '@/utils/precoCliente';
 
 export default function Catalogo() {
   const { carrinhoKey } = useLojaContext();
@@ -85,9 +86,11 @@ export default function Catalogo() {
       // Isso permite que cápsulas mostrem produtos que foram desativados posteriormente
       setTodosProdutos(produtosList || []);
 
-      // Mostrar apenas produtos ativos e que não sejam visíveis apenas em cápsulas no catálogo
+      // Mostrar apenas produtos ativos, não visíveis apenas em cápsulas, e disponíveis para o perfil do user
       const produtosVisiveis = (produtosList || []).filter(p =>
-        p.ativo !== false && p.visivel_apenas_capsulas !== true
+        p.ativo !== false &&
+        p.visivel_apenas_capsulas !== true &&
+        isProdutoVisivelParaCliente(p, currentUser)
       );
       setProdutos(produtosVisiveis);
 
@@ -121,7 +124,14 @@ export default function Catalogo() {
           capsula.produtos_quantidades = {};
         }
       });
-      setCapsulas(capsulasList || []);
+      // Filtrar cápsulas visíveis para o perfil (flag própria + produtos internos disponíveis)
+      const capsulasVisiveis = (capsulasList || []).filter(capsula => {
+        const produtosInternos = (capsula.produto_ids || [])
+          .map(pid => (produtosList || []).find(p => p.id === pid))
+          .filter(Boolean);
+        return isCapsulaVisivelParaCliente(capsula, produtosInternos, currentUser);
+      });
+      setCapsulas(capsulasVisiveis);
     } catch (error) {
     } finally {
       setLoading(false);
@@ -281,16 +291,16 @@ export default function Catalogo() {
           qtdConfig.variantes.forEach(varianteConfig => {
             const quantidade = varianteConfig.quantidade || 0;
             const precoPorItem = produto.tipo_venda === 'grade'
-              ? (produto.preco_grade_completa || 0)
-              : (produto.preco_por_peca || 0);
+              ? getPrecoGrade(produto, user)
+              : getPrecoPeca(produto, user);
             precoTotalCapsula += precoPorItem * quantidade;
           });
         } else if (typeof qtdConfig === 'number') {
           // Produto sem variantes
           const quantidade = qtdConfig;
           const precoPorItem = produto.tipo_venda === 'grade'
-            ? (produto.preco_grade_completa || 0)
-            : (produto.preco_por_peca || 0);
+            ? getPrecoGrade(produto, user)
+            : getPrecoPeca(produto, user);
           precoTotalCapsula += precoPorItem * quantidade;
         }
       });
@@ -480,9 +490,9 @@ export default function Catalogo() {
       case 'estoque_asc':
         return estoqueA - estoqueB;
       case 'preco_asc':
-        return a.preco_por_peca - b.preco_por_peca;
+        return getPrecoPeca(a, user) - getPrecoPeca(b, user);
       case 'preco_desc':
-        return b.preco_por_peca - a.preco_por_peca;
+        return getPrecoPeca(b, user) - getPrecoPeca(a, user);
       case 'nome_asc':
         return a.nome.localeCompare(b.nome);
       case 'data_desc':
@@ -501,7 +511,7 @@ export default function Catalogo() {
   const activeCapsulas = capsulas.filter(c => c.ativa);
 
   const getPricePerPiece = (produto) => {
-    return produto.preco_por_peca;
+    return getPrecoPeca(produto, user);
   };
   
   const handleSelectCapsula = (capsula) => {
@@ -778,7 +788,7 @@ export default function Catalogo() {
               </Badge>
               <div className="text-right">
                 <p className="text-lg sm:text-xl lg:text-2xl font-bold text-blue-600">
-                  {formatCurrency(produto.preco_por_peca)}
+                  {formatCurrency(getPrecoPeca(produto, user))}
                 </p>
                 <p className="text-[10px] sm:text-xs text-gray-500">por peça</p>
               </div>
@@ -792,7 +802,7 @@ export default function Catalogo() {
 
             {produto.tipo_venda === 'grade' && (
               <p className="text-[10px] sm:text-xs text-gray-600 bg-gray-50 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg">
-                Grade: {produto.total_pecas_grade} peças • {formatCurrency(produto.preco_grade_completa)}
+                Grade: {produto.total_pecas_grade} peças • {formatCurrency(getPrecoGrade(produto, user))}
               </p>
             )}
 
@@ -1316,14 +1326,14 @@ export default function Catalogo() {
                 <div className="bg-blue-50 p-4 rounded-xl space-y-2 border border-blue-200">
                   <div className="text-sm text-gray-600 mb-1">Preço por Peça</div>
                   <div className="text-3xl font-bold text-blue-600">
-                    {formatCurrency(selectedProduto.preco_por_peca)}
+                    {formatCurrency(getPrecoPeca(selectedProduto, user))}
                   </div>
                   {selectedProduto.tipo_venda === 'grade' && (
                     <div className="pt-2 mt-2 border-t border-blue-200">
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-gray-700">Grade completa ({selectedProduto.total_pecas_grade} peças):</span>
                         <span className="text-xl font-bold text-blue-700">
-                          {formatCurrency(selectedProduto.preco_grade_completa)}
+                          {formatCurrency(getPrecoGrade(selectedProduto, user))}
                         </span>
                       </div>
                     </div>
@@ -1337,10 +1347,10 @@ export default function Catalogo() {
                       {formatCurrency(selectedProduto.custo_por_peca)}
                       <span className="text-sm font-normal text-green-600 ml-1">por peça</span>
                     </div>
-                    {selectedProduto.preco_por_peca > 0 && (
+                    {getPrecoPeca(selectedProduto, user) > 0 && (
                       <div className="pt-2 mt-2 border-t border-green-200 flex justify-between items-center text-sm">
-                        <span className="text-green-700">Markup: {(selectedProduto.custo_por_peca / selectedProduto.preco_por_peca).toFixed(2)}×</span>
-                        <span className="text-green-700">ROI: {(((selectedProduto.custo_por_peca - selectedProduto.preco_por_peca) / selectedProduto.preco_por_peca) * 100).toFixed(0)}%</span>
+                        <span className="text-green-700">Markup: {(selectedProduto.custo_por_peca / getPrecoPeca(selectedProduto, user)).toFixed(2)}×</span>
+                        <span className="text-green-700">ROI: {(((selectedProduto.custo_por_peca - getPrecoPeca(selectedProduto, user)) / getPrecoPeca(selectedProduto, user)) * 100).toFixed(0)}%</span>
                       </div>
                     )}
                   </div>

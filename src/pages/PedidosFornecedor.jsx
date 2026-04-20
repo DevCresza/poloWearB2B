@@ -1606,8 +1606,14 @@ export default function PedidosFornecedor() {
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
-                      <CardTitle className="text-lg font-bold text-gray-900">
+                      <CardTitle className="text-lg font-bold text-gray-900 flex items-center gap-2 flex-wrap">
                         {nomeCliente}
+                        {cliente?.tipo_negocio === 'multimarca' && (
+                          <Badge className="bg-purple-100 text-purple-800 border border-purple-300 text-[10px] px-2 py-0.5">Multimarca</Badge>
+                        )}
+                        {cliente?.tipo_negocio === 'franqueado' && (
+                          <Badge className="bg-blue-100 text-blue-800 border border-blue-300 text-[10px] px-2 py-0.5">Franqueado</Badge>
+                        )}
                       </CardTitle>
                       {cliente?.full_name && nomeCliente !== cliente.full_name && (
                         <p className="text-sm text-gray-500">{cliente.full_name}</p>

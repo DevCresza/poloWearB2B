@@ -50,6 +50,10 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
     preco_por_peca: 0,
     total_pecas_grade: 0,
     preco_grade_completa: 0,
+    disponivel_franqueado: true,
+    disponivel_multimarca: false,
+    preco_peca_multimarca: 0,
+    preco_grade_multimarca: 0,
     custo_por_peca: 0,
     margem_lucro: 0,
     pedido_minimo_grades: 1,
@@ -318,7 +322,8 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
     setFormData(prev => ({
       ...prev,
       total_pecas_grade: total,
-      preco_grade_completa: total * (prev.preco_por_peca || 0)
+      preco_grade_completa: total * (prev.preco_por_peca || 0),
+      preco_grade_multimarca: total * (prev.preco_peca_multimarca || 0)
     }));
   };
 
@@ -380,8 +385,20 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
         return;
       }
 
-      if (!formData.preco_por_peca || formData.preco_por_peca <= 0) {
-        toast.error('Por favor, informe um preço de venda válido (maior que zero).');
+      if (!formData.disponivel_franqueado && !formData.disponivel_multimarca) {
+        toast.error('Selecione ao menos um perfil de cliente (Franqueado ou Multimarca).');
+        setSubmitting(false);
+        return;
+      }
+
+      if (formData.disponivel_franqueado && (!formData.preco_por_peca || formData.preco_por_peca <= 0)) {
+        toast.error('Informe o preço de venda para Franqueado (maior que zero).');
+        setSubmitting(false);
+        return;
+      }
+
+      if (formData.disponivel_multimarca && (!formData.preco_peca_multimarca || formData.preco_peca_multimarca <= 0)) {
+        toast.error('Informe o preço de venda para Multimarca (maior que zero).');
         setSubmitting(false);
         return;
       }
@@ -833,13 +850,13 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="preco_por_peca">Preço de Venda por Peça (R$) *</Label>
+                    <Label htmlFor="preco_por_peca">Preço Franqueado por Peça (R$)</Label>
                     <Input
                       id="preco_por_peca"
                       type="number"
                       step="0.01"
-                      min="0.01"
-                      required
+                      min="0"
+                      disabled={!formData.disponivel_franqueado}
                       value={formData.preco_por_peca || 0}
                       onChange={(e) => {
                         calcularPrecoGrade(e.target.value);
@@ -847,6 +864,71 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                       }}
                     />
                   </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-4">
+                  <h4 className="font-semibold text-blue-900">Disponibilidade por Perfil de Cliente</h4>
+                  <p className="text-xs text-blue-700">Defina para quais perfis este produto está disponível e seus respectivos preços.</p>
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="flex items-start gap-2 bg-white rounded-lg border p-3">
+                      <Checkbox
+                        id="disp_franqueado"
+                        checked={formData.disponivel_franqueado}
+                        onCheckedChange={(checked) => setFormData({ ...formData, disponivel_franqueado: !!checked })}
+                      />
+                      <div className="flex-1">
+                        <Label htmlFor="disp_franqueado" className="cursor-pointer font-medium">Franqueado</Label>
+                        <p className="text-xs text-gray-500">Usa preço da seção acima (Preço Franqueado por Peça)</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-2 bg-white rounded-lg border p-3">
+                      <Checkbox
+                        id="disp_multimarca"
+                        checked={formData.disponivel_multimarca}
+                        onCheckedChange={(checked) => setFormData({ ...formData, disponivel_multimarca: !!checked })}
+                      />
+                      <div className="flex-1">
+                        <Label htmlFor="disp_multimarca" className="cursor-pointer font-medium">Multimarca</Label>
+                        <p className="text-xs text-gray-500">Somente pagamento à vista (sem boleto)</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {formData.disponivel_multimarca && (
+                    <div className="grid md:grid-cols-2 gap-4 pt-2 border-t border-blue-200">
+                      <div className="space-y-2">
+                        <Label htmlFor="preco_peca_multimarca">Preço Multimarca por Peça (R$) *</Label>
+                        <Input
+                          id="preco_peca_multimarca"
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          value={formData.preco_peca_multimarca || 0}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value) || 0;
+                            setFormData(prev => ({
+                              ...prev,
+                              preco_peca_multimarca: v,
+                              preco_grade_multimarca: v * (prev.total_pecas_grade || 0)
+                            }));
+                          }}
+                        />
+                      </div>
+                      {formData.tipo_venda === 'grade' && (
+                        <div className="space-y-2">
+                          <Label>Preço Multimarca por Grade (R$)</Label>
+                          <div className="bg-white border rounded px-3 py-2 text-lg font-bold text-blue-700">
+                            R$ {(formData.preco_grade_multimarca || 0).toFixed(2)}
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            {formData.total_pecas_grade} peças × R$ {(formData.preco_peca_multimarca || 0).toFixed(2)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {formData.tipo_venda === 'grade' && (

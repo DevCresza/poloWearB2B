@@ -412,6 +412,7 @@ export default function PedidosAdmin() {
   ];
 
   const userMap = new Map(users.map(u => [u.id, u.empresa || u.razao_social || u.nome_marca || u.full_name]));
+  const userTipoMap = new Map(users.map(u => [u.id, u.tipo_negocio]));
   const fornecedorMap = new Map(fornecedores.map(f => [f.id, f.razao_social || f.nome_fantasia || f.nome_marca]));
 
   if (loading) {
@@ -694,7 +695,15 @@ export default function PedidosAdmin() {
                             </div>
                           </td>
                           <td className="p-4">
-                            <div>{userMap.get(pedido.comprador_user_id) || 'N/A'}</div>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <span>{userMap.get(pedido.comprador_user_id) || 'N/A'}</span>
+                              {userTipoMap.get(pedido.comprador_user_id) === 'multimarca' && (
+                                <Badge className="bg-purple-100 text-purple-800 border border-purple-300 text-[10px] px-1.5 py-0">Multi</Badge>
+                              )}
+                              {userTipoMap.get(pedido.comprador_user_id) === 'franqueado' && (
+                                <Badge className="bg-blue-100 text-blue-800 border border-blue-300 text-[10px] px-1.5 py-0">Franq</Badge>
+                              )}
+                            </div>
                             {pedido.loja_id && lojasMap[pedido.loja_id] && (
                               <div className="flex items-center gap-1 mt-0.5 text-xs text-blue-600">
                                 <Store className="w-3 h-3" />

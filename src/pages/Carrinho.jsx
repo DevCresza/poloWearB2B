@@ -23,6 +23,7 @@ import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { formatCurrency } from '@/utils/exportUtils';
 import { useLojaContext } from '@/contexts/LojaContext';
+import { getPrecoPeca, getPrecoGrade } from '@/utils/precoCliente';
 import { Store } from 'lucide-react';
 import { Loja } from '@/api/entities';
 import ReplicarPedidoModal from '@/components/pedidos/ReplicarPedidoModal';
@@ -249,14 +250,14 @@ export default function Carrinho() {
 
       grupos[fornecedorKey].itens.push(item);
 
-      // Calcular preço do item
+      // Calcular preço do item (respeitando perfil do cliente)
       let preco;
       if (item.tipo === 'capsula') {
         preco = item.preco_unitario || 0;
       } else {
         preco = item.tipo_venda === 'grade'
-          ? item.preco_grade_completa
-          : item.preco_por_peca;
+          ? getPrecoGrade(item, user)
+          : getPrecoPeca(item, user);
       }
 
       grupos[fornecedorKey].total += preco * item.quantidade;
@@ -266,6 +267,15 @@ export default function Carrinho() {
 
   const getMetodosPagamentoDisponiveis = (fornecedorId) => {
     const fornecedor = fornecedores.find(f => f.id === fornecedorId);
+
+    // Multimarca: somente à vista (sem boleto)
+    if (user?.tipo_negocio === 'multimarca') {
+      return [
+        { value: 'pix', label: 'PIX' },
+        { value: 'cartao_credito', label: 'Cartão de Crédito' },
+        { value: 'transferencia', label: 'Transferência Bancária' }
+      ];
+    }
 
     // Verifica se o cliente está na lista de "sem crédito" (bloqueado para boleto)
     const clienteBloqueado = fornecedor &&
@@ -345,8 +355,8 @@ export default function Carrinho() {
             const config = detalhe.configuracao;
             const tipoVenda = produtoCompleto.tipo_venda || 'avulso';
             const pecasGrade = parseInt(produtoCompleto.total_pecas_grade) || 1;
-            const precoUnitario = parseFloat(produtoCompleto.preco_por_peca) || 0;
-            const precoGrade = parseFloat(produtoCompleto.preco_grade_completa) || 0;
+            const precoUnitario = getPrecoPeca(produtoCompleto, user);
+            const precoGrade = getPrecoGrade(produtoCompleto, user);
 
             // Foto do produto
             let fotoUrl = null;
@@ -420,8 +430,8 @@ export default function Carrinho() {
           tipo_venda: item.tipo_venda,
           quantidade: item.quantidade,
           total_pecas_grade: item.total_pecas_grade || 0,
-          preco: item.tipo_venda === 'grade' ? item.preco_grade_completa : item.preco_por_peca,
-          total: (item.tipo_venda === 'grade' ? item.preco_grade_completa : item.preco_por_peca) * item.quantidade,
+          preco: item.tipo_venda === 'grade' ? getPrecoGrade(item, user) : getPrecoPeca(item, user),
+          total: (item.tipo_venda === 'grade' ? getPrecoGrade(item, user) : getPrecoPeca(item, user)) * item.quantidade,
           foto: getPrimeiraFoto(item),
           grade_selecionada: item.grade_configuracao || null,
           cor_selecionada: item.cor_selecionada || null
@@ -1037,8 +1047,8 @@ export default function Carrinho() {
 
                         // Renderização normal para produtos
                         const preco = item.tipo_venda === 'grade'
-                          ? item.preco_grade_completa
-                          : item.preco_por_peca;
+                          ? getPrecoGrade(item, user)
+                          : getPrecoPeca(item, user);
                         const itemKey = `${item.id}_${item.cor_selecionada?.cor_nome || 'default'}`;
                         const indisponivel = itensIndisponiveis.has(itemKey);
 

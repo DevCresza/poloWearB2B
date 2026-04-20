@@ -25,6 +25,8 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
     produtos_quantidades: {},
     ativa: true,
     fornecedor_id: null,
+    disponivel_franqueado: true,
+    disponivel_multimarca: false,
   });
   const [allProdutos, setAllProdutos] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
@@ -55,6 +57,8 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
         produtos_quantidades: quantidades,
         ativa: capsula.ativa !== undefined ? capsula.ativa : true,
         fornecedor_id: capsula.fornecedor_id || null,
+        disponivel_franqueado: capsula.disponivel_franqueado !== false,
+        disponivel_multimarca: capsula.disponivel_multimarca === true,
       });
     } else if (currentUser?.tipo_negocio === 'fornecedor' && currentUser?.fornecedor_id) {
       // Se é um novo cadastro e o usuário é fornecedor, pré-definir o fornecedor_id
@@ -249,6 +253,23 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
       return;
     }
 
+    if (!formData.disponivel_franqueado && !formData.disponivel_multimarca) {
+      toast.error('Selecione ao menos um perfil de cliente (Franqueado ou Multimarca).');
+      return;
+    }
+
+    if (formData.disponivel_multimarca) {
+      const produtosProblema = formData.produto_ids
+        .map(pid => allProdutos.find(p => p.id === pid))
+        .filter(p => p && (!p.disponivel_multimarca || !(parseFloat(p.preco_peca_multimarca) > 0)));
+      if (produtosProblema.length > 0) {
+        const nomes = produtosProblema.map(p => p.nome).slice(0, 3).join(', ');
+        const resto = produtosProblema.length > 3 ? ` e +${produtosProblema.length - 3}` : '';
+        toast.error(`Produtos sem preço/flag multimarca: ${nomes}${resto}. Ajuste-os antes de marcar a cápsula para multimarca.`);
+        return;
+      }
+    }
+
     const fornecedorDaCapsula = fornecedorIds.size === 1
       ? Array.from(fornecedorIds)[0]
       : (currentUser?.tipo_negocio === 'fornecedor' ? currentUser.fornecedor_id : null);
@@ -304,6 +325,40 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
               <div className="flex items-center space-x-2">
                 <Switch id="ativa" checked={formData.ativa} onCheckedChange={checked => setFormData({...formData, ativa: checked})} />
                 <Label htmlFor="ativa">Cápsula Ativa</Label>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
+                <Label className="font-medium text-sm text-blue-900">Disponibilidade por Perfil</Label>
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    id="cap_franqueado"
+                    checked={formData.disponivel_franqueado}
+                    onCheckedChange={(checked) => setFormData({ ...formData, disponivel_franqueado: !!checked })}
+                  />
+                  <Label htmlFor="cap_franqueado" className="cursor-pointer text-sm">Franqueado</Label>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    id="cap_multimarca"
+                    checked={formData.disponivel_multimarca}
+                    onCheckedChange={(checked) => setFormData({ ...formData, disponivel_multimarca: !!checked })}
+                  />
+                  <Label htmlFor="cap_multimarca" className="cursor-pointer text-sm">Multimarca</Label>
+                </div>
+                {formData.disponivel_multimarca && formData.produto_ids.length > 0 && (() => {
+                  const problema = formData.produto_ids
+                    .map(pid => allProdutos.find(p => p.id === pid))
+                    .filter(p => p && (!p.disponivel_multimarca || !(parseFloat(p.preco_peca_multimarca) > 0)));
+                  if (problema.length === 0) return null;
+                  return (
+                    <Alert className="mt-2 border-red-200 bg-red-50">
+                      <AlertTriangle className="h-4 w-4 text-red-600" />
+                      <AlertDescription className="text-red-800 text-xs">
+                        {problema.length} produto(s) sem preço/flag multimarca: {problema.map(p => p.nome).slice(0, 3).join(', ')}{problema.length > 3 ? `, +${problema.length - 3}` : ''}.
+                      </AlertDescription>
+                    </Alert>
+                  );
+                })()}
               </div>
             </div>
 
