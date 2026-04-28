@@ -46,8 +46,15 @@ export default function ProductImageCarousel({ images, productName }) {
     if (emblaMainApi) emblaMainApi.scrollNext();
   }, [emblaMainApi]);
 
-  // Filter out empty/null images
-  const validImages = (images || []).filter(img => img && img.trim() !== '');
+  // Filter out empty/null images. Aceita strings ou objetos { url, ... }.
+  const validImages = (images || [])
+    .map(img => {
+      if (!img) return null;
+      if (typeof img === 'string') return img.trim() || null;
+      if (typeof img === 'object' && typeof img.url === 'string') return img.url.trim() || null;
+      return null;
+    })
+    .filter(Boolean);
 
   return (
     <div className="space-y-3">
@@ -61,7 +68,7 @@ export default function ProductImageCarousel({ images, productName }) {
                   key={index}
                   className="flex-[0_0_100%] min-w-0"
                 >
-                  <div className="aspect-[3/4] bg-gray-200">
+                  <div className="aspect-[4/5] bg-gray-200">
                     <img
                       src={image}
                       alt={`${productName} - Foto ${index + 1}`}
@@ -72,7 +79,7 @@ export default function ProductImageCarousel({ images, productName }) {
               ))
             ) : (
               <div className="flex-[0_0_100%] min-w-0">
-                <div className="aspect-[3/4] bg-gray-200 flex items-center justify-center">
+                <div className="aspect-[4/5] bg-gray-200 flex items-center justify-center">
                   <Package className="w-16 h-16 text-gray-400" />
                 </div>
               </div>
