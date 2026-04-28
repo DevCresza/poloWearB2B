@@ -29,8 +29,14 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await User.login(email, password);
-      navigate('/PortalDashboard');
+      const u = await User.login(email, password);
+      // Cliente (multimarca/franqueado) cai direto no catálogo. Admin/fornecedor seguem no dashboard.
+      const tipo = u?.tipo_negocio || u?.user?.tipo_negocio;
+      if (tipo === 'multimarca' || tipo === 'franqueado') {
+        navigate('/catalogo');
+      } else {
+        navigate('/PortalDashboard');
+      }
     } catch (err) {
       setError(err.message || 'Erro ao fazer login');
     } finally {
