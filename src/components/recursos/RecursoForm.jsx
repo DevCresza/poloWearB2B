@@ -8,8 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Recurso } from '@/api/entities';
 import { UploadFile } from '@/api/integrations';
-import { Save, X, Upload, Plus, Trash2 } from 'lucide-react';
+import { Save, X, Upload, Plus, Trash2, FileText } from 'lucide-react';
 import { toast } from 'sonner';
+import ImageEditor from '@/components/ImageEditor';
 
 export default function RecursoForm({ recurso, onClose, onSuccess }) {
   const [formData, setFormData] = useState(recurso || {
@@ -29,6 +30,8 @@ export default function RecursoForm({ recurso, onClose, onSuccess }) {
   const [salvando, setSalvando] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [uploadingThumb, setUploadingThumb] = useState(false);
+  const [thumbToCrop, setThumbToCrop] = useState(null);
+  const [showThumbEditor, setShowThumbEditor] = useState(false);
   const [checklistItems, setChecklistItems] = useState(
     formData.tipo === 'checklist' && formData.conteudo
       ? JSON.parse(formData.conteudo)
@@ -157,7 +160,8 @@ export default function RecursoForm({ recurso, onClose, onSuccess }) {
                 </SelectTrigger>
                 <SelectContent className="bg-gray-800 text-white border-gray-700">
                   <SelectItem value="artigo" className="focus:bg-gray-700 focus:text-white data-[state=checked]:bg-red-700 data-[state=checked]:text-white">Artigo/Texto</SelectItem>
-                  <SelectItem value="video" className="focus:bg-gray-700 focus:text-white data-[state=checked]:bg-red-700 data-[state=checked]:text-white">Vídeo</SelectItem>
+                  <SelectItem value="video" className="focus:bg-gray-700 focus:text-white data-[state=checked]:bg-red-700 data-[state=checked]:text-white">Vídeo (YouTube / Instagram Reels)</SelectItem>
+                  <SelectItem value="pdf" className="focus:bg-gray-700 focus:text-white data-[state=checked]:bg-red-700 data-[state=checked]:text-white">PDF</SelectItem>
                   <SelectItem value="lookbook" className="focus:bg-gray-700 focus:text-white data-[state=checked]:bg-red-700 data-[state=checked]:text-white">Lookbook</SelectItem>
                   <SelectItem value="checklist" className="focus:bg-gray-700 focus:text-white data-[state=checked]:bg-red-700 data-[state=checked]:text-white">Checklist</SelectItem>
                   <SelectItem value="marketing" className="focus:bg-gray-700 focus:text-white data-[state=checked]:bg-red-700 data-[state=checked]:text-white">Material de Marketing</SelectItem>
@@ -204,14 +208,41 @@ export default function RecursoForm({ recurso, onClose, onSuccess }) {
 
           {formData.tipo === 'video' && (
             <div className="space-y-2">
-              <Label htmlFor="video_url" className="text-gray-300">URL do Vídeo (YouTube) *</Label>
+              <Label htmlFor="video_url" className="text-gray-300">URL do Vídeo (YouTube ou Instagram Reels) *</Label>
               <Input
                 id="video_url"
                 value={formData.video_url}
                 onChange={(e) => setFormData({ ...formData, video_url: e.target.value })}
-                placeholder="https://www.youtube.com/watch?v=..."
+                placeholder="https://www.youtube.com/watch?v=... ou https://www.instagram.com/reel/..."
                 className="bg-gray-800 text-white border-gray-700 placeholder:text-gray-500 "
               />
+              <p className="text-xs text-gray-500">Aceita YouTube (watch, embed, youtu.be) e Instagram Reels.</p>
+            </div>
+          )}
+
+          {formData.tipo === 'pdf' && (
+            <div className="space-y-2">
+              <Label htmlFor="pdf" className="text-gray-300 flex items-center gap-2"><FileText className="w-4 h-4" /> Arquivo PDF *</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="file"
+                  id="pdf"
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) handleFileUpload(file, 'arquivo_url');
+                  }}
+                  accept="application/pdf"
+                  disabled={uploadingFile}
+                  className="bg-gray-800 text-white border-gray-700 placeholder:text-gray-500 file:bg-gray-700 file:text-white file:border-gray-600 file:hover:bg-gray-600"
+                />
+                {formData.arquivo_url && (
+                  <Button type="button" variant="outline" onClick={() => window.open(formData.arquivo_url, '_blank')} className="border-gray-600 hover:bg-gray-800 text-gray-200 hover:text-white">
+                    Abrir PDF
+                  </Button>
+                )}
+              </div>
+              {uploadingFile && <p className="text-sm text-blue-400">Fazendo upload...</p>}
+              <p className="text-xs text-gray-500">O PDF poderá ser visualizado inline no portal e baixado pelo cliente.</p>
             </div>
           )}
 
@@ -282,34 +313,62 @@ export default function RecursoForm({ recurso, onClose, onSuccess }) {
             </div>
           )}
 
-          {/* Thumbnail */}
+          {/* Thumbnail (capa 16:9 com crop) */}
           <div className="space-y-2">
-            <Label htmlFor="thumbnail" className="text-gray-300">Imagem de Capa (opcional)</Label>
-            <div className="flex gap-2">
+            <Label htmlFor="thumbnail" className="text-gray-300">Imagem de Capa (16:9 — recomendado 1600×900 px)</Label>
+            <div className="flex gap-2 items-center">
               <Input
                 type="file"
                 id="thumbnail"
                 onChange={(e) => {
                   const file = e.target.files[0];
-                  if (file) handleFileUpload(file, 'thumbnail_url');
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onloadend = () => {
+                    setThumbToCrop(reader.result);
+                    setShowThumbEditor(true);
+                  };
+                  reader.readAsDataURL(file);
+                  e.target.value = '';
                 }}
                 accept="image/*"
                 disabled={uploadingThumb}
-                className="bg-gray-800 text-white border-gray-700 placeholder:text-gray-500  file:bg-gray-700 file:text-white file:border-gray-600 file:hover:bg-gray-600"
+                className="bg-gray-800 text-white border-gray-700 placeholder:text-gray-500 file:bg-gray-700 file:text-white file:border-gray-600 file:hover:bg-gray-600"
               />
               {formData.thumbnail_url && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => window.open(formData.thumbnail_url, '_blank')}
-                  className="border-gray-600 hover:bg-gray-800 text-gray-200 hover:text-white"
-                >
-                  Ver Imagem
-                </Button>
+                <div className="w-24 aspect-video rounded overflow-hidden border border-gray-600 shrink-0">
+                  <img src={formData.thumbnail_url} alt="Capa" className="w-full h-full object-cover" />
+                </div>
               )}
             </div>
             {uploadingThumb && <p className="text-sm text-blue-400">Fazendo upload...</p>}
           </div>
+
+          {showThumbEditor && thumbToCrop && (
+            <ImageEditor
+              open={showThumbEditor}
+              onClose={() => { setShowThumbEditor(false); setThumbToCrop(null); }}
+              imageSrc={thumbToCrop}
+              aspectRatio={16/9}
+              lockAspect={true}
+              onSave={async (blob) => {
+                setUploadingThumb(true);
+                try {
+                  const file = new File([blob], `capa-${Date.now()}.jpg`, { type: 'image/jpeg' });
+                  const result = await UploadFile({ file });
+                  const url = result.url || result.file_url;
+                  setFormData(prev => ({ ...prev, thumbnail_url: url }));
+                  toast.success('Capa salva!');
+                } catch (_) {
+                  toast.error('Falha ao enviar capa.');
+                } finally {
+                  setUploadingThumb(false);
+                  setShowThumbEditor(false);
+                  setThumbToCrop(null);
+                }
+              }}
+            />
+          )}
 
           {/* Disponível Para */}
           <div className="space-y-2">

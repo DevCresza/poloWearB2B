@@ -682,7 +682,7 @@ export default function Catalogo() {
       <Card className="hover:shadow-xl transition-all bg-white border-0 shadow-md group h-full flex flex-col">
         <div className="p-4 sm:p-5 flex flex-col h-full">
           <div
-            className="aspect-[3/4] bg-gray-100 rounded-xl overflow-hidden mb-4 relative cursor-pointer"
+            className="aspect-[4/5] bg-gray-100 rounded-xl overflow-hidden mb-4 relative cursor-pointer"
             onClick={() => openProductDetails(produto)}
           >
             {(() => {
@@ -769,73 +769,22 @@ export default function Catalogo() {
             )}
           </div>
           
-          <div className="space-y-2 sm:space-y-3 flex-1 flex flex-col">
+          <div className="space-y-2 flex-1 flex flex-col">
             <h3
-              className="font-bold text-gray-900 line-clamp-2 text-sm sm:text-base lg:text-lg min-h-[2.5rem] sm:min-h-[3rem] cursor-pointer hover:text-blue-600 transition-colors"
+              className="font-semibold text-gray-900 line-clamp-2 text-xs sm:text-sm uppercase tracking-tight cursor-pointer hover:text-blue-600 transition-colors min-h-[2.25rem]"
               onClick={() => openProductDetails(produto)}
             >
               {produto.nome}
             </h3>
-            {produto.referencia_fornecedor && (
-              <p className="text-[10px] sm:text-xs text-gray-500 -mt-1">
-                Ref: {produto.referencia_fornecedor}
-              </p>
+
+            <p className="text-base sm:text-lg font-bold text-gray-900">
+              {formatCurrency(getPrecoPeca(produto, user))}
+            </p>
+
+            {produto.disponibilidade === 'pronta_entrega' && produto.controla_estoque && estoque <= 0 && (
+              <p className="text-[10px] sm:text-xs font-semibold text-red-600">✗ Esgotado</p>
             )}
 
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] sm:text-xs truncate max-w-[120px]" title={fornecedorMap[produto.fornecedor_id] || 'Polo Wear'}>
-                {fornecedorMap[produto.fornecedor_id] || 'Polo Wear'}
-              </Badge>
-              <div className="text-right">
-                <p className="text-lg sm:text-xl lg:text-2xl font-bold text-blue-600">
-                  {formatCurrency(getPrecoPeca(produto, user))}
-                </p>
-                <p className="text-[10px] sm:text-xs text-gray-500">por peça</p>
-              </div>
-            </div>
-
-            {produto.custo_por_peca > 0 && (
-              <p className="text-[10px] sm:text-xs text-green-700 bg-green-50 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg">
-                Preço sugerido de venda: {formatCurrency(produto.custo_por_peca)}/peça
-              </p>
-            )}
-
-            {produto.tipo_venda === 'grade' && (
-              <p className="text-[10px] sm:text-xs text-gray-600 bg-gray-50 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg">
-                Grade: {produto.total_pecas_grade} peças • {formatCurrency(getPrecoGrade(produto, user))}
-              </p>
-            )}
-
-            {/* Só mostra estoque para produtos de pronta entrega */}
-            {produto.disponibilidade === 'pronta_entrega' && produto.controla_estoque && (
-              <p className={`text-[10px] sm:text-xs font-semibold ${estoque > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {estoque > 0 ? `✓ ${estoque} disponível` : '✗ Esgotado'}
-              </p>
-            )}
-            
-            {produto.tem_variantes_cor && variantes.length > 0 && (
-              <div className="flex flex-wrap gap-1 sm:gap-1.5">
-                {variantes.slice(0, 6).map((v, idx) => (
-                  <div
-                    key={idx}
-                    className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border-2 border-gray-300 shadow-sm"
-                    style={{ backgroundColor: v.cor_codigo_hex || v.cor_hex || '#000000' }}
-                    title={
-                      produto.disponibilidade === 'pronta_entrega'
-                        ? `${v.cor_nome}: ${v.estoque_grades || 0} grades`
-                        : v.cor_nome
-                    }
-                  />
-                ))}
-                {variantes.length > 6 && (
-                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border-2 border-gray-300 bg-gray-100 flex items-center justify-center text-[8px] sm:text-[10px] text-gray-600 font-semibold">
-                    +{variantes.length - 6}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Badges de Lançamento e Disponibilidade abaixo das cores */}
             <div className="flex items-center gap-1.5">
               {ehLancamento && (
                 <Badge className="bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-sm text-[9px] px-1.5 py-0.5">
@@ -843,15 +792,9 @@ export default function Catalogo() {
                   Lançamento
                 </Badge>
               )}
-              {produto.disponibilidade === 'sob_encomenda' && (
-                <Badge className="bg-orange-500 text-white shadow-sm text-[9px] px-1.5 py-0.5">
-                  <Clock className="w-2 h-2 mr-0.5" />
-                  Sob Encomenda
-                </Badge>
-              )}
             </div>
-            
-            <div className="flex gap-2 pt-2 mt-auto">
+
+            <div className="pt-2 mt-auto">
               <Button
                 onClick={() => adicionarDiretoAoCarrinho(produto)}
                 disabled={
@@ -860,25 +803,16 @@ export default function Catalogo() {
                   !produto.permite_venda_sem_estoque &&
                   estoque <= 0
                 }
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white h-9 sm:h-11 text-xs sm:text-sm"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white h-9 sm:h-10 text-xs sm:text-sm"
               >
                 {adicionandoCarrinho[produto.id] ? (
                   <Check className="w-4 h-4 sm:w-5 sm:h-5" />
                 ) : (
                   <>
-                    <ShoppingCart className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-                    <span className="hidden sm:inline">Adicionar</span>
-                    <span className="sm:hidden">+</span>
+                    <ShoppingCart className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5" />
+                    Adicionar
                   </>
                 )}
-              </Button>
-              <Button 
-                onClick={() => openProductDetails(produto)}
-                variant="outline"
-                size="icon"
-                className="h-9 w-9 sm:h-11 sm:w-11"
-              >
-                <Eye className="w-4 h-4 sm:w-5 sm:h-5" />
               </Button>
             </div>
           </div>
@@ -1043,62 +977,96 @@ export default function Catalogo() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8">
-        {/* Featured Products */}
+        {/* Hero - Produtos em Destaque (4 grandes) */}
         {featuredProducts.length > 0 && (
-          <div className="space-y-4 sm:space-y-6">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <Star className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-500 fill-yellow-500" />
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Produtos em Destaque</h2>
-            </div>
-            
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
-              {featuredProducts.map(produto => (
-                <ProductCard key={produto.id} produto={produto} />
-              ))}
-            </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+            {featuredProducts.slice(0, 4).map(produto => {
+              const fotos = getTodasFotos(produto);
+              const fotoAtual = fotos.length > 0 ? fotos[0] : null;
+              return (
+                <div
+                  key={produto.id}
+                  className="relative aspect-[4/5] bg-gray-50 rounded-xl overflow-hidden cursor-pointer group"
+                  onClick={() => openProductDetails(produto)}
+                >
+                  {fotoAtual ? (
+                    <img src={fotoAtual} alt={produto.nome} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  ) : (
+                    <div className="flex items-center justify-center h-full"><Package className="w-16 h-16 text-gray-300" /></div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
-        {/* Capsules Section */}
+        {/* Chips de filtro rápido */}
+        <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
+          {[
+            { label: 'Todos', clear: true },
+            { label: 'Pronta Entrega', tipo: 'disponibilidade', value: 'pronta_entrega' },
+            { label: 'Nova Coleção', tipo: 'lancamento' },
+            { label: 'Acessórios', tipo: 'categoria', value: 'Acessórios' },
+            { label: 'Calçados', tipo: 'categoria', value: 'Calçados' },
+            { label: 'Íntimo', tipo: 'categoria', value: 'Íntimo' },
+            { label: 'Feminino', tipo: 'genero', value: 'Feminino' },
+            { label: 'Masculino', tipo: 'genero', value: 'Masculino' },
+          ].map(chip => {
+            const isActive =
+              (chip.tipo === 'disponibilidade' && selectedDisponibilidade === chip.value) ||
+              (chip.tipo === 'categoria' && selectedCategoria === chip.value) ||
+              (chip.tipo === 'genero' && selectedGenero === chip.value) ||
+              (chip.clear && selectedCategoria === 'all' && selectedGenero === 'all' && selectedDisponibilidade === 'all');
+            return (
+              <button
+                key={chip.label}
+                onClick={() => {
+                  if (chip.clear) {
+                    setSelectedCategoria('all'); setSelectedGenero('all'); setSelectedDisponibilidade('all');
+                  } else if (chip.tipo === 'categoria') {
+                    setSelectedCategoria(selectedCategoria === chip.value ? 'all' : chip.value);
+                  } else if (chip.tipo === 'genero') {
+                    setSelectedGenero(selectedGenero === chip.value ? 'all' : chip.value);
+                  } else if (chip.tipo === 'disponibilidade') {
+                    setSelectedDisponibilidade(selectedDisponibilidade === chip.value ? 'all' : chip.value);
+                  } else if (chip.tipo === 'lancamento') {
+                    setOrdenacao('data_desc');
+                  }
+                }}
+                className={`shrink-0 px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium uppercase tracking-wide border transition-all ${
+                  isActive
+                    ? 'bg-gray-900 text-white border-gray-900'
+                    : 'bg-white text-gray-700 border-gray-300 hover:border-gray-900'
+                }`}
+              >
+                {chip.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Faixa horizontal de Cápsulas */}
         {activeCapsulas.length > 0 && (
-          <div className="space-y-4 sm:space-y-6">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Cápsulas</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div className="space-y-3">
+            <h2 className="text-base sm:text-lg font-bold text-gray-900 uppercase tracking-wider">Cápsulas</h2>
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
               {activeCapsulas.map(capsula => (
-                <div key={capsula.id} onClick={() => handleSelectCapsula(capsula)} className="cursor-pointer group">
-                  <Card className="overflow-hidden hover:shadow-xl transition-all border-0 shadow-md">
-                    <div className="aspect-[3/4] overflow-hidden bg-gradient-to-br from-purple-100 to-pink-100">
-                      {capsula.imagem_capa_url ? (
-                        <img
-                          src={capsula.imagem_capa_url}
-                          alt={capsula.nome}
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                            e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center"><svg class="w-16 h-16 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg></div>';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Sparkles className="w-16 h-16 text-purple-400" />
-                        </div>
-                      )}
-                    </div>
-                    <CardHeader className="p-4 sm:p-6">
-                      <CardTitle className="text-base sm:text-xl">{capsula.nome}</CardTitle>
-                      <p className="text-xs sm:text-sm text-gray-600 line-clamp-2">{capsula.descricao}</p>
-                      <Badge variant="outline" className="w-fit bg-purple-50 text-purple-700 border-purple-200 mt-2 text-xs">
-                        {capsula.produto_ids?.length || 0} produtos
-                      </Badge>
-                      {capsula.fornecedor_id && (() => {
-                        const forn = fornecedores.find(f => f.id === capsula.fornecedor_id);
-                        const nome = forn?.razao_social || forn?.nome_fantasia || forn?.nome_marca;
-                        return nome ? (
-                          <p className="text-xs text-gray-500 mt-1">{nome}</p>
-                        ) : null;
-                      })()}
-                    </CardHeader>
-                  </Card>
+                <div
+                  key={capsula.id}
+                  onClick={() => handleSelectCapsula(capsula)}
+                  className="shrink-0 w-40 sm:w-48 cursor-pointer group"
+                >
+                  <div className="aspect-square rounded-xl overflow-hidden bg-gradient-to-br from-pink-100 to-purple-100 mb-2">
+                    {capsula.imagem_capa_url ? (
+                      <img src={capsula.imagem_capa_url} alt={capsula.nome} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Sparkles className="w-10 h-10 text-purple-400" />
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs sm:text-sm font-semibold text-gray-900 line-clamp-1">{capsula.nome}</p>
+                  <p className="text-[11px] text-gray-500">{capsula.produto_ids?.length || 0} produtos</p>
                 </div>
               ))}
             </div>
@@ -1859,7 +1827,7 @@ export default function Catalogo() {
                 <div className="space-y-4">
                   {/* Foto principal */}
                   <div className="relative w-full max-w-md mx-auto">
-                    <div className="aspect-[3/4] rounded-lg overflow-hidden bg-gray-100">
+                    <div className="aspect-[4/5] rounded-lg overflow-hidden bg-gray-100">
                       <img
                         src={capsulaFotos[capsulaFotoIndex]?.url}
                         alt={capsulaFotos[capsulaFotoIndex]?.produtoNome || selectedCapsula.nome}
@@ -1952,7 +1920,7 @@ export default function Catalogo() {
 
               {/* Fallback se não tiver fotos mas tiver imagem de capa */}
               {capsulaFotos.length === 0 && selectedCapsula.imagem_capa_url && (
-                <div className="w-full max-w-md mx-auto aspect-[3/4] rounded-lg overflow-hidden">
+                <div className="w-full max-w-md mx-auto aspect-[4/5] rounded-lg overflow-hidden">
                   <img
                     src={selectedCapsula.imagem_capa_url}
                     alt={selectedCapsula.nome}

@@ -392,13 +392,13 @@ function ContentRow({ title, recursos, onSelect, getTipoIcon }) {
           return (
             <Card
               key={recurso.id}
-              className="netflix-card flex-shrink-0 w-72 bg-gray-900 border-0 cursor-pointer overflow-hidden"
+              className="netflix-card flex-shrink-0 w-72 bg-gray-900 border-0 cursor-pointer overflow-hidden group"
               onClick={() => onSelect(recurso)}
             >
               <div className="relative aspect-video bg-gray-800">
                 {recurso.thumbnail_url ? (
-                  <img 
-                    src={recurso.thumbnail_url} 
+                  <img
+                    src={recurso.thumbnail_url}
                     alt={recurso.titulo}
                     className="w-full h-full object-cover"
                   />
@@ -407,10 +407,30 @@ function ContentRow({ title, recursos, onSelect, getTipoIcon }) {
                     <TipoIcon className="w-16 h-16 text-gray-600" />
                   </div>
                 )}
-                
+
+                {/* Overlay com gradiente */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+
+                {/* Título e meta sobrepostos */}
+                <div className="absolute bottom-0 left-0 right-0 p-4 space-y-1">
+                  <h3 className="font-semibold text-white line-clamp-2 text-base drop-shadow-md">
+                    {recurso.titulo}
+                  </h3>
+                  <div className="flex items-center justify-between text-[11px] text-gray-200">
+                    <div className="flex items-center gap-1.5">
+                      <TipoIcon className="w-3.5 h-3.5" />
+                      <span className="capitalize">{recurso.tipo}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Eye className="w-3 h-3" />
+                      <span>{recurso.visualizacoes || 0}</span>
+                    </div>
+                  </div>
+                </div>
+
                 {recurso.tipo === 'video' && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity">
-                    <Play className="w-16 h-16 text-white fill-current" />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Play className="w-14 h-14 text-white fill-current" />
                   </div>
                 )}
 
@@ -423,27 +443,6 @@ function ContentRow({ title, recursos, onSelect, getTipoIcon }) {
                   </div>
                 )}
               </div>
-              
-              <CardContent className="p-4">
-                <h3 className="font-semibold text-white mb-2 line-clamp-2 text-lg">
-                  {recurso.titulo}
-                </h3>
-                
-                <p className="text-sm text-gray-400 line-clamp-2 mb-3">
-                  {recurso.descricao}
-                </p>
-
-                <div className="flex items-center justify-between text-xs text-gray-500">
-                  <div className="flex items-center gap-2">
-                    <TipoIcon className="w-4 h-4" />
-                    <span className="capitalize">{recurso.tipo}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Eye className="w-3 h-3" />
-                    <span>{recurso.visualizacoes || 0}</span>
-                  </div>
-                </div>
-              </CardContent>
             </Card>
           );
         })}

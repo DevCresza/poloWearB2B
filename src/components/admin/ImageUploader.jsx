@@ -150,7 +150,7 @@ export default function ImageUploader({ images = [], onImagesChange, maxImages =
                         onMouseEnter={() => setHoveredImage(index)}
                         onMouseLeave={() => setHoveredImage(null)}
                       >
-                        <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200">
+                        <div className="aspect-[4/5] bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200">
                           <img
                             src={imageUrl}
                             alt={`Produto ${index + 1}`}
@@ -246,7 +246,7 @@ export default function ImageUploader({ images = [], onImagesChange, maxImages =
           }}
           imageSrc={currentImageToEdit}
           onSave={handleSaveEditedImage}
-          aspectRatio={1}
+          aspectRatio={4/5}
         />
       )}
     </div>

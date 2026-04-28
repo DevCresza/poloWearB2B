@@ -294,7 +294,7 @@ export default function ProductVariantsManager({ variantes = [], onChange, grade
                                     {...provided.draggableProps}
                                     className={`relative group ${snapshot.isDragging ? 'z-50' : ''}`}
                                   >
-                                    <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200">
+                                    <div className="aspect-[4/5] bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200">
                                       <img
                                         src={url}
                                         alt={`${variante.cor_nome} ${idx + 1}`}
@@ -402,7 +402,7 @@ export default function ProductVariantsManager({ variantes = [], onChange, grade
           }}
           imageSrc={currentImageToEdit}
           onSave={handleSaveEditedImage}
-          aspectRatio={1}
+          aspectRatio={4/5}
         />
       )}
     </Card>

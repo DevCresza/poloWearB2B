@@ -22,7 +22,8 @@ export default function ImageEditor({
   onClose,
   imageSrc,
   onSave,
-  aspectRatio = 1
+  aspectRatio = 4/5,
+  lockAspect = true
 }) {
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -167,51 +168,48 @@ export default function ImageEditor({
           {/* Controles */}
           <div className="space-y-4 pb-4">
           {/* Proporção */}
-          <div className="space-y-2">
-            <Label>Proporção da Imagem</Label>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant={currentAspect === 1 ? "default" : "outline"}
-                size="sm"
-                onClick={() => setCurrentAspect(1)}
-                className="gap-2"
-              >
-                <Square className="w-4 h-4" />
-                Quadrado (1:1)
-              </Button>
-              <Button
-                type="button"
-                variant={currentAspect === 4/3 ? "default" : "outline"}
-                size="sm"
-                onClick={() => setCurrentAspect(4/3)}
-                className="gap-2"
-              >
-                <Maximize2 className="w-4 h-4" />
-                Paisagem (4:3)
-              </Button>
-              <Button
-                type="button"
-                variant={currentAspect === 3/4 ? "default" : "outline"}
-                size="sm"
-                onClick={() => setCurrentAspect(3/4)}
-                className="gap-2"
-              >
-                <Maximize2 className="w-4 h-4 rotate-90" />
-                Retrato (3:4)
-              </Button>
-              <Button
-                type="button"
-                variant={currentAspect === 16/9 ? "default" : "outline"}
-                size="sm"
-                onClick={() => setCurrentAspect(16/9)}
-                className="gap-2"
-              >
-                <Maximize2 className="w-4 h-4" />
-                Widescreen (16:9)
-              </Button>
+          {!lockAspect && (
+            <div className="space-y-2">
+              <Label>Proporção da Imagem</Label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant={currentAspect === 4/5 ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCurrentAspect(4/5)}
+                  className="gap-2"
+                >
+                  <Maximize2 className="w-4 h-4 rotate-90" />
+                  Produto (4:5)
+                </Button>
+                <Button
+                  type="button"
+                  variant={currentAspect === 1 ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCurrentAspect(1)}
+                  className="gap-2"
+                >
+                  <Square className="w-4 h-4" />
+                  Quadrado (1:1)
+                </Button>
+                <Button
+                  type="button"
+                  variant={currentAspect === 16/9 ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCurrentAspect(16/9)}
+                  className="gap-2"
+                >
+                  <Maximize2 className="w-4 h-4" />
+                  Widescreen (16:9)
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
+          {lockAspect && (
+            <div className="bg-blue-50 border border-blue-200 rounded p-2 text-xs text-blue-800">
+              Padrão de imagem do produto: <strong>4:5</strong> (1200×1500 px recomendado).
+            </div>
+          )}
 
           {/* Zoom */}
           <div className="space-y-2">

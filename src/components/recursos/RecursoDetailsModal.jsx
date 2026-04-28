@@ -14,6 +14,7 @@ export default function RecursoDetailsModal({ recurso, onClose, onEdit, onDelete
     const icons = {
       artigo: FileText,
       video: Video,
+      pdf: FileText,
       lookbook: ImageIcon,
       checklist: CheckSquare,
       marketing: TrendingUp,
@@ -40,11 +41,31 @@ export default function RecursoDetailsModal({ recurso, onClose, onEdit, onDelete
     switch (recurso.tipo) {
       case 'video':
         if (recurso.video_url) {
+          const raw = recurso.video_url;
+          // Instagram Reel
+          const igMatch = raw.match(/instagram\.com\/(?:reel|p|tv)\/([\w-]+)/);
+          if (igMatch) {
+            return (
+              <div className="aspect-[9/16] max-w-md mx-auto rounded-lg overflow-hidden bg-black">
+                <iframe
+                  src={`https://www.instagram.com/reel/${igMatch[1]}/embed`}
+                  title={recurso.titulo}
+                  frameBorder="0"
+                  scrolling="no"
+                  allow="encrypted-media"
+                  allowFullScreen
+                  className="w-full h-full"
+                />
+              </div>
+            );
+          }
+
+          // YouTube
           let videoId = '';
           try {
-            const url = new URL(recurso.video_url);
+            const url = new URL(raw);
             if (url.hostname.includes('youtube.com')) {
-              videoId = url.searchParams.get('v');
+              videoId = url.searchParams.get('v') || url.pathname.replace('/embed/', '').replace('/shorts/', '').split('/').filter(Boolean)[0] || '';
             } else if (url.hostname.includes('youtu.be')) {
               videoId = url.pathname.slice(1);
             }
@@ -73,6 +94,25 @@ export default function RecursoDetailsModal({ recurso, onClose, onEdit, onDelete
             <Play className="w-20 h-20 text-gray-600" />
           </div>
         );
+
+      case 'pdf':
+        if (recurso.arquivo_url) {
+          return (
+            <div className="space-y-3">
+              <div className="rounded-lg overflow-hidden border border-gray-700 bg-white">
+                <iframe
+                  src={`${recurso.arquivo_url}#toolbar=0&navpanes=0`}
+                  title={recurso.titulo}
+                  className="w-full h-[70vh]"
+                />
+              </div>
+              <Button onClick={() => window.open(recurso.arquivo_url, '_blank')} className="w-full bg-blue-600 hover:bg-blue-700 text-white">
+                <Download className="w-4 h-4 mr-2" /> Baixar PDF
+              </Button>
+            </div>
+          );
+        }
+        return <p className="text-gray-500">PDF não disponível.</p>;
 
       case 'imagem':
       case 'lookbook':
@@ -214,7 +254,7 @@ export default function RecursoDetailsModal({ recurso, onClose, onEdit, onDelete
           </div>
 
           {/* Arquivo para Download */}
-          {recurso.arquivo_url && recurso.tipo !== 'video' && recurso.tipo !== 'imagem' && (
+          {recurso.arquivo_url && recurso.tipo !== 'video' && recurso.tipo !== 'imagem' && recurso.tipo !== 'pdf' && (
             <div className="flex items-center gap-3 p-4 bg-gray-900 rounded-lg border border-gray-800">
               <FileText className="w-8 h-8 text-blue-500" />
               <div className="flex-1">
