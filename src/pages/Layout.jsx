@@ -306,7 +306,7 @@ export default function Layout({ children, currentPageName }) {
       {/* Mobile Header */}
       <div className="lg:hidden bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="flex items-center justify-between p-4">
-          <div className="font-bold text-xl text-blue-600">POLO B2B</div>
+          <img src="/logoPolo.png" alt="Polo Wear" className="h-8 w-auto object-contain" />
           <div className="flex items-center gap-2">
             {isCliente && !hideSeletorLoja && <SeletorLoja />}
             {/* Notificações Mobile */}
@@ -352,8 +352,8 @@ export default function Layout({ children, currentPageName }) {
 
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex w-64 bg-slate-100 flex-col p-4 sticky top-0 h-screen">
-        <div className="h-16 flex items-center justify-center font-bold text-2xl text-blue-600 mb-4 flex-shrink-0">
-          POLO B2B
+        <div className="h-20 flex items-center justify-center mb-4 flex-shrink-0">
+          <img src="/logoPolo.png" alt="Polo Wear" className="h-14 w-auto object-contain" />
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto min-h-0">
           <NavLinks />
@@ -368,11 +368,14 @@ export default function Layout({ children, currentPageName }) {
 
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <header className="bg-slate-100 border-b border-gray-200 px-4 lg:px-8 py-4 sticky top-0 lg:top-auto z-50">
+        <header className="bg-white border-b border-gray-200 px-4 lg:px-8 py-3 sticky top-0 lg:top-auto z-50">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl lg:text-2xl font-bold text-gray-800">
-              {currentPageName.replace(/([A-Z])/g, ' $1').trim()}
-            </h1>
+            <div className="flex items-center gap-3">
+              <img src="/logoPolo.png" alt="Polo Wear" className="h-10 lg:h-12 w-auto object-contain hidden lg:block" />
+              <h1 className="text-base lg:text-lg font-semibold text-gray-700 lg:hidden">
+                {currentPageName.replace(/([A-Z])/g, ' $1').trim()}
+              </h1>
+            </div>
             <div className="flex items-center gap-2 lg:gap-4">
               {/* Seletor de Loja */}
               {isCliente && !hideSeletorLoja && <SeletorLoja />}

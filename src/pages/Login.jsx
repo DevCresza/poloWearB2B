@@ -73,11 +73,9 @@ export default function Login() {
         <Card className="shadow-xl">
           <CardHeader className="space-y-1">
             <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center">
-                <LogIn className="w-8 h-8 text-white" />
-              </div>
+              <img src="/logoPolo.png" alt="Polo Wear" className="h-20 w-auto object-contain" />
             </div>
-            <CardTitle className="text-2xl text-center">Polo Wear B2B</CardTitle>
+            <CardTitle className="text-xl text-center text-gray-700">Portal B2B</CardTitle>
             <CardDescription className="text-center">
               Entre com suas credenciais para acessar o sistema
             </CardDescription>
