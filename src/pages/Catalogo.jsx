@@ -977,6 +977,22 @@ export default function Catalogo() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8">
+        {/* Banner principal (placeholder de teste) */}
+        <div className="relative w-full aspect-[16/6] rounded-xl overflow-hidden bg-gray-200 shadow-md">
+          <img
+            src="https://images.unsplash.com/photo-1483985988355-763728e1935b?w=1600&q=80"
+            alt="Coleção Polo Wear"
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/20 to-transparent flex items-center">
+            <div className="px-8 sm:px-12 max-w-xl text-white">
+              <p className="text-xs sm:text-sm uppercase tracking-[0.2em] mb-2 opacity-90">Nova coleção</p>
+              <h2 className="text-3xl sm:text-5xl font-bold leading-tight mb-3">Primavera Verão 2026</h2>
+              <p className="text-sm sm:text-base opacity-90">Os lançamentos chegaram. Confira os destaques abaixo.</p>
+            </div>
+          </div>
+        </div>
+
         {/* Hero - Produtos em Destaque (4 grandes) */}
         {featuredProducts.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
