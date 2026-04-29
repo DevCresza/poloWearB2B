@@ -311,13 +311,9 @@ export default function GestaoProdutos() {
         />
       ) : (
         <div className="space-y-6">
-          {/* Header */}
+          {/* Header (subtítulo apenas; o título principal vem do Layout) */}
           <div className="flex flex-col lg:flex-row gap-4 justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                <Package className="w-6 h-6" />
-                Gestão de Produtos
-              </h1>
               <p className="text-gray-600">Cadastre e gerencie produtos com grades personalizadas</p>
             </div>
 
