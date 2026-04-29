@@ -1014,16 +1014,16 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                 </h3>
 
                 <div className="space-y-2">
-                  <Label htmlFor="video_url">URL do Vídeo (YouTube)</Label>
+                  <Label htmlFor="video_url">URL do Vídeo (YouTube ou Instagram Reels)</Label>
                   <Input
                     id="video_url"
                     type="url"
                     value={formData.video_url || ''}
                     onChange={(e) => setFormData({...formData, video_url: e.target.value})}
-                    placeholder="https://www.youtube.com/watch?v=..."
+                    placeholder="https://www.youtube.com/watch?v=... ou https://www.instagram.com/reel/..."
                   />
                   <p className="text-sm text-gray-500">
-                    Cole o link do vídeo do YouTube para exibição na página do produto
+                    Cole o link do YouTube ou de um Reels do Instagram. O vídeo aparece na galeria do produto.
                   </p>
                 </div>
 

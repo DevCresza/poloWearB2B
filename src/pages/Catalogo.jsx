@@ -1138,11 +1138,19 @@ export default function Catalogo() {
                     const match = url.match(regExp);
                     return (match && match[2].length === 11) ? match[2] : null;
                   };
+                  // Extrair ID do Instagram Reel/Post
+                  const getInstagramId = (url) => {
+                    if (!url) return null;
+                    const m = url.match(/instagram\.com\/(?:reel|p|tv)\/([\w-]+)/);
+                    return m ? m[1] : null;
+                  };
 
                   const youtubeVideoId = getYouTubeVideoId(selectedProduto.video_url);
-                  const totalMedias = fotosParaMostrar.length + (youtubeVideoId ? 1 : 0);
+                  const instagramId = !youtubeVideoId ? getInstagramId(selectedProduto.video_url) : null;
+                  const hasVideo = Boolean(youtubeVideoId || instagramId);
+                  const totalMedias = fotosParaMostrar.length + (hasVideo ? 1 : 0);
 
-                  if (fotosParaMostrar.length > 0 || youtubeVideoId) {
+                  if (fotosParaMostrar.length > 0 || hasVideo) {
                     return (
                       <>
                         {/* Foto/Vídeo Principal */}
@@ -1160,6 +1168,16 @@ export default function Catalogo() {
                               title="Vídeo do Produto"
                               frameBorder="0"
                               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              allowFullScreen
+                            />
+                          ) : instagramId ? (
+                            <iframe
+                              className="w-full h-full"
+                              src={`https://www.instagram.com/reel/${instagramId}/embed`}
+                              title="Reels do Produto"
+                              frameBorder="0"
+                              scrolling="no"
+                              allow="encrypted-media"
                               allowFullScreen
                             />
                           ) : null}
@@ -1202,19 +1220,23 @@ export default function Catalogo() {
                                 />
                               </button>
                             ))}
-                            {youtubeVideoId && (
+                            {hasVideo && (
                               <button
                                 key="video"
                                 onClick={() => setFotoAtualIndex(fotosParaMostrar.length)}
-                                className={`aspect-square bg-gray-100 rounded-lg overflow-hidden border-2 transition-all hover:border-blue-500 relative ${
+                                className={`aspect-square bg-gray-900 rounded-lg overflow-hidden border-2 transition-all hover:border-blue-500 relative ${
                                   fotoAtualIndex === fotosParaMostrar.length ? 'border-blue-500 ring-2 ring-blue-300' : 'border-transparent'
                                 }`}
                               >
-                                <img
-                                  src={`https://img.youtube.com/vi/${youtubeVideoId}/mqdefault.jpg`}
-                                  alt="Vídeo do Produto"
-                                  className="w-full h-full object-cover"
-                                />
+                                {youtubeVideoId ? (
+                                  <img
+                                    src={`https://img.youtube.com/vi/${youtubeVideoId}/mqdefault.jpg`}
+                                    alt="Vídeo do Produto"
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full bg-gradient-to-br from-pink-500 via-purple-500 to-orange-500" />
+                                )}
                                 <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
                                   <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
                                     <path d="M8 5v14l11-7z"/>
