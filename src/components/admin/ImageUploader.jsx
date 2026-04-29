@@ -247,6 +247,7 @@ export default function ImageUploader({ images = [], onImagesChange, maxImages =
           imageSrc={currentImageToEdit}
           onSave={handleSaveEditedImage}
           aspectRatio={4/5}
+          lockAspect={true}
         />
       )}
     </div>

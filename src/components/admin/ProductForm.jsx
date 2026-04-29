@@ -1031,6 +1031,10 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
 
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold">Fotos do Produto</h3>
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900">
+                    <strong>Padrão único de imagem:</strong> proporção <strong>4:5</strong> (vertical). Tamanho recomendado <strong>1200×1500 px</strong>.
+                    Ao subir, será aberto o editor para você posicionar a foto dentro desse formato.
+                  </div>
                   <ImageUploader
                     images={formData.fotos}
                     onImagesChange={(fotos) => setFormData(prev => ({...prev, fotos}))}

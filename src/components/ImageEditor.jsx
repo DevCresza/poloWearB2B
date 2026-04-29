@@ -206,8 +206,13 @@ export default function ImageEditor({
             </div>
           )}
           {lockAspect && (
-            <div className="bg-blue-50 border border-blue-200 rounded p-2 text-xs text-blue-800">
-              Padrão de imagem do produto: <strong>4:5</strong> (1200×1500 px recomendado).
+            <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-3 flex items-center gap-2 text-sm text-blue-900">
+              <Square className="w-5 h-5 shrink-0" />
+              <div>
+                Padrão único de proporção: <strong>4:5</strong> (vertical). Tamanho recomendado: 1200×1500 px.
+                <br />
+                <span className="text-xs opacity-80">Use o zoom e o reposicionamento para enquadrar o produto dentro deste formato.</span>
+              </div>
             </div>
           )}
 

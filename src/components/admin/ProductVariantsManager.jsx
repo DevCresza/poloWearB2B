@@ -174,6 +174,9 @@ export default function ProductVariantsManager({ variantes = [], onChange, grade
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900">
+          <strong>Padrão único de imagem:</strong> proporção <strong>4:5</strong> (vertical). Tamanho recomendado <strong>1200×1500 px</strong>.
+        </div>
         {variantesArray.length === 0 ? (
           <p className="text-gray-500 text-center py-8">
             Nenhuma variante cadastrada. Clique em "Adicionar Cor" para começar.
@@ -403,6 +406,7 @@ export default function ProductVariantsManager({ variantes = [], onChange, grade
           imageSrc={currentImageToEdit}
           onSave={handleSaveEditedImage}
           aspectRatio={4/5}
+          lockAspect={true}
         />
       )}
     </Card>
