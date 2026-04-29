@@ -444,9 +444,9 @@ export default function GestaoProdutos() {
                         key={produto.id}
                         className="bg-white rounded-lg border border-gray-200 hover:shadow-lg transition-all overflow-hidden flex flex-col group"
                       >
-                        <div className="relative aspect-[4/5] bg-gray-100 overflow-hidden">
+                        <div className="relative aspect-[4/5] bg-white overflow-hidden">
                           {foto ? (
-                            <img src={foto} alt={produto.nome} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                            <img src={foto} alt={produto.nome} className="w-full h-full object-contain group-hover:scale-105 transition-transform" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
                               <Package className="w-8 h-8 text-gray-300" />
