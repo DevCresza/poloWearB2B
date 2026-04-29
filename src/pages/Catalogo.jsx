@@ -680,10 +680,10 @@ export default function Catalogo() {
     const ehLancamento = isLancamento(produto);
 
     return (
-      <Card className="hover:shadow-xl transition-all bg-white border-0 shadow-md group h-full flex flex-col">
-        <div className="p-4 sm:p-5 flex flex-col h-full">
+      <Card className="hover:shadow-lg transition-all bg-white border-0 shadow-sm group h-full flex flex-col">
+        <div className="p-2 sm:p-3 flex flex-col h-full">
           <div
-            className="aspect-[4/5] bg-gray-100 rounded-xl overflow-hidden mb-4 relative cursor-pointer"
+            className="aspect-[4/5] bg-gray-100 rounded-lg overflow-hidden mb-2 relative cursor-pointer"
             onClick={() => openProductDetails(produto)}
           >
             {(() => {
@@ -740,26 +740,21 @@ export default function Catalogo() {
               );
             })()}
             
-            {/* Badges no canto superior */}
-            <div className="absolute top-2 left-2 right-2 flex flex-wrap gap-1.5">
-              {produto.is_destaque && (
-                <Badge className="bg-yellow-500 text-white shadow-lg text-[10px] sm:text-xs">
-                  <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 fill-current" />
+            {/* Badge único no canto superior esquerdo */}
+            <div className="absolute top-1.5 left-1.5">
+              {ehLancamento ? (
+                <Badge className="bg-gradient-to-r from-pink-500 to-pink-600 text-white shadow-md text-[9px] px-1.5 py-0.5 uppercase tracking-wider rounded">
+                  Lançamento
+                </Badge>
+              ) : produto.is_destaque ? (
+                <Badge className="bg-yellow-500 text-white shadow-md text-[9px] px-1.5 py-0.5 uppercase tracking-wider rounded">
                   Destaque
                 </Badge>
-              )}
-              {produto.disponibilidade === 'pronta_entrega' && (
-                <Badge className="bg-green-500 text-white shadow-lg text-[10px] sm:text-xs">
-                  <Truck className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
-                  Pronta Entrega
+              ) : produto.disponibilidade === 'pronta_entrega' ? (
+                <Badge className="bg-green-600 text-white shadow-md text-[9px] px-1.5 py-0.5 uppercase tracking-wider rounded">
+                  Pronta entrega
                 </Badge>
-              )}
-              {produto.disponibilidade === 'pre_venda' && (
-                <Badge className="bg-purple-500 text-white shadow-lg text-[10px] sm:text-xs">
-                  <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
-                  Pré-Venda
-                </Badge>
-              )}
+              ) : null}
             </div>
 
             {/* Só mostra overlay "Sem Estoque" para produtos de pronta entrega */}
@@ -770,32 +765,23 @@ export default function Catalogo() {
             )}
           </div>
           
-          <div className="space-y-2 flex-1 flex flex-col">
+          <div className="space-y-1.5 flex-1 flex flex-col">
             <h3
-              className="font-semibold text-gray-900 line-clamp-2 text-xs sm:text-sm uppercase tracking-tight cursor-pointer hover:text-blue-600 transition-colors min-h-[2.25rem]"
+              className="font-semibold text-gray-900 line-clamp-2 text-[11px] sm:text-xs uppercase tracking-tight cursor-pointer hover:text-blue-600 transition-colors min-h-[2rem] leading-tight"
               onClick={() => openProductDetails(produto)}
             >
               {produto.nome}
             </h3>
 
-            <p className="text-base sm:text-lg font-bold text-gray-900">
+            <p className="text-sm sm:text-base font-bold text-gray-900">
               {formatCurrency(getPrecoPeca(produto, user))}
             </p>
 
             {produto.disponibilidade === 'pronta_entrega' && produto.controla_estoque && estoque <= 0 && (
-              <p className="text-[10px] sm:text-xs font-semibold text-red-600">✗ Esgotado</p>
+              <p className="text-[10px] font-semibold text-red-600">✗ Esgotado</p>
             )}
 
-            <div className="flex items-center gap-1.5">
-              {ehLancamento && (
-                <Badge className="bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-sm text-[9px] px-1.5 py-0.5">
-                  <Sparkles className="w-2 h-2 mr-0.5" />
-                  Lançamento
-                </Badge>
-              )}
-            </div>
-
-            <div className="pt-2 mt-auto">
+            <div className="pt-1 mt-auto">
               <Button
                 onClick={() => adicionarDiretoAoCarrinho(produto)}
                 disabled={
@@ -804,16 +790,11 @@ export default function Catalogo() {
                   !produto.permite_venda_sem_estoque &&
                   estoque <= 0
                 }
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white h-9 sm:h-10 text-xs sm:text-sm"
+                className="w-full bg-gray-900 hover:bg-gray-800 text-white h-8 text-[11px] uppercase tracking-wide font-medium rounded-full"
               >
                 {adicionandoCarrinho[produto.id] ? (
-                  <Check className="w-4 h-4 sm:w-5 sm:h-5" />
-                ) : (
-                  <>
-                    <ShoppingCart className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5" />
-                    Adicionar
-                  </>
-                )}
+                  <Check className="w-4 h-4" />
+                ) : 'Adicionar'}
               </Button>
             </div>
           </div>
@@ -1094,7 +1075,7 @@ export default function Catalogo() {
               </p>
             </Card>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2 sm:gap-3 lg:gap-4">
               {sortedProducts.map(produto => (
                 <ProductCard key={produto.id} produto={produto} />
               ))}
