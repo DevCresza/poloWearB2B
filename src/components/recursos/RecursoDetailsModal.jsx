@@ -6,7 +6,7 @@ import { Recurso } from '@/api/entities';
 import { toast } from 'sonner';
 import { 
   FileText, Video, Image as ImageIcon, CheckSquare, TrendingUp,
-  Download, Eye, Play, Calendar, User, X, Edit, Trash2
+  Download, Eye, Play, Calendar, User, Edit, Trash2
 } from 'lucide-react';
 
 export default function RecursoDetailsModal({ recurso, onClose, onEdit, onDelete, isAdmin }) {
@@ -183,36 +183,26 @@ export default function RecursoDetailsModal({ recurso, onClose, onEdit, onDelete
             </>
           )}
           
-          <div className="absolute top-4 right-4 flex gap-2">
-            {isAdmin && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onEdit(recurso)}
-                  className="bg-black/50 hover:bg-black/70 text-white"
-                >
-                  <Edit className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleDelete}
-                  className="bg-black/50 hover:bg-red-600 text-white"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="bg-black/50 hover:bg-black/70 text-white"
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
+          {isAdmin && (
+            <div className="absolute top-4 right-14 flex gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onEdit(recurso)}
+                className="bg-black/50 hover:bg-black/70 text-white"
+              >
+                <Edit className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleDelete}
+                className="bg-black/50 hover:bg-red-600 text-white"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
 
           <div className="absolute bottom-4 left-6 right-6">
             <h2 className="text-4xl font-bold mb-3">{recurso.titulo}</h2>
