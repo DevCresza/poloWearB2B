@@ -465,9 +465,30 @@ export default function GestaoProdutos() {
                           <h3 className="text-[11px] font-semibold uppercase tracking-tight line-clamp-2 leading-tight min-h-[2rem]">
                             {produto.nome}
                           </h3>
-                          <p className="text-sm font-bold text-gray-900">
-                            {formatCurrency(produto.preco_por_peca)}
-                          </p>
+                          <div className="space-y-0.5">
+                            {produto.disponivel_franqueado !== false && (
+                              <div className="flex items-baseline gap-1.5">
+                                <span className="text-[9px] font-semibold text-blue-600 uppercase">Fran.</span>
+                                <span className="text-sm font-bold text-gray-900">{formatCurrency(produto.preco_por_peca)}</span>
+                              </div>
+                            )}
+                            {produto.disponivel_multimarca === true && (
+                              <div className="flex items-baseline gap-1.5">
+                                <span className="text-[9px] font-semibold text-purple-600 uppercase">Multi.</span>
+                                <span className={`text-sm font-bold ${
+                                  parseFloat(produto.preco_peca_multimarca) < parseFloat(produto.preco_por_peca) * 0.5
+                                    ? 'text-red-600'
+                                    : 'text-gray-900'
+                                }`}>
+                                  {produto.preco_peca_multimarca ? formatCurrency(produto.preco_peca_multimarca) : 'R$ 0,00'}
+                                </span>
+                                {parseFloat(produto.preco_peca_multimarca) > 0 &&
+                                 parseFloat(produto.preco_peca_multimarca) < parseFloat(produto.preco_por_peca) * 0.5 && (
+                                  <span className="text-[9px] text-red-600 font-semibold" title="Preço multimarca muito abaixo do franqueado, verificar">⚠</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                           <p className="text-[10px] text-gray-500 truncate">
                             {getFornecedorNome(produto.fornecedor_id)}
                           </p>
@@ -597,14 +618,28 @@ export default function GestaoProdutos() {
                           </TableCell>
                           
                           <TableCell>
-                            <div className="text-sm">
-                              {produto.tipo_venda === 'grade' ? (
-                                <>
-                                  <div className="font-semibold">{formatCurrency(produto.preco_grade_completa)}</div>
-                                  <div className="text-gray-500">{formatCurrency(produto.preco_por_peca)}/pç</div>
-                                </>
-                              ) : (
-                                <div className="font-semibold">{formatCurrency(produto.preco_por_peca)}</div>
+                            <div className="text-xs space-y-1">
+                              {produto.disponivel_franqueado !== false && (
+                                <div>
+                                  <span className="text-[10px] font-semibold text-blue-600 uppercase mr-1">Fran.</span>
+                                  <span className="font-semibold text-gray-900">{formatCurrency(produto.preco_por_peca)}</span>
+                                  {produto.tipo_venda === 'grade' && (
+                                    <span className="text-gray-500 ml-1">({formatCurrency(produto.preco_grade_completa)} grade)</span>
+                                  )}
+                                </div>
+                              )}
+                              {produto.disponivel_multimarca === true && (
+                                <div className={parseFloat(produto.preco_peca_multimarca) > 0 && parseFloat(produto.preco_peca_multimarca) < parseFloat(produto.preco_por_peca) * 0.5 ? 'text-red-600' : ''}>
+                                  <span className="text-[10px] font-semibold text-purple-600 uppercase mr-1">Multi.</span>
+                                  <span className="font-semibold">{produto.preco_peca_multimarca ? formatCurrency(produto.preco_peca_multimarca) : 'R$ 0,00'}</span>
+                                  {produto.tipo_venda === 'grade' && produto.preco_grade_multimarca && (
+                                    <span className="text-gray-500 ml-1">({formatCurrency(produto.preco_grade_multimarca)} grade)</span>
+                                  )}
+                                  {parseFloat(produto.preco_peca_multimarca) > 0 &&
+                                   parseFloat(produto.preco_peca_multimarca) < parseFloat(produto.preco_por_peca) * 0.5 && (
+                                    <span className="ml-1" title="Preço multimarca muito abaixo do franqueado, verificar">⚠</span>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </TableCell>
