@@ -18,6 +18,21 @@ import { User } from '@/api/entities';
 import { supabase } from '@/lib/supabase';
 import { Building, DollarSign, Mail, Phone, User as UserIcon, Shield, Truck, MapPin, Clock, CreditCard } from 'lucide-react'; // Added CreditCard icon
 
+// Extrai a mensagem real de erro de uma chamada supabase.functions.invoke.
+// Retorna string com o erro, ou null se sucesso.
+async function parseInvokeError(error, data) {
+  if (data && data.error) return data.error;
+  if (!error) return null;
+  // FunctionsHttpError traz o corpo da resposta em error.context
+  try {
+    if (error.context && typeof error.context.json === 'function') {
+      const body = await error.context.json();
+      if (body?.error) return body.error;
+    }
+  } catch (_) { /* ignore */ }
+  return error.message || 'Erro desconhecido';
+}
+
 export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
   const [formData, setFormData] = useState({
     nome_marca: 'Polo Wear',
@@ -113,49 +128,55 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
         // Atualização de fornecedor existente
         await Fornecedor.update(fornecedor.id, fornecedorData);
 
-        // Se informou email e/ou senha, gerenciar o usuário
+        // Se informou email, gerenciar o usuário de acesso
         if (formData.email_fornecedor) {
           try {
-            // Buscar usuário existente pelo email
             const usuarios = await User.list();
             const usuarioExistente = usuarios.find(u =>
-              u.email?.toLowerCase() === formData.email_fornecedor.toLowerCase()
+              u.email?.toLowerCase() === formData.email_fornecedor.trim().toLowerCase()
             );
 
             if (usuarioExistente) {
-              // Atualizar dados do usuário
-              await User.update(usuarioExistente.id, {
-                full_name: formData.razao_social,
-                empresa: formData.nome_marca,
-                ativo: formData.ativo_fornecedor,
-                fornecedor_id: fornecedor.id
-              });
-
-              // Se informou nova senha, atualizar via Edge Function
-              if (formData.senha_fornecedor && formData.senha_fornecedor.length >= 6) {
-                const { data, error } = await supabase.functions.invoke('update-user-password', {
-                  body: {
-                    user_id: usuarioExistente.id,
-                    new_password: formData.senha_fornecedor
-                  }
-                });
-
-                if (error) {
-                  console.error('Erro ao atualizar senha:', error);
-                  toast.warning('Dados atualizados, mas erro ao alterar senha.');
+              // 1) Senha PRIMEIRO (mais crítico) — por email, independente do update de perfil
+              if (formData.senha_fornecedor && formData.senha_fornecedor.trim()) {
+                if (formData.senha_fornecedor.trim().length < 6) {
+                  toast.error('A senha deve ter no mínimo 6 caracteres.');
                 } else {
-                  toast.success('Senha atualizada com sucesso!');
+                  const { data: pwData, error: pwError } = await supabase.functions.invoke('update-user-password', {
+                    body: {
+                      email: formData.email_fornecedor.trim(),
+                      new_password: formData.senha_fornecedor.trim()
+                    }
+                  });
+                  const pwErrMsg = await parseInvokeError(pwError, pwData);
+                  if (pwErrMsg) {
+                    toast.error('Erro ao alterar a senha: ' + pwErrMsg);
+                  } else {
+                    toast.success('Senha alterada com sucesso!');
+                  }
                 }
               }
-            } else if (formData.senha_fornecedor) {
-              // Criar novo usuário se não existe e tem senha
-              if (formData.senha_fornecedor.length < 6) {
+
+              // 2) Atualizar dados do perfil (não bloqueia a senha)
+              try {
+                await User.update(usuarioExistente.id, {
+                  full_name: formData.razao_social,
+                  empresa: formData.nome_marca,
+                  ativo: formData.ativo_fornecedor,
+                  fornecedor_id: fornecedor.id
+                });
+              } catch (updErr) {
+                console.error('Erro ao atualizar dados do usuário:', updErr);
+              }
+            } else if (formData.senha_fornecedor && formData.senha_fornecedor.trim()) {
+              // Não existe usuário → criar
+              if (formData.senha_fornecedor.trim().length < 6) {
                 toast.error('A senha deve ter no mínimo 6 caracteres.');
               } else {
                 const { data: cuData, error: cuError } = await supabase.functions.invoke('create-user', {
                   body: {
-                    email: formData.email_fornecedor,
-                    password: formData.senha_fornecedor,
+                    email: formData.email_fornecedor.trim(),
+                    password: formData.senha_fornecedor.trim(),
                     full_name: formData.razao_social,
                     role: 'fornecedor',
                     tipo_negocio: 'fornecedor',
@@ -165,8 +186,9 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
                     ativo: formData.ativo_fornecedor
                   }
                 });
-                if (cuError || cuData?.error) {
-                  toast.error('Erro ao criar usuário de acesso: ' + (cuData?.error || cuError.message));
+                const cuErrMsg = await parseInvokeError(cuError, cuData);
+                if (cuErrMsg) {
+                  toast.error('Erro ao criar usuário de acesso: ' + cuErrMsg);
                 } else {
                   toast.success('Usuário de acesso criado com sucesso!');
                 }
@@ -174,7 +196,7 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
             }
           } catch (userError) {
             console.error('Erro ao gerenciar usuário:', userError);
-            toast.warning('Fornecedor atualizado, mas houve um problema com o usuário de acesso.');
+            toast.warning('Fornecedor atualizado, mas houve um problema com o usuário de acesso: ' + (userError?.message || ''));
           }
         }
 
@@ -192,8 +214,8 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
             try {
               const { data: cuData, error: cuError } = await supabase.functions.invoke('create-user', {
                 body: {
-                  email: formData.email_fornecedor,
-                  password: formData.senha_fornecedor,
+                  email: formData.email_fornecedor.trim(),
+                  password: formData.senha_fornecedor.trim(),
                   full_name: formData.razao_social,
                   role: 'fornecedor',
                   tipo_negocio: 'fornecedor',
@@ -203,14 +225,15 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
                   ativo: formData.ativo_fornecedor
                 }
               });
-              if (cuError || cuData?.error) {
-                toast.warning(`Fornecedor criado, mas erro ao criar usuário: ${cuData?.error || cuError.message}`);
+              const cuErrMsg = await parseInvokeError(cuError, cuData);
+              if (cuErrMsg) {
+                toast.warning(`Fornecedor criado, mas erro ao criar usuário: ${cuErrMsg}`);
               } else {
                 toast.success('Fornecedor e usuário de acesso criados com sucesso!');
               }
             } catch (userError) {
               console.error('Erro ao criar usuário:', userError);
-              toast.warning(`Fornecedor criado, mas erro ao criar usuário: ${userError.message}`);
+              toast.warning(`Fornecedor criado, mas erro ao criar usuário: ${userError?.message || ''}`);
             }
           }
         } else {
