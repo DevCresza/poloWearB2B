@@ -15,7 +15,6 @@ import { toast } from 'sonner';
 import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox import
 import { Fornecedor } from '@/api/entities';
 import { User } from '@/api/entities';
-import { supabaseAuth } from '@/api/supabaseAuth';
 import { supabase } from '@/lib/supabase';
 import { Building, DollarSign, Mail, Phone, User as UserIcon, Shield, Truck, MapPin, Clock, CreditCard } from 'lucide-react'; // Added CreditCard icon
 
@@ -153,18 +152,24 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
               if (formData.senha_fornecedor.length < 6) {
                 toast.error('A senha deve ter no mínimo 6 caracteres.');
               } else {
-                await supabaseAuth.signup({
-                  email: formData.email_fornecedor,
-                  password: formData.senha_fornecedor,
-                  full_name: formData.razao_social,
-                  role: 'fornecedor',
-                  tipo_negocio: 'fornecedor',
-                  empresa: formData.nome_marca,
-                  telefone: formData.contato_comercial_whatsapp || formData.contato_comercial_telefone || '',
-                  fornecedor_id: fornecedor.id,
-                  ativo: formData.ativo_fornecedor
+                const { data: cuData, error: cuError } = await supabase.functions.invoke('create-user', {
+                  body: {
+                    email: formData.email_fornecedor,
+                    password: formData.senha_fornecedor,
+                    full_name: formData.razao_social,
+                    role: 'fornecedor',
+                    tipo_negocio: 'fornecedor',
+                    empresa: formData.nome_marca,
+                    telefone: formData.contato_comercial_whatsapp || formData.contato_comercial_telefone || '',
+                    fornecedor_id: fornecedor.id,
+                    ativo: formData.ativo_fornecedor
+                  }
                 });
-                toast.success('Usuário de acesso criado com sucesso!');
+                if (cuError || cuData?.error) {
+                  toast.error('Erro ao criar usuário de acesso: ' + (cuData?.error || cuError.message));
+                } else {
+                  toast.success('Usuário de acesso criado com sucesso!');
+                }
               }
             }
           } catch (userError) {
@@ -185,18 +190,24 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
             toast.success('Fornecedor criado, mas usuário de acesso não foi criado.');
           } else {
             try {
-              await supabaseAuth.signup({
-                email: formData.email_fornecedor,
-                password: formData.senha_fornecedor,
-                full_name: formData.razao_social,
-                role: 'fornecedor',
-                tipo_negocio: 'fornecedor',
-                empresa: formData.nome_marca,
-                telefone: formData.contato_comercial_whatsapp || formData.contato_comercial_telefone || '',
-                fornecedor_id: novoFornecedor.id,
-                ativo: formData.ativo_fornecedor
+              const { data: cuData, error: cuError } = await supabase.functions.invoke('create-user', {
+                body: {
+                  email: formData.email_fornecedor,
+                  password: formData.senha_fornecedor,
+                  full_name: formData.razao_social,
+                  role: 'fornecedor',
+                  tipo_negocio: 'fornecedor',
+                  empresa: formData.nome_marca,
+                  telefone: formData.contato_comercial_whatsapp || formData.contato_comercial_telefone || '',
+                  fornecedor_id: novoFornecedor.id,
+                  ativo: formData.ativo_fornecedor
+                }
               });
-              toast.success('Fornecedor e usuário de acesso criados com sucesso!');
+              if (cuError || cuData?.error) {
+                toast.warning(`Fornecedor criado, mas erro ao criar usuário: ${cuData?.error || cuError.message}`);
+              } else {
+                toast.success('Fornecedor e usuário de acesso criados com sucesso!');
+              }
             } catch (userError) {
               console.error('Erro ao criar usuário:', userError);
               toast.warning(`Fornecedor criado, mas erro ao criar usuário: ${userError.message}`);
