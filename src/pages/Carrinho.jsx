@@ -4,6 +4,7 @@ import { Pedido } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { Carteira } from '@/api/entities';
 import { Produto } from '@/api/entities';
+import { darBaixaEstoque } from '@/utils/estoqueUtils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -465,10 +466,19 @@ export default function Carrinho() {
         metodo_pagamento: metodo,
         endereco_entrega: enderecoEntrega,
         observacoes: obs || '',
-        observacoes_comprador: obs || ''
+        observacoes_comprador: obs || '',
+        estoque_baixado: true
       };
 
       const pedido = await Pedido.create(pedidoData);
+
+      // Baixa automática de estoque dos produtos vendidos.
+      // Não bloqueia o pedido caso falhe — apenas registra o erro.
+      try {
+        await darBaixaEstoque(itensPedido);
+      } catch (estoqueErr) {
+        console.error('Erro ao dar baixa no estoque:', estoqueErr);
+      }
 
       const dataVencimento = new Date();
       dataVencimento.setDate(dataVencimento.getDate() + 30);

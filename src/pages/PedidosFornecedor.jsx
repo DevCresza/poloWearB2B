@@ -8,6 +8,7 @@ import { Carteira } from '@/api/entities';
 import { Fornecedor } from '@/api/entities'; // Added import for Fornecedor
 import { Faturamento } from '@/api/entities';
 import { SendEmail, UploadFile } from '@/api/integrations';
+import { devolverEstoque } from '@/utils/estoqueUtils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -234,6 +235,16 @@ export default function PedidosFornecedor() {
         status: 'cancelado',
         motivo_recusa: motivoRecusa
       });
+
+      // Devolver ao estoque os produtos do pedido recusado
+      if (selectedPedido.estoque_baixado) {
+        try {
+          await devolverEstoque(selectedPedido.itens);
+          await Pedido.update(selectedPedido.id, { estoque_baixado: false });
+        } catch (estoqueErr) {
+          console.error('Erro ao devolver estoque do pedido recusado:', estoqueErr);
+        }
+      }
 
       // Notificar cliente
       await SendEmail({
@@ -939,6 +950,16 @@ export default function PedidosFornecedor() {
         status: 'cancelado',
         motivo_recusa: motivoCancelamento
       });
+
+      // Devolver ao estoque os produtos do pedido cancelado
+      if (selectedPedido.estoque_baixado) {
+        try {
+          await devolverEstoque(selectedPedido.itens);
+          await Pedido.update(selectedPedido.id, { estoque_baixado: false });
+        } catch (estoqueErr) {
+          console.error('Erro ao devolver estoque do pedido cancelado:', estoqueErr);
+        }
+      }
 
       // Cancelar todos os títulos/parcelas pendentes na carteira
       try {

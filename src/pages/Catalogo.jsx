@@ -1630,9 +1630,13 @@ export default function Catalogo() {
                   <div className="flex items-center gap-2">
                     {(() => {
                       let estoqueParaMostrar = 0;
-                      if (selectedProduto.tem_variantes_cor && selectedVariantColor) {
-                        estoqueParaMostrar = selectedVariantColor.estoque_grades || 0;
-                      } else if (!selectedProduto.tem_variantes_cor) {
+                      if (selectedProduto.tem_variantes_cor) {
+                        // Cor específica selecionada → estoque dela.
+                        // Nenhuma cor selecionada → soma do estoque de todas as cores.
+                        estoqueParaMostrar = selectedVariantColor
+                          ? (selectedVariantColor.estoque_grades || 0)
+                          : getProductTotalStock(selectedProduto);
+                      } else {
                         estoqueParaMostrar = selectedProduto.estoque_atual_grades || 0;
                       }
 
