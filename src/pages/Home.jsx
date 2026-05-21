@@ -19,7 +19,7 @@ export default function Home() {
           />
           <div className="h-1 w-32 bg-gradient-to-r from-blue-500 to-red-500 mx-auto mb-6"></div>
           <h1 className="text-3xl md:text-4xl font-light text-white mb-4">
-            Portal de Compras Franqueados
+            Portal de Compras
           </h1>
           <p className="text-gray-400 text-lg">
             Acesse sua conta para fazer pedidos e acompanhar suas compras

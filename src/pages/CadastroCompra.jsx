@@ -6,10 +6,21 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
-import { Contact } from '@/api/entities';
+import { Contact, User as UserAuth, Loja } from '@/api/entities';
 import { SendEmail } from '@/api/integrations';
-import { Store, ArrowRight, CheckCircle, Phone, Mail, Building, MapPin, User, CreditCard, Truck } from 'lucide-react';
+import { Store, ArrowRight, CheckCircle, Phone, Mail, Building, MapPin, User, CreditCard, Truck, Lock } from 'lucide-react';
 import { toast } from 'sonner';
+
+// Permissões padrão de um cliente multimarca
+const PERMISSOES_MULTIMARCA = {
+  ver_capsulas: true,
+  ver_pronta_entrega: true,
+  ver_programacao: true,
+  ver_relatorios: false,
+  ver_precos_custo: false,
+  fazer_pedidos: true,
+  ver_historico: true
+};
 
 export default function CadastroCompra() {
   // Detectar se é formulário de registro (view=register)
@@ -62,7 +73,11 @@ export default function CadastroCompra() {
     // Informações Comerciais
     tempo_atuacao: '',
     numero_funcionarios: '',
-    observacoes: ''
+    observacoes: '',
+
+    // Dados de acesso (apenas no cadastro de multimarca)
+    senha: '',
+    confirmar_senha: ''
   });
 
   const estados = [
@@ -125,12 +140,24 @@ export default function CadastroCompra() {
     e.preventDefault();
     
     // Validação básica
-    if (!formData.nome_loja || !formData.cnpj || !formData.nome_responsavel || 
+    if (!formData.nome_loja || !formData.cnpj || !formData.nome_responsavel ||
         !formData.email_responsavel || !formData.telefone_responsavel) {
       toast.error('Por favor, preencha todos os campos obrigatórios.');
       return;
     }
-    
+
+    // Validação da senha — apenas no cadastro de multimarca
+    if (isRegisterView) {
+      if (!formData.senha || formData.senha.length < 6) {
+        toast.error('A senha deve ter pelo menos 6 caracteres.');
+        return;
+      }
+      if (formData.senha !== formData.confirmar_senha) {
+        toast.error('As senhas não conferem.');
+        return;
+      }
+    }
+
     setLoading(true);
     
     try {
@@ -140,6 +167,61 @@ export default function CadastroCompra() {
       let enderecoEntregaCompleto = enderecoCompleto;
       if (formData.entrega_mesmo_endereco === 'nao') {
         enderecoEntregaCompleto = `${formData.entrega_rua}, ${formData.entrega_numero}${formData.entrega_complemento ? ' - ' + formData.entrega_complemento : ''}, ${formData.entrega_bairro}, ${formData.entrega_cidade}/${formData.entrega_estado}`;
+      }
+
+      // Cadastro de Multimarca: cria a conta de acesso com a senha escolhida
+      // (a pessoa fica logada e já pode comprar logo após o cadastro)
+      if (isRegisterView) {
+        try {
+          const novoUsuario = await UserAuth.signup({
+            email: formData.email_responsavel.trim().toLowerCase(),
+            password: formData.senha,
+            full_name: formData.nome_responsavel,
+            telefone: formData.telefone_responsavel,
+            whatsapp: formData.whatsapp_responsavel || formData.telefone_responsavel,
+            tipo_negocio: 'multimarca',
+            role: 'multimarca',
+            categoria_cliente: 'multimarca',
+            empresa: formData.nome_loja,
+            cnpj: formData.cnpj,
+            cidade: formData.endereco_cidade,
+            estado: formData.endereco_estado,
+            endereco_completo: enderecoCompleto,
+            cep: formData.endereco_cep,
+            ativo: true,
+            permissoes: PERMISSOES_MULTIMARCA
+          });
+
+          // Cria a loja do cliente com os dados do cadastro
+          try {
+            await Loja.create({
+              user_id: novoUsuario.id,
+              nome: formData.nome_loja,
+              cnpj: formData.cnpj || null,
+              inscricao_estadual: formData.inscricao_estadual || null,
+              endereco_completo: enderecoCompleto,
+              bairro: formData.endereco_bairro || null,
+              cidade: formData.endereco_cidade || null,
+              estado: formData.endereco_estado || null,
+              cep: formData.endereco_cep || null,
+              telefone: formData.telefone_responsavel || null,
+              whatsapp: formData.whatsapp_responsavel || null,
+              email: formData.email_responsavel || null,
+              categoria_cliente: 'multimarca',
+              ativa: true
+            });
+          } catch (lojaError) {
+            console.error('Erro ao criar loja do cliente:', lojaError);
+          }
+        } catch (signupError) {
+          const msg = (signupError?.message || '').toLowerCase();
+          if (msg.includes('already') || msg.includes('registered') || msg.includes('exist')) {
+            toast.error('Este e-mail já possui cadastro. Faça login na página inicial.');
+          } else {
+            toast.error(`Erro ao criar a conta: ${signupError.message || 'tente novamente.'}`);
+          }
+          return;
+        }
       }
 
       // Dados para salvar no CRM
@@ -194,8 +276,14 @@ ${formData.observacoes || 'Nenhuma observação'}
 Data do Cadastro: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`
       };
 
-      // Salvar no banco
-      await Contact.create(dadosContato);
+      // Salvar lead no CRM — mantém todos os dados captados no formulário
+      try {
+        await Contact.create(dadosContato);
+      } catch (contatoError) {
+        // No cadastro de multimarca a conta já foi criada; falha no CRM não bloqueia
+        if (!isRegisterView) throw contatoError;
+        console.error('Erro ao salvar lead no CRM:', contatoError);
+      }
 
       // Enviar email
       try {
@@ -263,18 +351,18 @@ Data: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`
               <CheckCircle className="w-10 h-10 text-green-600" />
             </div>
             <h1 className="text-3xl font-bold text-gray-900 mb-4">
-              {isRegisterView ? 'Cadastro Recebido!' : 'Solicitação Enviada!'}
+              {isRegisterView ? 'Conta criada com sucesso!' : 'Solicitação Enviada!'}
             </h1>
             <p className="text-lg text-gray-600 mb-8">
               {isRegisterView
-                ? 'Obrigado pelo interesse em revender POLO Wear! Nossa equipe comercial entrará em contato em até 24 horas.'
+                ? 'Seu acesso já está liberado! Você pode entrar no catálogo e fazer pedidos agora mesmo.'
                 : 'Obrigado pelo interesse em ser franqueado POLO Wear. Nossa equipe entrará em contato em até 24 horas.'}
             </p>
-            <Button 
-              onClick={() => window.location.href = '/'}
+            <Button
+              onClick={() => window.location.href = isRegisterView ? '/Catalogo' : '/'}
               className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3"
             >
-              Voltar ao Site
+              {isRegisterView ? 'Acessar o Catálogo' : 'Voltar ao Site'}
             </Button>
           </CardContent>
         </Card>
@@ -415,6 +503,52 @@ Data: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`
               </div>
 
               <Separator />
+
+              {/* Dados de Acesso — somente no cadastro de multimarca */}
+              {isRegisterView && (
+                <>
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Lock className="w-5 h-5 text-blue-600" />
+                      <h3 className="text-xl font-bold text-gray-900">Dados de Acesso</h3>
+                    </div>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <p className="text-sm text-blue-800">
+                        Seu login será o <strong>e-mail do responsável</strong> informado acima.
+                        Defina uma senha para acessar o portal.
+                      </p>
+                    </div>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="senha">Senha *</Label>
+                        <Input
+                          id="senha"
+                          type="password"
+                          value={formData.senha}
+                          onChange={(e) => setFormData({...formData, senha: e.target.value})}
+                          required={isRegisterView}
+                          minLength={6}
+                          placeholder="Mínimo de 6 caracteres"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="confirmar_senha">Confirmar Senha *</Label>
+                        <Input
+                          id="confirmar_senha"
+                          type="password"
+                          value={formData.confirmar_senha}
+                          onChange={(e) => setFormData({...formData, confirmar_senha: e.target.value})}
+                          required={isRegisterView}
+                          minLength={6}
+                          placeholder="Repita a senha"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+                </>
+              )}
 
               {/* Endereço da Loja */}
               <div className="space-y-4">
@@ -749,8 +883,17 @@ Data: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-sm text-blue-800">
-                  <strong>Importante:</strong> Após enviar suas informações, nossa equipe 
-                  entrará em contato em até 24 horas para prosseguir com o cadastro e configuração do acesso ao portal.
+                  {isRegisterView ? (
+                    <>
+                      <strong>Importante:</strong> Ao concluir o cadastro, seu acesso ao portal é
+                      liberado na hora — você já poderá navegar no catálogo e fazer pedidos.
+                    </>
+                  ) : (
+                    <>
+                      <strong>Importante:</strong> Após enviar suas informações, nossa equipe
+                      entrará em contato em até 24 horas para prosseguir com o cadastro e configuração do acesso ao portal.
+                    </>
+                  )}
                 </p>
               </div>
 
@@ -759,9 +902,9 @@ Data: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`
                 disabled={loading}
                 className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-lg font-semibold"
               >
-                {loading ? 'Enviando...' : (
+                {loading ? (isRegisterView ? 'Criando conta...' : 'Enviando...') : (
                   <>
-                    Enviar Solicitação
+                    {isRegisterView ? 'Criar Conta e Acessar' : 'Enviar Solicitação'}
                     <ArrowRight className="w-5 h-5 ml-2" />
                   </>
                 )}
