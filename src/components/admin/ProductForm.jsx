@@ -63,6 +63,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
     tem_variantes_cor: false, // New field
     variantes_cor: [], // New field
     is_destaque: false,
+    is_mais_vendido: false,
     ativo: true,
     visivel_apenas_capsulas: false,
     controla_estoque: true, // Kept as default true, checkbox removed
@@ -84,7 +85,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
 
   // Grades por tipo de categoria
   const tamanhosRoupa = ['PP', 'P', 'M', 'G', 'GG', 'G1', 'G2', 'G3', 'G4', 'G5'];
-  const tamanhosCalcaBermuda = ['36', '38', '40', '42', '44', '46', '48', '50', '52', '54'];
+  const tamanhosCalcaBermuda = ['36', '38', '40', '42', '44', '46', '48', '50', '52', '54', 'P', 'M', 'G', 'GG'];
   const tamanhosCalcados = ['34', '35', '36', '37', '38', '39', '40', '41', '42', '43'];
 
   const categoriasCalcaBermuda = ['Calças', 'Bermudas'];
@@ -1180,6 +1181,20 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                   className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                 >
                   Produto em Destaque
+                </label>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="is_mais_vendido"
+                  checked={formData.is_mais_vendido || false}
+                  onCheckedChange={(checked) => setFormData({...formData, is_mais_vendido: checked})}
+                />
+                <label
+                  htmlFor="is_mais_vendido"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  🔥 Marcar como Mais Vendido
                 </label>
               </div>
 

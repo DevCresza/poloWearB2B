@@ -4,6 +4,7 @@ import { User } from '@/api/entities';
 import { Produto } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { Capsula } from '@/api/entities';
+import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +32,7 @@ export default function Catalogo() {
   const [todosProdutos, setTodosProdutos] = useState([]); // Lista completa sem filtros
   const [fornecedores, setFornecedores] = useState([]);
   const [capsulas, setCapsulas] = useState([]);
+  const [vendasPorProduto, setVendasPorProduto] = useState({}); // { produto_id: total de peças vendidas }
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFornecedor, setSelectedFornecedor] = useState('all');
@@ -77,11 +79,20 @@ export default function Catalogo() {
       const currentUser = await User.me();
       setUser(currentUser);
       
-      const [produtosList, fornecedoresList, capsulasList] = await Promise.all([
+      const [produtosList, fornecedoresList, capsulasList, vendasResult] = await Promise.all([
         Produto.list(),
         Fornecedor.list(),
-        Capsula.list()
+        Capsula.list(),
+        supabase.rpc('get_produtos_mais_vendidos')
       ]);
+
+      // Ranking de mais vendidos (total de peças vendidas por produto)
+      // Agregado no servidor — não expõe dados sensíveis dos pedidos ao cliente
+      const mapaVendas = {};
+      (vendasResult?.data || []).forEach(v => {
+        mapaVendas[v.produto_id] = Number(v.total_vendido) || 0;
+      });
+      setVendasPorProduto(mapaVendas);
 
       // Guardar TODOS os produtos (incluindo inativos e visíveis apenas em cápsulas)
       // Isso permite que cápsulas mostrem produtos que foram desativados posteriormente
@@ -484,6 +495,17 @@ export default function Catalogo() {
     const estoqueB = getProductTotalStock(b);
     
     switch (ordenacao) {
+      case 'mais_vendidos': {
+        // Produtos marcados manualmente como "Mais Vendido" pelo admin vêm primeiro
+        const tagA = a.is_mais_vendido ? 1 : 0;
+        const tagB = b.is_mais_vendido ? 1 : 0;
+        if (tagA !== tagB) return tagB - tagA;
+        const vendasA = vendasPorProduto[a.id] || 0;
+        const vendasB = vendasPorProduto[b.id] || 0;
+        if (vendasB !== vendasA) return vendasB - vendasA;
+        // Empate (inclusive produtos sem vendas): prioriza quem tem estoque
+        return estoqueB - estoqueA;
+      }
       case 'estoque_desc':
         if (estoqueA > 0 && estoqueB === 0) return -1;
         if (estoqueA === 0 && estoqueB > 0) return 1;
@@ -510,6 +532,16 @@ export default function Catalogo() {
   );
   
   const activeCapsulas = capsulas.filter(c => c.ativa);
+
+  // IDs dos produtos campeões de venda (top 8) — usado para o selo "Mais Vendido"
+  const topVendidosIds = useMemo(() => {
+    const ranking = Object.entries(vendasPorProduto)
+      .filter(([, qtd]) => qtd > 0)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([pid]) => pid);
+    return new Set(ranking);
+  }, [vendasPorProduto]);
 
   const getPricePerPiece = (produto) => {
     return getPrecoPeca(produto, user);
@@ -678,6 +710,8 @@ export default function Catalogo() {
     }
     const estoque = getProductTotalStock(produto);
     const ehLancamento = isLancamento(produto);
+    // Selo "Mais Vendido": tag manual do admin OU entre os campeões de venda reais
+    const ehMaisVendido = produto.is_mais_vendido === true || topVendidosIds.has(produto.id);
 
     return (
       <Card className="hover:shadow-xl transition-all bg-white border-0 shadow-md group h-full flex flex-col">
@@ -742,7 +776,11 @@ export default function Catalogo() {
             
             {/* Badge único no canto superior esquerdo */}
             <div className="absolute top-1.5 left-1.5">
-              {ehLancamento ? (
+              {ehMaisVendido ? (
+                <Badge className="bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-md text-[9px] px-1.5 py-0.5 uppercase tracking-wider rounded">
+                  🔥 Mais Vendido
+                </Badge>
+              ) : ehLancamento ? (
                 <Badge className="bg-gradient-to-r from-pink-500 to-pink-600 text-white shadow-md text-[9px] px-1.5 py-0.5 uppercase tracking-wider rounded">
                   Lançamento
                 </Badge>
@@ -876,6 +914,7 @@ export default function Catalogo() {
                 <SelectValue placeholder="Ordenar" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="mais_vendidos">🔥 Mais Vendidos</SelectItem>
                 <SelectItem value="estoque_desc">Maior Estoque</SelectItem>
                 <SelectItem value="preco_asc">Menor Preço</SelectItem>
                 <SelectItem value="preco_desc">Maior Preço</SelectItem>
