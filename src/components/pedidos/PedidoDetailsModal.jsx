@@ -6,6 +6,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
@@ -13,7 +14,7 @@ import {
   Package, MapPin, DollarSign, Calendar, FileText,
   Download, CheckCircle, Clock, Truck, User, Building,
   Phone, Mail, CreditCard, Upload, AlertTriangle, Pencil, ChevronDown, ChevronUp,
-  Printer
+  Printer, Copy
 } from 'lucide-react';
 import { Pedido, Produto } from '@/api/entities';
 import { Carteira } from '@/api/entities';
@@ -38,6 +39,10 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   // Estados para configuração de parcelas do boleto (aba Documentos)
   const [qtdParcelasBoleto, setQtdParcelasBoleto] = useState(1);
   const [parcelasBoletoConfig, setParcelasBoletoConfig] = useState([{ dataVencimento: '' }]);
+
+  // Estados para pagamento via PIX (aba Documentos)
+  const [pixInfo, setPixInfo] = useState(pedido.pix_info || '');
+  const [savingPix, setSavingPix] = useState(false);
 
   // Estados para parcelas/títulos
   const [parcelas, setParcelas] = useState([]);
@@ -314,6 +319,19 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   const temParcelaPaga = parcelas.some(p => p.status === 'pago');
 
   // Abrir edição do boleto com dados pré-preenchidos das parcelas existentes
+  const handleSalvarPix = async () => {
+    setSavingPix(true);
+    try {
+      await Pedido.update(pedido.id, { pix_info: pixInfo });
+      toast.success('Informações de PIX salvas');
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      toast.error('Erro ao salvar: ' + (err?.message || ''));
+    } finally {
+      setSavingPix(false);
+    }
+  };
+
   const handleOpenEditBoleto = () => {
     if (parcelas.length > 0) {
       setQtdParcelasBoleto(parcelas.length);
@@ -2242,8 +2260,61 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
 
             {/* Tab: Documentos */}
             <TabsContent value="documentos" className="space-y-4">
-              {/* Boleto */}
-              {pedido.boleto_url ? (
+              {/* Pagamento (PIX ou Boleto, conforme método do pedido) */}
+              {pedido.metodo_pagamento === 'pix' ? (
+                <div className={`p-4 rounded-lg ${pedido.pix_info ? 'bg-blue-50' : 'bg-gray-50 border-2 border-dashed border-gray-300'}`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <CreditCard className="w-5 h-5 text-blue-600" />
+                    <h4 className="font-semibold">Pagamento via PIX</h4>
+                  </div>
+
+                  {canUpload ? (
+                    <div className="space-y-3">
+                      <p className="text-sm text-gray-600">
+                        Informe a chave PIX, código copia-e-cola ou as instruções de pagamento para o cliente.
+                      </p>
+                      <Textarea
+                        value={pixInfo}
+                        onChange={(e) => setPixInfo(e.target.value)}
+                        placeholder={'Ex: Chave PIX (CNPJ): 00.000.000/0001-00\nOu cole aqui o código copia-e-cola...'}
+                        rows={5}
+                        className="font-mono text-sm"
+                      />
+                      <Button
+                        onClick={handleSalvarPix}
+                        disabled={savingPix || (pixInfo || '').trim() === (pedido.pix_info || '').trim()}
+                        className="w-full bg-blue-600 hover:bg-blue-700"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {savingPix ? 'Salvando...' : (pedido.pix_info ? 'Atualizar Informações de PIX' : 'Salvar Informações de PIX')}
+                      </Button>
+                    </div>
+                  ) : pedido.pix_info ? (
+                    <div className="space-y-3">
+                      <p className="text-sm text-gray-600">Use os dados abaixo para fazer o pagamento via PIX:</p>
+                      <div className="bg-white p-3 rounded border border-blue-200 whitespace-pre-wrap text-sm font-mono break-all">
+                        {pedido.pix_info}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          navigator.clipboard.writeText(pedido.pix_info || '');
+                          toast.success('Informações de PIX copiadas');
+                        }}
+                      >
+                        <Copy className="w-4 h-4 mr-2" /> Copiar
+                      </Button>
+                    </div>
+                  ) : (
+                    <Alert>
+                      <AlertDescription>
+                        Aguardando o fornecedor cadastrar as informações de PIX.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              ) : pedido.boleto_url ? (
                 <div className="p-4 bg-blue-50 rounded-lg">
                   <div className="flex items-center justify-between">
                     <div>
