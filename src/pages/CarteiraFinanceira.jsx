@@ -4,7 +4,7 @@ import { Carteira } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { Pedido } from '@/api/entities';
 import { Loja } from '@/api/entities';
-import { SendEmail, UploadFile } from '@/api/integrations';
+import { UploadFile } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -282,24 +282,7 @@ export default function CarteiraFinanceira() {
         status: 'em_analise'
       });
 
-      // Enviar notificação ao fornecedor
-      const pedido = await Pedido.get(selectedTitulo.pedido_id);
-      await SendEmail({
-        to: 'financeiro@polomultimarca.com.br',
-        subject: `Comprovante de Pagamento - Pedido #${pedido.id.slice(-8).toUpperCase()}`,
-        body: `
-          Um novo comprovante de pagamento foi enviado pelo cliente.
-
-          Cliente: ${user.empresa || user.full_name}
-          Pedido: #${pedido.id.slice(-8).toUpperCase()}
-          Valor: ${formatCurrency(selectedTitulo.valor)}
-          Vencimento: ${new Date(selectedTitulo.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}
-          Data do Pagamento Informada: ${new Date(dataPagamentoInformada + 'T12:00:00').toLocaleDateString('pt-BR')}
-
-          Comprovante: ${uploadResult.file_url}
-        `
-      });
-
+      // Notificação ao fornecedor é disparada automaticamente pelo webhook notify-pedido
       toast.success('Comprovante enviado com sucesso! Aguarde a análise.');
       setShowUploadModal(false);
       setComprovanteFile(null);
@@ -433,21 +416,7 @@ export default function CarteiraFinanceira() {
         console.warn('Erro ao atualizar status do pedido:', e);
       }
 
-      // 4. Notificar cliente por email (não bloqueia aprovação se falhar)
-      try {
-        const cliente = await User.get(tituloParaAprovar.cliente_user_id);
-        if (cliente?.email) {
-          const pedidoId = tituloParaAprovar.pedido_id ? `#${tituloParaAprovar.pedido_id.slice(-8).toUpperCase()}` : '';
-          await SendEmail({
-            to: cliente.email,
-            subject: `Comprovante Aprovado${pedidoId ? ` - Pedido ${pedidoId}` : ''}`,
-            body: `Seu comprovante de pagamento foi aprovado!\n\n${pedidoId ? `Pedido: ${pedidoId}\n` : ''}Valor: ${formatCurrency(tituloParaAprovar.valor)}\nData do Pagamento: ${new Date(dataPagamentoConfirmada + 'T12:00:00').toLocaleDateString('pt-BR')}`
-          });
-        }
-      } catch (e) {
-        console.warn('Erro ao enviar email de aprovação:', e);
-      }
-
+      // 4. Notificação ao cliente é disparada automaticamente pelo webhook notify-pedido
       toast.success('Comprovante aprovado!');
       setShowAprovacaoModal(false);
       setTituloParaAprovar(null);
@@ -503,21 +472,7 @@ export default function CarteiraFinanceira() {
         console.warn('Erro ao atualizar status do pedido:', e);
       }
 
-      // Notificar cliente (não bloqueia recusa se falhar)
-      try {
-        const cliente = await User.get(tituloParaRecusar.cliente_user_id);
-        if (cliente?.email) {
-          const pedidoId = tituloParaRecusar.pedido_id ? `#${tituloParaRecusar.pedido_id.slice(-8).toUpperCase()}` : '';
-          await SendEmail({
-            to: cliente.email,
-            subject: `Comprovante Recusado${pedidoId ? ` - Pedido ${pedidoId}` : ''}`,
-            body: `Seu comprovante de pagamento foi recusado.\n\nMotivo: ${motivoRecusa.trim()}\n\nPor favor, envie um novo comprovante.`
-          });
-        }
-      } catch (e) {
-        console.warn('Erro ao enviar email de recusa:', e);
-      }
-
+      // Notificação ao cliente é disparada automaticamente pelo webhook notify-pedido
       toast.success('Comprovante recusado. Cliente notificado.');
       setShowRecusaModal(false);
       setTituloParaRecusar(null);

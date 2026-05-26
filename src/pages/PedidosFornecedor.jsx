@@ -195,26 +195,7 @@ export default function PedidosFornecedor() {
         data_prevista_entrega: dataEntrega
       });
 
-      // Notificar cliente
-      await SendEmail({
-        from_name: 'POLO B2B',
-        to: clientes.find(c => c.id === selectedPedido.comprador_user_id)?.email,
-        subject: `✅ Pedido Aprovado - #${selectedPedido.id.slice(-8).toUpperCase()}`,
-        body: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; text-align: center;">
-              <h1 style="color: white; margin: 0;">✅ Pedido Aprovado!</h1>
-            </div>
-            <div style="padding: 30px; background: white;">
-              <p>Seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi aprovado!</p>
-              <p><strong>Data prevista de entrega:</strong> ${new Date(dataEntrega).toLocaleDateString('pt-BR')}</p>
-              <p>Valor total: ${formatCurrency(selectedPedido.valor_total)}</p>
-              <p style="margin-top: 30px;">Acompanhe o status do seu pedido no sistema.</p>
-            </div>
-          </div>
-        `
-      });
-
+      // Notificação ao cliente é disparada automaticamente pelo webhook notify-pedido
       toast.success('Pedido aprovado com sucesso!');
       setShowApprovalModal(false);
       setDataEntrega('');
@@ -246,27 +227,7 @@ export default function PedidosFornecedor() {
         }
       }
 
-      // Notificar cliente
-      await SendEmail({
-        from_name: 'POLO B2B',
-        to: clientes.find(c => c.id === selectedPedido.comprador_user_id)?.email,
-        subject: `❌ Pedido Recusado - #${selectedPedido.id.slice(-8).toUpperCase()}`,
-        body: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); padding: 30px; text-align: center;">
-              <h1 style="color: white; margin: 0;">❌ Pedido Recusado</h1>
-            </div>
-            <div style="padding: 30px; background: white;">
-              <p>Infelizmente seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi recusado.</p>
-              <div style="background: #fee2e2; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                <strong>Motivo:</strong> ${motivoRecusa}
-              </div>
-              <p>Entre em contato conosco para mais informações.</p>
-            </div>
-          </div>
-        `
-      });
-
+      // Notificação ao cliente é disparada automaticamente pelo webhook notify-pedido
       toast.info('Pedido recusado');
       setShowRejectModal(false);
       setMotivoRecusa('');
@@ -612,43 +573,7 @@ export default function PedidosFornecedor() {
         }
       }
 
-      // Notificar cliente (não bloquear o fluxo se o email falhar)
-      try {
-        const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
-        if (cliente?.email) {
-          const freteEmailHtml = tipoFrete === 'FOB' ? `
-                    <p><strong>Tipo de Frete:</strong> FOB (por conta do cliente)</p>
-                    <p><strong>Valor do Frete:</strong> R$ ${valorFrete.toFixed(2).replace('.', ',')}</p>
-                    ${freteInclusoBoleto ? '<p><em>Frete incluso no boleto</em></p>' : '<p><em>Frete cobrado separadamente</em></p>'}
-          ` : `<p><strong>Tipo de Frete:</strong> CIF (por conta do fornecedor)</p>`;
-
-          await SendEmail({
-            from_name: 'POLO B2B',
-            to: cliente.email,
-            subject: `Pedido Enviado - #${selectedPedido.id.slice(-8).toUpperCase()}`,
-            body: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 30px; text-align: center;">
-                  <h1 style="color: white; margin: 0;">Pedido em Transporte</h1>
-                </div>
-                <div style="padding: 30px; background: white;">
-                  <p>Seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi enviado!</p>
-                  <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                    <p><strong>Transportadora:</strong> ${transportadora}</p>
-                    ${codigoRastreio ? `<p><strong>Codigo de Rastreio:</strong> ${codigoRastreio}</p>` : ''}
-                    <p><strong>Data de Envio:</strong> ${new Date(dataEnvio + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
-                    ${freteEmailHtml}
-                  </div>
-                  <p>Acompanhe seu pedido no sistema!</p>
-                </div>
-              </div>
-            `
-          });
-        }
-      } catch (emailError) {
-        console.warn('Erro ao enviar email de notificação de envio:', emailError);
-      }
-
+      // Notificação ao cliente é disparada automaticamente pelo webhook notify-pedido
       toast.info('Informacoes de envio salvas!');
       setShowEnvioModal(false);
       resetEnvioForm();
@@ -790,76 +715,7 @@ export default function PedidosFornecedor() {
         }
       }
 
-      // Montar lista de parcelas para o email
-      // Calcular valor individual de cada parcela para o email
-      const getValorParcelaEmail = (index) => {
-        if (freteNoBoleto && selectedPedido.frete_modo_cobranca === 'primeiro_boleto' && qtdParcelas > 1) {
-          const valorProdutosParcela = (selectedPedido.valor_total || 0) / qtdParcelas;
-          return index === 0 ? valorProdutosParcela + frete : valorProdutosParcela;
-        }
-        return valorBase / qtdParcelas;
-      };
-
-      const parcelasHtml = parcelas.map((p, i) => `
-        <tr>
-          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${i + 1}/${qtdParcelas}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${formatCurrency(getValorParcelaEmail(i))}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${new Date(p.dataVencimento + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
-        </tr>
-      `).join('');
-
-      // Notificar cliente
-      const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
-      const temFrete = selectedPedido.valor_frete_fob && selectedPedido.valor_frete_fob > 0;
-      await SendEmail({
-        from_name: 'POLO B2B',
-        to: cliente?.email,
-        subject: `📄 Boleto Disponível - Pedido #${selectedPedido.id.slice(-8).toUpperCase()}`,
-        body: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; text-align: center;">
-              <h1 style="color: white; margin: 0;">📄 Boleto Disponível</h1>
-            </div>
-            <div style="padding: 30px; background: white;">
-              <p>O boleto do seu pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> está disponível!</p>
-              <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                ${temFrete ? `
-                  <p><strong>Valor dos Produtos:</strong> ${formatCurrency(selectedPedido.valor_total)}</p>
-                  <p><strong>Frete FOB:</strong> ${formatCurrency(selectedPedido.valor_frete_fob)}</p>
-                ` : ''}
-                <p><strong>Valor Total:</strong> ${formatCurrency(valorBase)}</p>
-                ${qtdParcelas > 1 ? `<p><strong>Parcelado em:</strong> ${qtdParcelas}x de ${formatCurrency(valorBase / qtdParcelas)}</p>` : ''}
-              </div>
-
-              ${qtdParcelas > 0 ? `
-                <h3 style="margin-top: 20px;">📅 Parcelas e Vencimentos</h3>
-                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-                  <thead>
-                    <tr style="background: #f3f4f6;">
-                      <th style="padding: 8px; text-align: left;">Parcela</th>
-                      <th style="padding: 8px; text-align: left;">Valor</th>
-                      <th style="padding: 8px; text-align: left;">Vencimento</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${parcelasHtml}
-                  </tbody>
-                </table>
-              ` : ''}
-
-              <div style="text-align: center; margin-top: 30px;">
-                <a href="${boletoUpload.file_url}" style="display: inline-block; background: #10b981; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px;">
-                  Baixar Boleto
-                </a>
-              </div>
-              <p style="margin-top: 30px; font-size: 14px; color: #6b7280;">
-                Você receberá um lembrete por e-mail no vencimento de cada parcela.
-              </p>
-            </div>
-          </div>
-        `
-      });
-
+      // Notificação ao cliente é disparada automaticamente pelo webhook notify-pedido
       toast.success('Boleto enviado com sucesso!');
       setShowBoletoModal(false);
       setBoletoFile(null);
@@ -975,29 +831,7 @@ export default function PedidosFornecedor() {
         console.warn('Erro ao cancelar títulos da carteira:', carteiraErr);
       }
 
-      // Notificar cliente
-      const cliente = clientes.find(c => c.id === selectedPedido.comprador_user_id);
-      await SendEmail({
-        from_name: 'POLO B2B',
-        to: cliente?.email,
-        subject: `❌ Pedido Cancelado - #${selectedPedido.id.slice(-8).toUpperCase()}`,
-        body: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); padding: 30px; text-align: center;">
-              <h1 style="color: white; margin: 0;">❌ Pedido Cancelado</h1>
-            </div>
-            <div style="padding: 30px; background: white;">
-              <p>O pedido <strong>#${selectedPedido.id.slice(-8).toUpperCase()}</strong> foi cancelado.</p>
-              <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                <strong>Motivo:</strong> ${motivoCancelamento}
-              </div>
-              <p><strong>Valor do pedido:</strong> ${formatCurrency(selectedPedido.valor_total)}</p>
-              <p style="margin-top: 20px;">Se tiver dúvidas, entre em contato conosco.</p>
-            </div>
-          </div>
-        `
-      });
-
+      // Notificação ao cliente é disparada automaticamente pelo webhook notify-pedido
       toast.info('Pedido cancelado');
       setShowCancelarModal(false);
       setMotivoCancelamento('');

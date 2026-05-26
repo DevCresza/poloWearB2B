@@ -21,7 +21,7 @@ import { Carteira } from '@/api/entities';
 import { User as UserEntity } from '@/api/entities';
 import { Loja } from '@/api/entities';
 import { Faturamento } from '@/api/entities';
-import { UploadFile, SendEmail } from '@/api/integrations';
+import { UploadFile } from '@/api/integrations';
 import { formatDateTime, formatCurrency } from '@/utils/exportUtils';
 import { Store } from 'lucide-react';
 import { jsPDF } from 'jspdf';
@@ -877,24 +877,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
         status: 'em_analise'
       });
 
-      // Enviar notificação ao fornecedor
-      await SendEmail({
-        to: 'financeiro@polomultimarca.com.br',
-        subject: `Comprovante de Pagamento - Pedido #${pedido.id.slice(-8).toUpperCase()} - Parcela ${parcelas.findIndex(p => p.id === parcelaSelecionada.id) + 1}`,
-        body: `
-          Um novo comprovante de pagamento foi enviado pelo cliente.
-
-          Cliente: ${currentUser?.empresa || currentUser?.full_name}
-          Pedido: #${pedido.id.slice(-8).toUpperCase()}
-          Parcela: ${parcelas.findIndex(p => p.id === parcelaSelecionada.id) + 1} de ${parcelas.length}
-          Valor: R$ ${parcelaSelecionada.valor?.toFixed(2)}
-          Vencimento: ${new Date(parcelaSelecionada.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}
-          Data do Pagamento Informada: ${new Date(dataPagamentoParcela + 'T12:00:00').toLocaleDateString('pt-BR')}
-
-          Comprovante: ${uploadResult.file_url}
-        `
-      });
-
+      // Notificação ao fornecedor é disparada automaticamente pelo webhook notify-pedido
       toast.success('Comprovante enviado com sucesso! Aguarde a análise.');
 
       // Recarregar parcelas
