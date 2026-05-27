@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Pedido } from '@/api/entities';
 import { toast } from 'sonner';
 import { Produto } from '@/api/entities'; // Not used in this file, but kept from original imports
@@ -32,6 +33,7 @@ import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
 
 export default function PedidosFornecedor() {
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [fornecedorAtual, setFornecedorAtual] = useState(null); // Fornecedor do usuário logado
   const [pedidos, setPedidos] = useState([]);
@@ -104,6 +106,18 @@ export default function PedidosFornecedor() {
     setLoading(true);
     try {
       const currentUser = await User.me();
+
+      // Proteção: só admin e fornecedor podem ver esta página.
+      // Clientes (multimarca/franqueado) são redirecionados para "Meus Pedidos".
+      const podeVerPedidosFornecedor =
+        currentUser?.role === 'admin' ||
+        currentUser?.tipo_negocio === 'admin' ||
+        currentUser?.tipo_negocio === 'fornecedor';
+      if (!podeVerPedidosFornecedor) {
+        navigate('/MeusPedidos', { replace: true });
+        return;
+      }
+
       setUser(currentUser);
 
       let pedidosList = [];
