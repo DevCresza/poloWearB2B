@@ -1,5 +1,6 @@
 
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Pedido } from '@/api/entities';
 import { User } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
@@ -23,6 +24,7 @@ import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
 
 export default function PedidosAdmin() {
+  const navigate = useNavigate();
   const [pedidos, setPedidos] = useState([]);
   const [users, setUsers] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
@@ -48,8 +50,17 @@ export default function PedidosAdmin() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [me, pedidosList, usersList, fornecedoresList, lojasList] = await Promise.all([
-        User.me(),
+      const me = await User.me();
+
+      // Proteção: só admin e fornecedor podem ver esta página (lista todos os pedidos).
+      // Clientes (multimarca/franqueado) são redirecionados para "Meus Pedidos".
+      const podeVerTodos = me?.role === 'admin' || me?.tipo_negocio === 'admin' || me?.tipo_negocio === 'fornecedor';
+      if (!podeVerTodos) {
+        navigate('/MeusPedidos', { replace: true });
+        return;
+      }
+
+      const [pedidosList, usersList, fornecedoresList, lojasList] = await Promise.all([
         Pedido.list({ sort: '-created_date' }),
         User.list(),
         Fornecedor.list(),

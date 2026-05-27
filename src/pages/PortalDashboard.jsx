@@ -295,7 +295,7 @@ export default function PortalDashboard() {
     );
   }
 
-  const isCliente = user?.tipo_negocio === 'multimarca';
+  const isCliente = user?.tipo_negocio === 'multimarca' || user?.tipo_negocio === 'franqueado';
   const isFornecedor = user?.tipo_negocio === 'fornecedor';
   const isAdmin = user?.role === 'admin';
 
