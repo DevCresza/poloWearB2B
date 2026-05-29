@@ -445,6 +445,7 @@ export default function MeuPerfil() {
                 <Building className="w-4 h-4 mr-2" />
                 {user.tipo_negocio === 'multimarca'
                   ? (user.categoria_cliente === 'franqueado' ? 'Franqueado' : 'Multimarca')
+                  : user.tipo_negocio === 'franqueado' ? 'Franqueado'
                   : user.tipo_negocio === 'fornecedor' ? 'Fornecedor' : 'Admin'}
               </Badge>
               {user.codigo_cliente && (
