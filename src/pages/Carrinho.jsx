@@ -270,35 +270,44 @@ export default function Carrinho() {
     const fornecedor = fornecedores.find(f => f.id === fornecedorId);
 
     // Multimarca: somente à vista (sem boleto)
+    let metodosBase;
     if (user?.tipo_negocio === 'multimarca') {
-      return [
+      metodosBase = [
         { value: 'pix', label: 'PIX' },
         { value: 'cartao_credito', label: 'Cartão de Crédito' },
         { value: 'transferencia', label: 'Transferência Bancária' }
       ];
+    } else {
+      // Verifica se o cliente está na lista de "sem crédito" (bloqueado para boleto)
+      const clienteBloqueado = fornecedor &&
+        fornecedor.clientes_boleto_faturado &&
+        user &&
+        fornecedor.clientes_boleto_faturado.includes(user.id);
+
+      if (clienteBloqueado) {
+        // Cliente sem crédito - apenas PIX e Cartão
+        metodosBase = [
+          { value: 'pix', label: 'PIX' },
+          { value: 'cartao_credito', label: 'Cartão de Crédito' }
+        ];
+      } else {
+        // Cliente com crédito - todas as opções de pagamento
+        metodosBase = [
+          { value: 'pix', label: 'PIX' },
+          { value: 'cartao_credito', label: 'Cartão de Crédito' },
+          { value: 'boleto_faturado', label: 'Boleto Faturado (30 dias)' },
+          { value: 'transferencia', label: 'Transferência Bancária' }
+        ];
+      }
     }
 
-    // Verifica se o cliente está na lista de "sem crédito" (bloqueado para boleto)
-    const clienteBloqueado = fornecedor &&
-      fornecedor.clientes_boleto_faturado &&
-      user &&
-      fornecedor.clientes_boleto_faturado.includes(user.id);
+    // Intersecção com os métodos que o fornecedor aceita.
+    // Se o fornecedor não tem a lista preenchida (registros antigos), aceita todos.
+    const aceitosPeloFornecedor = Array.isArray(fornecedor?.metodos_pagamento_aceitos)
+      ? fornecedor.metodos_pagamento_aceitos
+      : ['pix', 'cartao_credito', 'boleto_faturado', 'transferencia'];
 
-    if (clienteBloqueado) {
-      // Cliente sem crédito - apenas PIX e Cartão
-      return [
-        { value: 'pix', label: 'PIX' },
-        { value: 'cartao_credito', label: 'Cartão de Crédito' }
-      ];
-    }
-
-    // Cliente com crédito - todas as opções de pagamento
-    return [
-      { value: 'pix', label: 'PIX' },
-      { value: 'cartao_credito', label: 'Cartão de Crédito' },
-      { value: 'boleto_faturado', label: 'Boleto Faturado (30 dias)' },
-      { value: 'transferencia', label: 'Transferência Bancária' }
-    ];
+    return metodosBase.filter(m => aceitosPeloFornecedor.includes(m.value));
   };
 
   // Função reutilizável para criar um pedido para uma loja específica
@@ -581,6 +590,13 @@ export default function Carrinho() {
 
     if (!metodoPagamento[fornecedorId]) {
       toast.info('Por favor, selecione um método de pagamento para este fornecedor.');
+      return;
+    }
+
+    // Defesa em profundidade: garantir que o método escolhido está realmente entre os aceitos pelo fornecedor
+    const metodosDisponiveis = getMetodosPagamentoDisponiveis(fornecedorId).map(m => m.value);
+    if (!metodosDisponiveis.includes(metodoPagamento[fornecedorId])) {
+      toast.error('Este método de pagamento não é aceito por este fornecedor. Escolha outra opção.');
       return;
     }
 
@@ -1244,9 +1260,10 @@ export default function Carrinho() {
                           <Select
                             value={metodoPagamento[grupo.fornecedor_id] || ''}
                             onValueChange={(value) => setMetodoPagamento(prev => ({ ...prev, [grupo.fornecedor_id]: value }))}
+                            disabled={metodosPagamento.length === 0}
                           >
                             <SelectTrigger>
-                              <SelectValue placeholder="Selecione" />
+                              <SelectValue placeholder={metodosPagamento.length === 0 ? 'Nenhuma forma de pagamento disponível' : 'Selecione'} />
                             </SelectTrigger>
                             <SelectContent>
                               {metodosPagamento.map(metodo => (
@@ -1256,6 +1273,11 @@ export default function Carrinho() {
                               ))}
                             </SelectContent>
                           </Select>
+                          {metodosPagamento.length === 0 && (
+                            <p className="text-xs text-red-600 mt-1">
+                              Este fornecedor não aceita formas de pagamento compatíveis com sua conta. Entre em contato com o comercial.
+                            </p>
+                          )}
                           {metodosPagamento.length === 2 && (
                             <p className="text-xs text-gray-500 mt-1">
                               Opção Boleto Faturado não disponível para sua conta

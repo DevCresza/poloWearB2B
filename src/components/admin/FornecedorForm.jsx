@@ -41,6 +41,7 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
     inscricao_estadual: '',
     responsavel_user_id: '',
     pedido_minimo_valor: 0,
+    metodos_pagamento_aceitos: ['pix', 'cartao_credito', 'boleto_faturado', 'transferencia'],
     email_fornecedor: '',
     senha_fornecedor: '',
     ativo_fornecedor: true,
@@ -110,6 +111,12 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
 
       if (!formData.responsavel_user_id) {
         toast.error('Por favor, selecione um Responsável (Admin).');
+        setLoading(false);
+        return;
+      }
+
+      if (!formData.metodos_pagamento_aceitos || formData.metodos_pagamento_aceitos.length === 0) {
+        toast.error('Selecione pelo menos uma forma de pagamento aceita.');
         setLoading(false);
         return;
       }
@@ -358,6 +365,42 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
                     onChange={(e) => setFormData({...formData, pedido_minimo_valor: parseFloat(e.target.value) || 0})}
                   />
                 </div>
+              </div>
+
+              <Separator />
+
+              {/* Formas de pagamento aceitas */}
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold">Formas de pagamento aceitas *</h3>
+                <p className="text-sm text-gray-500">Selecione as formas de pagamento que este fornecedor aceita. Apenas as marcadas aparecerão para o cliente no checkout.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[
+                    { value: 'pix', label: 'PIX' },
+                    { value: 'cartao_credito', label: 'Cartão de Crédito' },
+                    { value: 'boleto_faturado', label: 'Boleto Faturado (30 dias)' },
+                    { value: 'transferencia', label: 'Transferência Bancária' }
+                  ].map(({ value, label }) => {
+                    const lista = formData.metodos_pagamento_aceitos || [];
+                    const marcado = lista.includes(value);
+                    return (
+                      <label key={value} className="flex items-center gap-2 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+                        <Checkbox
+                          checked={marcado}
+                          onCheckedChange={(checked) => {
+                            const novaLista = checked
+                              ? [...lista.filter(v => v !== value), value]
+                              : lista.filter(v => v !== value);
+                            setFormData({ ...formData, metodos_pagamento_aceitos: novaLista });
+                          }}
+                        />
+                        <span className="text-sm">{label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {(formData.metodos_pagamento_aceitos || []).length === 0 && (
+                  <p className="text-xs text-red-600">Selecione pelo menos uma forma de pagamento.</p>
+                )}
               </div>
 
               <Separator />

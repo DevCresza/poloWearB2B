@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import {
@@ -595,6 +596,14 @@ export default function MeuPerfil() {
         </Card>
       )}
 
+      {/* Formas de pagamento aceitas (editável pelo próprio fornecedor) */}
+      {user.tipo_negocio === 'fornecedor' && fornecedor && (
+        <MetodosPagamentoCard
+          fornecedor={fornecedor}
+          onUpdated={(novosMetodos) => setFornecedor(prev => ({ ...prev, metodos_pagamento_aceitos: novosMetodos }))}
+        />
+      )}
+
       {/* Tabs com Informações */}
       <Card className="bg-slate-100 rounded-2xl shadow-neumorphic">
         <Tabs defaultValue="pessoal">
@@ -1035,5 +1044,94 @@ export default function MeuPerfil() {
         />
       )}
     </div>
+  );
+}
+
+// Card editável de "Formas de pagamento aceitas" — visível no perfil do fornecedor.
+function MetodosPagamentoCard({ fornecedor, onUpdated }) {
+  const METODOS = [
+    { value: 'pix', label: 'PIX' },
+    { value: 'cartao_credito', label: 'Cartão de Crédito' },
+    { value: 'boleto_faturado', label: 'Boleto Faturado (30 dias)' },
+    { value: 'transferencia', label: 'Transferência Bancária' }
+  ];
+
+  const inicial = Array.isArray(fornecedor?.metodos_pagamento_aceitos)
+    ? fornecedor.metodos_pagamento_aceitos
+    : ['pix', 'cartao_credito', 'boleto_faturado', 'transferencia'];
+
+  const [selecionados, setSelecionados] = useState(inicial);
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    setSelecionados(inicial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fornecedor?.id]);
+
+  const alterado = JSON.stringify([...selecionados].sort()) !== JSON.stringify([...inicial].sort());
+
+  const toggle = (value, checked) => {
+    setSelecionados((prev) =>
+      checked ? [...prev.filter(v => v !== value), value] : prev.filter(v => v !== value)
+    );
+  };
+
+  const salvar = async () => {
+    if (selecionados.length === 0) {
+      toast.error('Selecione pelo menos uma forma de pagamento.');
+      return;
+    }
+    setSalvando(true);
+    try {
+      await Fornecedor.update(fornecedor.id, { metodos_pagamento_aceitos: selecionados });
+      toast.success('Formas de pagamento atualizadas.');
+      if (onUpdated) onUpdated(selecionados);
+    } catch (err) {
+      toast.error('Erro ao salvar: ' + (err?.message || ''));
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <Card className="bg-slate-100 rounded-2xl shadow-neumorphic">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <CreditCard className="w-5 h-5 text-blue-600" />
+          Formas de pagamento aceitas
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-gray-600">
+          Apenas as formas marcadas aqui aparecerão para o cliente no checkout deste fornecedor.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {METODOS.map(({ value, label }) => {
+            const marcado = selecionados.includes(value);
+            return (
+              <label key={value} className="flex items-center gap-2 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer bg-white">
+                <Checkbox
+                  checked={marcado}
+                  onCheckedChange={(checked) => toggle(value, checked === true)}
+                />
+                <span className="text-sm font-medium">{label}</span>
+              </label>
+            );
+          })}
+        </div>
+        {selecionados.length === 0 && (
+          <p className="text-xs text-red-600">Selecione pelo menos uma forma de pagamento.</p>
+        )}
+        <div className="flex justify-end">
+          <Button
+            onClick={salvar}
+            disabled={salvando || !alterado || selecionados.length === 0}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            {salvando ? 'Salvando...' : 'Salvar alterações'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
