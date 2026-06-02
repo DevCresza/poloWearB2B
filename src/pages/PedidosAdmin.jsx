@@ -18,6 +18,7 @@ import {
 import PedidoCard from '../components/pedidos/PedidoCard';
 import PedidoDetailsModal from '../components/pedidos/PedidoDetailsModal';
 import PedidoEditModal from '../components/pedidos/PedidoEditModal';
+import PedidoItensEditModal from '../components/pedidos/PedidoItensEditModal';
 import { exportToCSV, exportToPDF, formatCurrency, formatDateTime, formatDate } from '@/utils/exportUtils';
 import MultiSelectFilter from '@/components/MultiSelectFilter';
 import { Loja } from '@/api/entities';
@@ -34,6 +35,7 @@ export default function PedidosAdmin() {
   const [selectedPedido, setSelectedPedido] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showItensEditModal, setShowItensEditModal] = useState(false);
   const [updatingPedidoId, setUpdatingPedidoId] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -250,6 +252,11 @@ export default function PedidosAdmin() {
   const handleEditPedido = (pedido) => {
     setSelectedPedido(pedido);
     setShowEditModal(true);
+  };
+
+  const handleEditItens = (pedido) => {
+    setSelectedPedido(pedido);
+    setShowItensEditModal(true);
   };
 
   const handleViewDetails = (pedido) => {
@@ -744,8 +751,11 @@ export default function PedidosAdmin() {
                               <Button variant="outline" size="sm" onClick={() => handleViewDetails(pedido)}>
                                 <Eye className="w-4 h-4" />
                               </Button>
-                              <Button variant="outline" size="sm" onClick={() => handleEditPedido(pedido)}>
+                              <Button variant="outline" size="sm" onClick={() => handleEditPedido(pedido)} title="Editar status, transporte e documentos">
                                 <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button variant="outline" size="sm" onClick={() => handleEditItens(pedido)} title="Revisar itens do pedido (quantidade)">
+                                <Package className="w-4 h-4" />
                               </Button>
                             </div>
                           </td>
@@ -788,6 +798,18 @@ export default function PedidosAdmin() {
           pedido={selectedPedido}
           onClose={() => {
             setShowEditModal(false);
+            setSelectedPedido(null);
+          }}
+          onUpdate={loadData}
+        />
+      )}
+
+      {showItensEditModal && selectedPedido && (
+        <PedidoItensEditModal
+          pedido={selectedPedido}
+          currentUser={currentUser}
+          onClose={() => {
+            setShowItensEditModal(false);
             setSelectedPedido(null);
           }}
           onUpdate={loadData}

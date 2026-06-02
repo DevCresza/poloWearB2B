@@ -28,6 +28,7 @@ import {
   FileText, Upload, Download, Filter, Eye, Edit, Truck, AlertTriangle, BarChart3
 } from 'lucide-react';
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
+import PedidoItensEditModal from '@/components/pedidos/PedidoItensEditModal';
 import { formatCurrency, exportToPDF, exportToCSV, formatDate } from '@/utils/exportUtils';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
@@ -58,6 +59,7 @@ export default function PedidosFornecedor() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [detailsDefaultTab, setDetailsDefaultTab] = useState('itens');
   const [showBoletoModal, setShowBoletoModal] = useState(false);
+  const [showItensEditModal, setShowItensEditModal] = useState(false);
   const [showBoletoNFModal, setShowBoletoNFModal] = useState(false);
   const [boletoNFList, setBoletoNFList] = useState([]);
   const [boletoNFSelected, setBoletoNFSelected] = useState(null);
@@ -1746,6 +1748,21 @@ export default function PedidosFornecedor() {
                         Ver Detalhes
                       </Button>
 
+                      {/* Revisar itens (admin + fornecedor) - bloqueado em entregue/cancelado/finalizado */}
+                      {!['entregue', 'cancelado', 'finalizado'].includes(pedido.status) && (
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedPedido(pedido);
+                            setShowItensEditModal(true);
+                          }}
+                          title="Revisar quantidade dos itens"
+                        >
+                          <Package className="w-4 h-4 mr-2" />
+                          Revisar Itens
+                        </Button>
+                      )}
+
                       {/* Botão para cancelar pedido - não aparece em novo_pedido (usar Recusar), cancelado ou finalizado */}
                       {!['novo_pedido', 'cancelado', 'finalizado'].includes(pedido.status) && (
                         <Button
@@ -2453,6 +2470,19 @@ export default function PedidosFornecedor() {
           userMap={new Map(clientes.map(c => [c.id, c.full_name || c.empresa || c.razao_social || c.nome_marca]))}
           fornecedorMap={new Map(fornecedores.map(f => [f.id, f.razao_social || f.nome_fantasia]))}
           defaultTab={detailsDefaultTab}
+        />
+      )}
+
+      {/* Modal de Revisão de Itens */}
+      {showItensEditModal && selectedPedido && (
+        <PedidoItensEditModal
+          pedido={selectedPedido}
+          currentUser={user}
+          onClose={() => {
+            setShowItensEditModal(false);
+            setSelectedPedido(null);
+          }}
+          onUpdate={loadPedidos}
         />
       )}
 
