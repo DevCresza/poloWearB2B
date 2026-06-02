@@ -44,7 +44,7 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
     metodos_pagamento_aceitos: ['pix', 'cartao_credito', 'boleto_faturado', 'transferencia'],
     boleto_faturado_prazos_dias: [],
     email_fornecedor: '',
-    senha_fornecedor: '',
+    senha_fornecedor: 'Polo12345',
     ativo_fornecedor: true,
     clientes_boleto_faturado: [], // Lista de clientes SEM CRÉDITO (bloqueados para boleto)
     contato_comercial_nome: '',
@@ -524,7 +524,8 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
                 {!fornecedor && (
                   <Alert className="bg-blue-50 border-blue-200">
                     <AlertDescription className="text-blue-800 text-sm">
-                      <strong>E-mail e senha são obrigatórios</strong> para criar a conta de acesso do fornecedor.
+                      <strong>E-mail é obrigatório.</strong> A senha vem padrão como <strong>Polo12345</strong> —
+                      altere se quiser uma diferente. O fornecedor pode trocar depois pelo "Esqueci minha senha".
                     </AlertDescription>
                   </Alert>
                 )}

@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { Fornecedor, Produto } from '@/api/entities';
+import { Fornecedor, Produto, User } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -15,6 +15,8 @@ import { formatCurrency } from '@/utils/exportUtils';
 
 export default function GestaoFornecedores() {
   const [fornecedores, setFornecedores] = useState([]);
+  // Set com os e-mails que tem conta de acesso em public.users (lowercase)
+  const [emailsComConta, setEmailsComConta] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingFornecedor, setEditingFornecedor] = useState(null);
@@ -31,8 +33,15 @@ export default function GestaoFornecedores() {
   const loadFornecedores = async () => {
     setLoading(true);
     try {
-      const fornecedoresList = await Fornecedor.list();
+      const [fornecedoresList, usuarios] = await Promise.all([
+        Fornecedor.list(),
+        User.list().catch(() => [])
+      ]);
       setFornecedores(fornecedoresList);
+      // Monta set de e-mails que tem conta real em public.users
+      const emails = new Set();
+      (usuarios || []).forEach(u => { if (u.email) emails.add(u.email.toLowerCase()); });
+      setEmailsComConta(emails);
     } catch (error) {
     } finally {
       setLoading(false);
@@ -201,13 +210,15 @@ export default function GestaoFornecedores() {
                       <TableCell>{fornecedor.razao_social}</TableCell>
                       <TableCell>{fornecedor.cnpj}</TableCell>
                       <TableCell>{formatCurrency(fornecedor.pedido_minimo_valor || 0)}</TableCell>
-                      <TableCell> {/* New cell for email and password */}
+                      <TableCell> {/* E-mail e status da conta */}
                         <div>
                           <div className="font-medium">{fornecedor.email_fornecedor || '-'}</div>
                           {fornecedor.email_fornecedor && (
-                            <div className="text-xs text-gray-600">
-                              {fornecedor.senha_fornecedor ? '••••••••' : 'Sem senha'}
-                            </div>
+                            emailsComConta.has(fornecedor.email_fornecedor.toLowerCase()) ? (
+                              <div className="text-xs text-green-700 font-medium">✓ Conta ativa</div>
+                            ) : (
+                              <div className="text-xs text-yellow-700 font-medium">⚠ Sem conta de acesso</div>
+                            )
                           )}
                         </div>
                       </TableCell>
