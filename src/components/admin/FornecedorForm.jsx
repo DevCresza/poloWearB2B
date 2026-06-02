@@ -78,31 +78,58 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
   // pra deixar o usuário digitar "/" sem que ele seja eliminado pelo parser).
   const [boletoPrazosText, setBoletoPrazosText] = useState('');
 
-  // Verifica se o e-mail de acesso preenchido já tem usuário criado em public.users.
-  // Re-checa quando o e-mail muda (caso o admin altere).
+  // Busca o usuario de acesso vinculado a este fornecedor (por fornecedor_id,
+  // que e a referencia robusta). Esse user e o "dono" do login.
+  // Guarda o email atual dele pra detectar quando o admin troca no form.
+  const [usuarioVinculado, setUsuarioVinculado] = useState(null);
+
   useEffect(() => {
     let cancelled = false;
-    const verificar = async () => {
-      const email = formData.email_fornecedor?.trim().toLowerCase();
-      if (!email) {
-        if (!cancelled) setTemContaAuth(false);
+    const buscarUsuario = async () => {
+      if (!fornecedor?.id) {
+        if (!cancelled) { setUsuarioVinculado(null); setTemContaAuth(false); }
         return;
       }
       setVerificandoConta(true);
       try {
-        const usuarios = await User.list();
+        // Query direta no supabase pra evitar paginacao do User.list()
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, email')
+          .eq('fornecedor_id', fornecedor.id)
+          .limit(1)
+          .maybeSingle();
         if (cancelled) return;
-        const existe = usuarios.some(u => u.email?.toLowerCase() === email);
-        setTemContaAuth(existe);
+        if (error || !data) {
+          // Fallback: busca pelo email cadastrado no fornecedor
+          if (fornecedor.email_fornecedor) {
+            const { data: byEmail } = await supabase
+              .from('users')
+              .select('id, email')
+              .ilike('email', fornecedor.email_fornecedor.trim())
+              .limit(1)
+              .maybeSingle();
+            if (!cancelled) {
+              setUsuarioVinculado(byEmail || null);
+              setTemContaAuth(!!byEmail);
+            }
+          } else {
+            setUsuarioVinculado(null);
+            setTemContaAuth(false);
+          }
+        } else {
+          setUsuarioVinculado(data);
+          setTemContaAuth(true);
+        }
       } catch {
-        if (!cancelled) setTemContaAuth(false);
+        if (!cancelled) { setUsuarioVinculado(null); setTemContaAuth(false); }
       } finally {
         if (!cancelled) setVerificandoConta(false);
       }
     };
-    verificar();
+    buscarUsuario();
     return () => { cancelled = true; };
-  }, [formData.email_fornecedor]);
+  }, [fornecedor?.id, fornecedor?.email_fornecedor]);
 
   useEffect(() => {
     const initForm = async () => {
@@ -197,22 +224,36 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
         // Se informou email, gerenciar o usuário de acesso
         if (formData.email_fornecedor) {
           try {
-            const usuarios = await User.list();
-            const usuarioExistente = usuarios.find(u =>
-              u.email?.toLowerCase() === formData.email_fornecedor.trim().toLowerCase()
-            );
+            const emailNovo = formData.email_fornecedor.trim();
+            const senhaNova = (formData.senha_fornecedor || '').trim();
 
-            if (usuarioExistente) {
-              // 1) Senha PRIMEIRO (mais crítico) — por email, independente do update de perfil
-              if (formData.senha_fornecedor && formData.senha_fornecedor.trim()) {
-                if (formData.senha_fornecedor.trim().length < 6) {
+            if (usuarioVinculado) {
+              // Existe usuario vinculado. Detectar troca de email.
+              const emailMudou = (usuarioVinculado.email || '').trim().toLowerCase() !== emailNovo.toLowerCase();
+
+              if (emailMudou) {
+                // Sincroniza auth + public.users + fornecedores em uma so chamada
+                const { data: ueData, error: ueErr } = await supabase.functions.invoke('update-user-email', {
+                  body: {
+                    user_id: usuarioVinculado.id,
+                    new_email: emailNovo,
+                    new_password: senhaNova && senhaNova.length >= 6 ? senhaNova : undefined,
+                    fornecedor_id: fornecedor.id,
+                  }
+                });
+                const ueErrMsg = await parseInvokeError(ueErr, ueData);
+                if (ueErrMsg) {
+                  toast.error('Erro ao atualizar e-mail de acesso: ' + ueErrMsg);
+                } else {
+                  toast.success(senhaNova ? 'E-mail e senha atualizados com sucesso!' : 'E-mail de acesso atualizado!');
+                }
+              } else if (senhaNova) {
+                // So senha mudou
+                if (senhaNova.length < 6) {
                   toast.error('A senha deve ter no mínimo 6 caracteres.');
                 } else {
                   const { data: pwData, error: pwError } = await supabase.functions.invoke('update-user-password', {
-                    body: {
-                      email: formData.email_fornecedor.trim(),
-                      new_password: formData.senha_fornecedor.trim()
-                    }
+                    body: { email: emailNovo, new_password: senhaNova }
                   });
                   const pwErrMsg = await parseInvokeError(pwError, pwData);
                   if (pwErrMsg) {
@@ -223,9 +264,9 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
                 }
               }
 
-              // 2) Atualizar dados do perfil (não bloqueia a senha)
+              // Atualiza dados do perfil em public.users (nao bloqueia o resto)
               try {
-                await User.update(usuarioExistente.id, {
+                await User.update(usuarioVinculado.id, {
                   full_name: formData.razao_social,
                   empresa: formData.nome_marca,
                   ativo: formData.ativo_fornecedor,
@@ -234,15 +275,15 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
               } catch (updErr) {
                 console.error('Erro ao atualizar dados do usuário:', updErr);
               }
-            } else if (formData.senha_fornecedor && formData.senha_fornecedor.trim()) {
-              // Não existe usuário → criar
-              if (formData.senha_fornecedor.trim().length < 6) {
+            } else if (senhaNova) {
+              // Nao existe usuario vinculado → criar agora
+              if (senhaNova.length < 6) {
                 toast.error('A senha deve ter no mínimo 6 caracteres.');
               } else {
                 const { data: cuData, error: cuError } = await supabase.functions.invoke('create-user', {
                   body: {
-                    email: formData.email_fornecedor.trim(),
-                    password: formData.senha_fornecedor.trim(),
+                    email: emailNovo,
+                    password: senhaNova,
                     full_name: formData.razao_social,
                     role: 'fornecedor',
                     tipo_negocio: 'fornecedor',

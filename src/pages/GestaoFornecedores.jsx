@@ -17,6 +17,8 @@ export default function GestaoFornecedores() {
   const [fornecedores, setFornecedores] = useState([]);
   // Set com os e-mails que tem conta de acesso em public.users (lowercase)
   const [emailsComConta, setEmailsComConta] = useState(new Set());
+  // Set com fornecedor_id que tem user vinculado (referencia mais robusta)
+  const [fornecedoresComUser, setFornecedoresComUser] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingFornecedor, setEditingFornecedor] = useState(null);
@@ -38,10 +40,15 @@ export default function GestaoFornecedores() {
         User.list().catch(() => [])
       ]);
       setFornecedores(fornecedoresList);
-      // Monta set de e-mails que tem conta real em public.users
+      // Monta sets de email + fornecedor_id que tem conta real em public.users
       const emails = new Set();
-      (usuarios || []).forEach(u => { if (u.email) emails.add(u.email.toLowerCase()); });
+      const fornIds = new Set();
+      (usuarios || []).forEach(u => {
+        if (u.email) emails.add(u.email.toLowerCase());
+        if (u.fornecedor_id) fornIds.add(u.fornecedor_id);
+      });
       setEmailsComConta(emails);
+      setFornecedoresComUser(fornIds);
     } catch (error) {
     } finally {
       setLoading(false);
@@ -214,7 +221,8 @@ export default function GestaoFornecedores() {
                         <div>
                           <div className="font-medium">{fornecedor.email_fornecedor || '-'}</div>
                           {fornecedor.email_fornecedor && (
-                            emailsComConta.has(fornecedor.email_fornecedor.toLowerCase()) ? (
+                            (fornecedoresComUser.has(fornecedor.id) ||
+                             emailsComConta.has(fornecedor.email_fornecedor.toLowerCase())) ? (
                               <div className="text-xs text-green-700 font-medium">✓ Conta ativa</div>
                             ) : (
                               <div className="text-xs text-yellow-700 font-medium">⚠ Sem conta de acesso</div>
