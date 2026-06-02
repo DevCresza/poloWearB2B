@@ -16,7 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox import
 import { Fornecedor } from '@/api/entities';
 import { User } from '@/api/entities';
 import { supabase } from '@/lib/supabase';
-import { Building, DollarSign, Mail, Phone, User as UserIcon, Shield, Truck, MapPin, Clock, CreditCard } from 'lucide-react'; // Added CreditCard icon
+import { Building, DollarSign, Mail, Phone, User as UserIcon, Shield, Truck, MapPin, Clock, CreditCard, AlertTriangle, CheckCircle } from 'lucide-react';
 
 // Extrai a mensagem real de erro de uma chamada supabase.functions.invoke.
 // Retorna string com o erro, ou null se sucesso.
@@ -72,6 +72,34 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [temContaAuth, setTemContaAuth] = useState(false);
+  const [verificandoConta, setVerificandoConta] = useState(false);
+
+  // Verifica se o e-mail de acesso preenchido já tem usuário criado em public.users.
+  // Re-checa quando o e-mail muda (caso o admin altere).
+  useEffect(() => {
+    let cancelled = false;
+    const verificar = async () => {
+      const email = formData.email_fornecedor?.trim().toLowerCase();
+      if (!email) {
+        if (!cancelled) setTemContaAuth(false);
+        return;
+      }
+      setVerificandoConta(true);
+      try {
+        const usuarios = await User.list();
+        if (cancelled) return;
+        const existe = usuarios.some(u => u.email?.toLowerCase() === email);
+        setTemContaAuth(existe);
+      } catch {
+        if (!cancelled) setTemContaAuth(false);
+      } finally {
+        if (!cancelled) setVerificandoConta(false);
+      }
+    };
+    verificar();
+    return () => { cancelled = true; };
+  }, [formData.email_fornecedor]);
 
   useEffect(() => {
     const initForm = async () => {
@@ -126,6 +154,28 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
         toast.error('Por favor, informe um valor de pedido mínimo válido.');
         setLoading(false);
         return;
+      }
+
+      // Validações de conta de acesso (evita ficar com fornecedor sem login válido)
+      if (!fornecedor) {
+        // Criação de novo fornecedor: e-mail + senha obrigatórios
+        if (!formData.email_fornecedor?.trim()) {
+          toast.error('Informe o e-mail de acesso do fornecedor.');
+          setLoading(false);
+          return;
+        }
+        if (!formData.senha_fornecedor || formData.senha_fornecedor.length < 6) {
+          toast.error('Defina uma senha de acesso (mínimo 6 caracteres).');
+          setLoading(false);
+          return;
+        }
+      } else if (formData.email_fornecedor?.trim() && !temContaAuth) {
+        // Edição: tem e-mail cadastrado mas não tem conta auth → exige senha para criar agora
+        if (!formData.senha_fornecedor || formData.senha_fornecedor.length < 6) {
+          toast.error('Este fornecedor não tem conta de acesso. Defina uma senha (mínimo 6 caracteres) para criar agora.');
+          setLoading(false);
+          return;
+        }
       }
 
       // Dados do fornecedor para salvar (sem email e senha do usuário)
@@ -435,14 +485,43 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
               <Separator />
 
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
+                <h3 className="text-lg font-semibold flex items-center gap-2 flex-wrap">
                   <Shield className="w-5 h-5" />
                   Acesso ao Portal
+                  {fornecedor && formData.email_fornecedor && !verificandoConta && (
+                    temContaAuth ? (
+                      <Badge className="ml-2 bg-green-100 text-green-800">
+                        <CheckCircle className="w-3 h-3 mr-1" /> Conta ativa
+                      </Badge>
+                    ) : (
+                      <Badge className="ml-2 bg-yellow-100 text-yellow-800">
+                        <AlertTriangle className="w-3 h-3 mr-1" /> Sem conta de acesso
+                      </Badge>
+                    )
+                  )}
                 </h3>
+
+                {fornecedor && formData.email_fornecedor && !temContaAuth && !verificandoConta && (
+                  <Alert className="bg-yellow-50 border-yellow-300">
+                    <AlertTriangle className="w-4 h-4 text-yellow-700" />
+                    <AlertDescription className="text-yellow-900">
+                      <strong>Atenção:</strong> Este fornecedor tem e-mail cadastrado mas <strong>não tem conta de acesso</strong>.
+                      Preencha a senha abaixo (mínimo 6 caracteres) e clique em Salvar para criar a conta agora.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {!fornecedor && (
+                  <Alert className="bg-blue-50 border-blue-200">
+                    <AlertDescription className="text-blue-800 text-sm">
+                      <strong>E-mail e senha são obrigatórios</strong> para criar a conta de acesso do fornecedor.
+                    </AlertDescription>
+                  </Alert>
+                )}
 
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label htmlFor="email_fornecedor">Email de Acesso</Label>
+                    <Label htmlFor="email_fornecedor">Email de Acesso{!fornecedor && ' *'}</Label>
                     <Input
                       id="email_fornecedor"
                       type="email"
@@ -452,13 +531,21 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="senha_fornecedor">Senha</Label>
+                    <Label htmlFor="senha_fornecedor">
+                      Senha{(!fornecedor || (formData.email_fornecedor && !temContaAuth)) ? ' *' : ''}
+                    </Label>
                     <Input
                       id="senha_fornecedor"
                       type="password"
                       value={formData.senha_fornecedor}
                       onChange={(e) => setFormData({...formData, senha_fornecedor: e.target.value})}
-                      placeholder={fornecedor ? "Deixe em branco para manter a senha atual" : ""}
+                      placeholder={
+                        !fornecedor
+                          ? "Mínimo 6 caracteres"
+                          : (formData.email_fornecedor && !temContaAuth)
+                            ? "Defina uma senha para criar a conta"
+                            : "Deixe em branco para manter a senha atual"
+                      }
                     />
                   </div>
                 </div>
