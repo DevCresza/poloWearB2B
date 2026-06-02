@@ -600,7 +600,11 @@ export default function MeuPerfil() {
       {user.tipo_negocio === 'fornecedor' && fornecedor && (
         <MetodosPagamentoCard
           fornecedor={fornecedor}
-          onUpdated={(novosMetodos) => setFornecedor(prev => ({ ...prev, metodos_pagamento_aceitos: novosMetodos }))}
+          onUpdated={({ metodos, prazos }) => setFornecedor(prev => ({
+            ...prev,
+            metodos_pagamento_aceitos: metodos,
+            boleto_faturado_prazos_dias: prazos
+          }))}
         />
       )}
 
@@ -1052,7 +1056,7 @@ function MetodosPagamentoCard({ fornecedor, onUpdated }) {
   const METODOS = [
     { value: 'pix', label: 'PIX' },
     { value: 'cartao_credito', label: 'Cartão de Crédito' },
-    { value: 'boleto_faturado', label: 'Boleto Faturado (30 dias)' },
+    { value: 'boleto_faturado', label: 'Boleto Faturado' },
     { value: 'transferencia', label: 'Transferência Bancária' }
   ];
 
@@ -1060,15 +1064,23 @@ function MetodosPagamentoCard({ fornecedor, onUpdated }) {
     ? fornecedor.metodos_pagamento_aceitos
     : ['pix', 'cartao_credito', 'boleto_faturado', 'transferencia'];
 
+  const prazosIniciais = Array.isArray(fornecedor?.boleto_faturado_prazos_dias)
+    ? fornecedor.boleto_faturado_prazos_dias
+    : [];
+
   const [selecionados, setSelecionados] = useState(inicial);
+  const [prazos, setPrazos] = useState(prazosIniciais);
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
     setSelecionados(inicial);
+    setPrazos(prazosIniciais);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fornecedor?.id]);
 
-  const alterado = JSON.stringify([...selecionados].sort()) !== JSON.stringify([...inicial].sort());
+  const metodosAlterado = JSON.stringify([...selecionados].sort()) !== JSON.stringify([...inicial].sort());
+  const prazosAlterado = JSON.stringify(prazos) !== JSON.stringify(prazosIniciais);
+  const alterado = metodosAlterado || prazosAlterado;
 
   const toggle = (value, checked) => {
     setSelecionados((prev) =>
@@ -1083,9 +1095,12 @@ function MetodosPagamentoCard({ fornecedor, onUpdated }) {
     }
     setSalvando(true);
     try {
-      await Fornecedor.update(fornecedor.id, { metodos_pagamento_aceitos: selecionados });
-      toast.success('Formas de pagamento atualizadas.');
-      if (onUpdated) onUpdated(selecionados);
+      await Fornecedor.update(fornecedor.id, {
+        metodos_pagamento_aceitos: selecionados,
+        boleto_faturado_prazos_dias: prazos
+      });
+      toast.success('Configurações atualizadas.');
+      if (onUpdated) onUpdated({ metodos: selecionados, prazos });
     } catch (err) {
       toast.error('Erro ao salvar: ' + (err?.message || ''));
     } finally {
@@ -1122,6 +1137,35 @@ function MetodosPagamentoCard({ fornecedor, onUpdated }) {
         {selecionados.length === 0 && (
           <p className="text-xs text-red-600">Selecione pelo menos uma forma de pagamento.</p>
         )}
+
+        {/* Prazos do boleto faturado — só aparece se boleto_faturado está marcado */}
+        {selecionados.includes('boleto_faturado') && (
+          <div className="space-y-2 pl-3 border-l-2 border-blue-200">
+            <Label htmlFor="meu_perfil_boleto_prazos">Prazos do boleto faturado (em dias)</Label>
+            <Input
+              id="meu_perfil_boleto_prazos"
+              placeholder="Ex.: 30/60/90 ou 45/60/75/90/105/120/135/150/165/180"
+              value={prazos.join('/')}
+              onChange={(e) => {
+                const novos = e.target.value
+                  .split(/[\s,/;]+/)
+                  .map(s => parseInt(s.trim(), 10))
+                  .filter(n => Number.isFinite(n) && n > 0 && n <= 365);
+                setPrazos(novos);
+              }}
+              className="bg-white"
+            />
+            <p className="text-xs text-gray-500">
+              Cada número é o vencimento de uma parcela, contado em dias a partir do envio do boleto. Deixe vazio para usar o padrão (30 dias).
+            </p>
+            {prazos.length > 0 && (
+              <p className="text-xs text-blue-700">
+                <strong>{prazos.length} parcela(s):</strong> {prazos.join(' / ')} dias
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="flex justify-end">
           <Button
             onClick={salvar}

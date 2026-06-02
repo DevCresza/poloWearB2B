@@ -1035,10 +1035,29 @@ export default function PedidosFornecedor() {
     setSelectedPedido(pedido);
     setBoletoNFSelected(null);
     setBoletoNFFile(null);
-    setBoletoNFQtdParcelas(1);
+
+    // Auto-preencher parcelas a partir dos prazos cadastrados do fornecedor (somente para boleto faturado)
+    const fornecedor = fornecedores.find(f => f.id === pedido.fornecedor_id);
+    const prazos = Array.isArray(fornecedor?.boleto_faturado_prazos_dias)
+      ? fornecedor.boleto_faturado_prazos_dias
+      : [];
     const hoje = new Date();
-    hoje.setDate(hoje.getDate() + 30);
-    setBoletoNFParcelas([{ dataVencimento: hoje.toISOString().split('T')[0] }]);
+    if (pedido.metodo_pagamento === 'boleto_faturado' && prazos.length > 0) {
+      setBoletoNFQtdParcelas(prazos.length);
+      const novas = prazos.map(dias => {
+        const data = new Date(hoje);
+        data.setDate(data.getDate() + dias);
+        return { dataVencimento: data.toISOString().split('T')[0] };
+      });
+      setBoletoNFParcelas(novas);
+    } else {
+      // Padrão: 1 parcela com vencimento em 30 dias
+      setBoletoNFQtdParcelas(1);
+      const data = new Date(hoje);
+      data.setDate(data.getDate() + 30);
+      setBoletoNFParcelas([{ dataVencimento: data.toISOString().split('T')[0] }]);
+    }
+
     setBoletoNFLoading(true);
     setShowBoletoNFModal(true);
     try {

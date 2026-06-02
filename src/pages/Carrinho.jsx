@@ -269,6 +269,14 @@ export default function Carrinho() {
   const getMetodosPagamentoDisponiveis = (fornecedorId) => {
     const fornecedor = fornecedores.find(f => f.id === fornecedorId);
 
+    // Monta a label do boleto faturado a partir dos prazos cadastrados do fornecedor
+    const prazosBoleto = Array.isArray(fornecedor?.boleto_faturado_prazos_dias)
+      ? fornecedor.boleto_faturado_prazos_dias
+      : [];
+    const labelBoletoFaturado = prazosBoleto.length > 0
+      ? `Boleto Faturado (${prazosBoleto.join('/')} dias)`
+      : 'Boleto Faturado (30 dias)';
+
     // Multimarca: somente à vista (sem boleto)
     let metodosBase;
     if (user?.tipo_negocio === 'multimarca') {
@@ -295,7 +303,7 @@ export default function Carrinho() {
         metodosBase = [
           { value: 'pix', label: 'PIX' },
           { value: 'cartao_credito', label: 'Cartão de Crédito' },
-          { value: 'boleto_faturado', label: 'Boleto Faturado (30 dias)' },
+          { value: 'boleto_faturado', label: labelBoletoFaturado },
           { value: 'transferencia', label: 'Transferência Bancária' }
         ];
       }

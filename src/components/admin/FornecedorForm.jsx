@@ -42,6 +42,7 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
     responsavel_user_id: '',
     pedido_minimo_valor: 0,
     metodos_pagamento_aceitos: ['pix', 'cartao_credito', 'boleto_faturado', 'transferencia'],
+    boleto_faturado_prazos_dias: [],
     email_fornecedor: '',
     senha_fornecedor: '',
     ativo_fornecedor: true,
@@ -400,6 +401,34 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
                 </div>
                 {(formData.metodos_pagamento_aceitos || []).length === 0 && (
                   <p className="text-xs text-red-600">Selecione pelo menos uma forma de pagamento.</p>
+                )}
+
+                {/* Prazos do boleto faturado — só aparece se a forma estiver marcada */}
+                {(formData.metodos_pagamento_aceitos || []).includes('boleto_faturado') && (
+                  <div className="space-y-2 mt-4 pl-3 border-l-2 border-blue-200">
+                    <Label htmlFor="boleto_prazos_input">Prazos do boleto faturado (em dias)</Label>
+                    <Input
+                      id="boleto_prazos_input"
+                      placeholder="Ex.: 30/60/90 ou 45/60/75/90/105/120/135/150/165/180"
+                      value={(formData.boleto_faturado_prazos_dias || []).join('/')}
+                      onChange={(e) => {
+                        const prazos = e.target.value
+                          .split(/[\s,/;]+/)
+                          .map(s => parseInt(s.trim(), 10))
+                          .filter(n => Number.isFinite(n) && n > 0 && n <= 365);
+                        setFormData({ ...formData, boleto_faturado_prazos_dias: prazos });
+                      }}
+                    />
+                    <p className="text-xs text-gray-500">
+                      Cada número é o vencimento de uma parcela, contado em dias a partir do envio do boleto. Deixe vazio para o padrão (30 dias).
+                    </p>
+                    {(formData.boleto_faturado_prazos_dias || []).length > 0 && (
+                      <p className="text-xs text-blue-700">
+                        <strong>{(formData.boleto_faturado_prazos_dias || []).length} parcela(s):</strong>{' '}
+                        {(formData.boleto_faturado_prazos_dias || []).join(' / ')} dias
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
 
