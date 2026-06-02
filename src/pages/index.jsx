@@ -50,6 +50,8 @@ import Login from "./Login";
 
 import ResetPassword from "./ResetPassword";
 
+import HistoricoEmails from "./HistoricoEmails";
+
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 
 const PAGES = {
@@ -99,6 +101,8 @@ const PAGES = {
     ConfigWhatsApp: ConfigWhatsApp,
     
     MeuPerfil: MeuPerfil,
+
+    HistoricoEmails: HistoricoEmails,
 
     Login: Login,
 
@@ -174,6 +178,8 @@ function PagesContent() {
                 <Route path="/ConfigWhatsApp" element={<ConfigWhatsApp />} />
                 
                 <Route path="/MeuPerfil" element={<MeuPerfil />} />
+
+                <Route path="/HistoricoEmails" element={<HistoricoEmails />} />
 
                 <Route path="/Login" element={<Login />} />
 

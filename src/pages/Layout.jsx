@@ -26,6 +26,7 @@ import {
   MessageCircle,
   BarChart3,
   BookOpen,
+  Mail,
   Menu,
   X
 } from 'lucide-react';
@@ -221,6 +222,10 @@ export default function Layout({ children, currentPageName }) {
             <TrendingUp className="w-5 h-5" />
             <span>Histórico</span>
           </Link>
+          <Link to={createPageUrl('HistoricoEmails')} className={getNavLinkClasses('HistoricoEmails')} onClick={() => setMobileMenuOpen(false)}>
+            <Mail className="w-5 h-5" />
+            <span>E-mails enviados</span>
+          </Link>
         </div>
       )}
 
@@ -287,6 +292,10 @@ export default function Layout({ children, currentPageName }) {
           <Link to={createPageUrl('Recursos')} className={getNavLinkClasses('Recursos')} onClick={() => setMobileMenuOpen(false)}>
             <BookOpen className="w-5 h-5" />
             <span>Conteúdos</span>
+          </Link>
+          <Link to={createPageUrl('HistoricoEmails')} className={getNavLinkClasses('HistoricoEmails')} onClick={() => setMobileMenuOpen(false)}>
+            <Mail className="w-5 h-5" />
+            <span>E-mails enviados</span>
           </Link>
         </div>
       )}
