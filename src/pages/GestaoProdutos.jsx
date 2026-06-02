@@ -32,7 +32,7 @@ export default function GestaoProdutos() {
 
   const categorias = [
     'Camisetas', 'Polos', 'Camisas', 'Shorts', 'Bermudas', 'Calças',
-    'Vestidos', 'Blusas', 'Regatas', 'Coletes', 'Saias', 'Jaquetas',
+    'Vestidos', 'Macacões', 'Blusas', 'Regatas', 'Coletes', 'Saias', 'Jaquetas',
     'Meias', 'Acessórios', 'Calçados', 'Chinelos', 'Garrafas', 'Perfumes'
   ];
 
