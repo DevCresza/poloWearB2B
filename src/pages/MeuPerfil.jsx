@@ -1070,11 +1070,14 @@ function MetodosPagamentoCard({ fornecedor, onUpdated }) {
 
   const [selecionados, setSelecionados] = useState(inicial);
   const [prazos, setPrazos] = useState(prazosIniciais);
+  // Texto bruto pro input dos prazos (deixa o usuário digitar "/" sem ser eliminado)
+  const [prazosText, setPrazosText] = useState(prazosIniciais.join('/'));
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
     setSelecionados(inicial);
     setPrazos(prazosIniciais);
+    setPrazosText(prazosIniciais.join('/'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fornecedor?.id]);
 
@@ -1145,9 +1148,11 @@ function MetodosPagamentoCard({ fornecedor, onUpdated }) {
             <Input
               id="meu_perfil_boleto_prazos"
               placeholder="Ex.: 30/60/90 ou 45/60/75/90/105/120/135/150/165/180"
-              value={prazos.join('/')}
+              value={prazosText}
               onChange={(e) => {
-                const novos = e.target.value
+                const text = e.target.value;
+                setPrazosText(text);
+                const novos = text
                   .split(/[\s,/;]+/)
                   .map(s => parseInt(s.trim(), 10))
                   .filter(n => Number.isFinite(n) && n > 0 && n <= 365);

@@ -74,6 +74,9 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
   const [dataLoaded, setDataLoaded] = useState(false);
   const [temContaAuth, setTemContaAuth] = useState(false);
   const [verificandoConta, setVerificandoConta] = useState(false);
+  // Estado de texto bruto pro input dos prazos (separado da array parseada,
+  // pra deixar o usuário digitar "/" sem que ele seja eliminado pelo parser).
+  const [boletoPrazosText, setBoletoPrazosText] = useState('');
 
   // Verifica se o e-mail de acesso preenchido já tem usuário criado em public.users.
   // Re-checa quando o e-mail muda (caso o admin altere).
@@ -119,6 +122,11 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
           ...fornecedor,
           clientes_boleto_faturado: fornecedor.clientes_boleto_faturado || []
         });
+        // Inicializa o texto bruto dos prazos do banco
+        const prazos = Array.isArray(fornecedor.boleto_faturado_prazos_dias)
+          ? fornecedor.boleto_faturado_prazos_dias
+          : [];
+        setBoletoPrazosText(prazos.join('/'));
       }
       setDataLoaded(true);
     };
@@ -460,9 +468,11 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
                     <Input
                       id="boleto_prazos_input"
                       placeholder="Ex.: 30/60/90 ou 45/60/75/90/105/120/135/150/165/180"
-                      value={(formData.boleto_faturado_prazos_dias || []).join('/')}
+                      value={boletoPrazosText}
                       onChange={(e) => {
-                        const prazos = e.target.value
+                        const text = e.target.value;
+                        setBoletoPrazosText(text);
+                        const prazos = text
                           .split(/[\s,/;]+/)
                           .map(s => parseInt(s.trim(), 10))
                           .filter(n => Number.isFinite(n) && n > 0 && n <= 365);
