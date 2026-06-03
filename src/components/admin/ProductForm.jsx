@@ -425,6 +425,28 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
 
         // Atualizar formData com variantes normalizadas
         formData.variantes_cor = variantesNormalizadas;
+
+        // Reconstroi o array `fotos` a partir das variantes (source of truth).
+        // Garante que cor_nome/cor_codigo_hex de cada foto reflitam SEMPRE
+        // o estado atual da variante a qual a foto pertence (mesmo apos rename).
+        // Preserva fotos "orfas" (uploadadas direto no campo de fotos sem cor).
+        const urlsDeVariantes = new Set();
+        const fotosDeVariantes = [];
+        for (const v of variantesNormalizadas) {
+          for (const u of (v.fotos_urls || [])) {
+            if (!u || urlsDeVariantes.has(u)) continue;
+            urlsDeVariantes.add(u);
+            fotosDeVariantes.push({
+              url: u,
+              cor_nome: v.cor_nome,
+              cor_codigo_hex: v.cor_codigo_hex
+            });
+          }
+        }
+        const fotosOrfas = (formData.fotos || [])
+          .map(p => typeof p === 'string' ? { url: p } : p)
+          .filter(p => p && p.url && !urlsDeVariantes.has(p.url));
+        formData.fotos = [...fotosDeVariantes, ...fotosOrfas];
       } else if (formData.estoque_atual_grades < 0) {
         toast.error('O estoque atual não pode ser negativo.');
         setSubmitting(false);
