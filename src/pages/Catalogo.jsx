@@ -50,6 +50,11 @@ export default function Catalogo() {
   const [carrinho, setCarrinho] = useState([]);
   const [quantidadeModal, setQuantidadeModal] = useState(1);
   const [quantidadeCapsula, setQuantidadeCapsula] = useState(1);
+  // Quantidades ajustadas pelo cliente dentro da capsula (por produto/cor).
+  // Comeca igual a `selectedCapsula.produtos_quantidades` (= minimo configurado
+  // pelo admin) e pode ser aumentado mas nunca diminuido abaixo do minimo.
+  const [ajustesQtdCapsula, setAjustesQtdCapsula] = useState({});
+  const [minimosQtdCapsula, setMinimosQtdCapsula] = useState({});
   const [selectedVariantColor, setSelectedVariantColor] = useState(null);
   const [quantidadesPorCor, setQuantidadesPorCor] = useState({}); // { cor_id: quantidade }
   const [adicionandoCarrinho, setAdicionandoCarrinho] = useState({});
@@ -280,15 +285,8 @@ export default function Catalogo() {
         produtoIds = [];
       }
 
-      // Parse produtos_quantidades
-      let produtosQuantidades = {};
-      try {
-        produtosQuantidades = typeof selectedCapsula.produtos_quantidades === 'string'
-          ? JSON.parse(selectedCapsula.produtos_quantidades)
-          : selectedCapsula.produtos_quantidades || {};
-      } catch (e) {
-        produtosQuantidades = {};
-      }
+      // Usa os ajustes do cliente (= minimos + aumentos), nao a config bruta
+      const produtosQuantidades = ajustesQtdCapsula || {};
 
       // Calcular preço total da cápsula
       let precoTotalCapsula = 0;
@@ -344,20 +342,12 @@ export default function Catalogo() {
           preco_total: precoTotalCapsula,
           preco_unitario: precoTotalCapsula, // Preço por cápsula
           produto_ids: produtoIds,
-          produtos_quantidades: selectedCapsula.produtos_quantidades,
+          // Salva os ajustes do cliente, nao a config original do admin
+          produtos_quantidades: ajustesQtdCapsula,
           // Informações adicionais para exibição
           detalhes_produtos: produtoIds.map(produtoId => {
             const produto = todosProdutos.find(p => p.id === produtoId);
-            let produtosQuantidades = {};
-            try {
-              produtosQuantidades = typeof selectedCapsula.produtos_quantidades === 'string'
-                ? JSON.parse(selectedCapsula.produtos_quantidades)
-                : selectedCapsula.produtos_quantidades || {};
-            } catch (e) {
-              console.warn('Erro ao fazer parse de produtos_quantidades:', e);
-            }
-
-            const qtdConfig = produtosQuantidades[produtoId];
+            const qtdConfig = (ajustesQtdCapsula || {})[produtoId];
 
             // Enriquecer configuração com dados completos de cor (incluindo hex)
             let configEnriquecida = qtdConfig;
@@ -682,7 +672,65 @@ export default function Catalogo() {
     setCapsulaFotoIndex(0);
     setSelectedCapsula(capsula);
     setQuantidadeCapsula(1);
+    // Reseta ajustes e minimos a partir das quantidades configuradas pelo admin
+    let pq = {};
+    try {
+      pq = typeof capsula.produtos_quantidades === 'string'
+        ? JSON.parse(capsula.produtos_quantidades)
+        : capsula.produtos_quantidades || {};
+    } catch (e) { pq = {}; }
+    setAjustesQtdCapsula(JSON.parse(JSON.stringify(pq)));
+    setMinimosQtdCapsula(JSON.parse(JSON.stringify(pq)));
     setShowCapsulaModal(true);
+  };
+
+  // Helpers para o ajuste de quantidades dentro da capsula
+  const getQtdAjustada = (produtoId, corId = null) => {
+    const c = ajustesQtdCapsula[produtoId];
+    if (c === undefined || c === null) return 0;
+    if (typeof c === 'number') return c;
+    if (Array.isArray(c.variantes)) {
+      const v = c.variantes.find(x => x.cor_id === corId);
+      return v?.quantidade || 0;
+    }
+    return 0;
+  };
+
+  const getQtdMinima = (produtoId, corId = null) => {
+    const c = minimosQtdCapsula[produtoId];
+    if (c === undefined || c === null) return 0;
+    if (typeof c === 'number') return c;
+    if (Array.isArray(c.variantes)) {
+      const v = c.variantes.find(x => x.cor_id === corId);
+      return v?.quantidade || 0;
+    }
+    return 0;
+  };
+
+  const ajustarQtdCapsula = (produtoId, corId, delta) => {
+    setAjustesQtdCapsula(prev => {
+      const updated = { ...prev };
+      const c = updated[produtoId];
+      if (c === undefined || c === null) return prev;
+
+      if (typeof c === 'number') {
+        const min = typeof minimosQtdCapsula[produtoId] === 'number'
+          ? minimosQtdCapsula[produtoId]
+          : 0;
+        updated[produtoId] = Math.max(min, c + delta);
+      } else if (Array.isArray(c.variantes)) {
+        const variantesMin = Array.isArray(minimosQtdCapsula[produtoId]?.variantes)
+          ? minimosQtdCapsula[produtoId].variantes
+          : [];
+        const variantes = c.variantes.map(v => {
+          if (v.cor_id !== corId) return v;
+          const min = (variantesMin.find(x => x.cor_id === corId)?.quantidade) || 0;
+          return { ...v, quantidade: Math.max(min, (v.quantidade || 0) + delta) };
+        });
+        updated[produtoId] = { ...c, variantes };
+      }
+      return updated;
+    });
   };
 
   const openProductDetails = (produto) => {
@@ -2004,16 +2052,8 @@ export default function Catalogo() {
                     const produto = todosProdutos.find(p => p.id === produtoId);
                     if (!produto) return null;
 
-                    let produtosQuantidades = {};
-                    try {
-                      produtosQuantidades = typeof selectedCapsula.produtos_quantidades === 'string'
-                        ? JSON.parse(selectedCapsula.produtos_quantidades)
-                        : selectedCapsula.produtos_quantidades || {};
-                    } catch (e) {
-                      produtosQuantidades = {};
-                    }
-
-                    const qtdConfig = produtosQuantidades[produtoId];
+                    // Usa os ajustes do cliente (com os minimos como piso)
+                    const qtdConfig = (ajustesQtdCapsula || {})[produtoId];
                     const primeiraFoto = getPrimeiraFoto(produto);
 
                     return (
@@ -2044,31 +2084,80 @@ export default function Catalogo() {
                               ) : null;
                             })()}
 
-                            {/* Mostrar composição de cores se tiver variantes */}
+                            {/* Mostrar composição de cores se tiver variantes (com +/- por cor) */}
                             {qtdConfig && typeof qtdConfig === 'object' && qtdConfig.variantes && qtdConfig.variantes.length > 0 && (
                               <div className="mt-3 space-y-2">
                                 <p className="text-xs font-semibold text-gray-700">Cores incluídas:</p>
-                                {qtdConfig.variantes.map((varianteConfig, idx) => (
-                                  <div key={idx} className="flex items-center gap-2 text-sm">
-                                    <div
-                                      className="w-5 h-5 rounded-full border-2 border-gray-300"
-                                      style={{ backgroundColor: varianteConfig.cor_hex || '#000' }}
-                                    />
-                                    <span className="font-medium">{varianteConfig.cor_nome}</span>
-                                    <span className="text-gray-600">
-                                      - {varianteConfig.quantidade} {produto.tipo_venda === 'grade' ? 'grade(s)' : 'unidade(s)'}
-                                    </span>
-                                  </div>
-                                ))}
+                                {qtdConfig.variantes.map((varianteConfig, idx) => {
+                                  const qtdAtual = getQtdAjustada(produtoId, varianteConfig.cor_id);
+                                  const qtdMin = getQtdMinima(produtoId, varianteConfig.cor_id);
+                                  const podeDecrementar = qtdAtual > qtdMin;
+                                  return (
+                                    <div key={idx} className="flex items-center gap-2 text-sm">
+                                      <div
+                                        className="w-5 h-5 rounded-full border-2 border-gray-300"
+                                        style={{ backgroundColor: varianteConfig.cor_hex || '#000' }}
+                                      />
+                                      <span className="font-medium flex-1">{varianteConfig.cor_nome}</span>
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => ajustarQtdCapsula(produtoId, varianteConfig.cor_id, -1)}
+                                          disabled={!podeDecrementar}
+                                          title={podeDecrementar ? 'Diminuir' : `Mínimo: ${qtdMin}`}
+                                          className="w-7 h-7 rounded-md border border-gray-300 flex items-center justify-center hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                                        >
+                                          <Minus className="w-3.5 h-3.5" />
+                                        </button>
+                                        <span className="w-10 text-center font-semibold tabular-nums">{qtdAtual}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => ajustarQtdCapsula(produtoId, varianteConfig.cor_id, +1)}
+                                          className="w-7 h-7 rounded-md border border-gray-300 flex items-center justify-center hover:bg-gray-100"
+                                        >
+                                          <Plus className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                      <span className="text-gray-500 text-xs ml-1 w-14">
+                                        {produto.tipo_venda === 'grade' ? 'grade(s)' : 'un.'}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
 
-                            {/* Mostrar quantidade se produto sem variantes */}
-                            {typeof qtdConfig === 'number' && (
-                              <p className="mt-2 text-sm text-gray-600">
-                                Quantidade: {qtdConfig} {produto.tipo_venda === 'grade' ? 'grade(s)' : 'unidade(s)'}
-                              </p>
-                            )}
+                            {/* Mostrar quantidade se produto sem variantes (com +/-) */}
+                            {typeof qtdConfig === 'number' && (() => {
+                              const qtdAtual = getQtdAjustada(produtoId);
+                              const qtdMin = getQtdMinima(produtoId);
+                              const podeDecrementar = qtdAtual > qtdMin;
+                              return (
+                                <div className="mt-2 flex items-center gap-2 text-sm">
+                                  <span className="text-gray-700 font-medium">Quantidade:</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => ajustarQtdCapsula(produtoId, null, -1)}
+                                    disabled={!podeDecrementar}
+                                    title={podeDecrementar ? 'Diminuir' : `Mínimo: ${qtdMin}`}
+                                    className="w-7 h-7 rounded-md border border-gray-300 flex items-center justify-center hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                                  >
+                                    <Minus className="w-3.5 h-3.5" />
+                                  </button>
+                                  <span className="w-10 text-center font-semibold tabular-nums">{qtdAtual}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => ajustarQtdCapsula(produtoId, null, +1)}
+                                    className="w-7 h-7 rounded-md border border-gray-300 flex items-center justify-center hover:bg-gray-100"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" />
+                                  </button>
+                                  <span className="text-gray-500 text-xs">
+                                    {produto.tipo_venda === 'grade' ? 'grade(s)' : 'unidade(s)'}
+                                  </span>
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       </div>
@@ -2080,15 +2169,8 @@ export default function Catalogo() {
               {/* Cálculo do Valor da Cápsula */}
               {(() => {
                 let valorTotalCapsula = 0;
-                let produtosQuantidades = {};
-
-                try {
-                  produtosQuantidades = typeof selectedCapsula.produtos_quantidades === 'string'
-                    ? JSON.parse(selectedCapsula.produtos_quantidades)
-                    : selectedCapsula.produtos_quantidades || {};
-                } catch (e) {
-                  produtosQuantidades = {};
-                }
+                // Usa os ajustes do cliente (>= minimos configurados pelo admin)
+                const produtosQuantidades = ajustesQtdCapsula || {};
 
                 // Parse produto_ids se vier como string
                 let produtoIds = [];
