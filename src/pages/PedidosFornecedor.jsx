@@ -869,29 +869,41 @@ export default function PedidosFornecedor() {
       pedidosParaExportar = pedidosParaExportar.filter(p => p.status === filtroStatus);
     }
 
-    // Definir colunas para o PDF
+    // Definir colunas para o PDF — CNPJ + Razão para distinguir matriz/filial,
+    // e Qtd Peças no lugar de NF para uma visão macro.
     const columns = [
       { key: 'id_formatado', label: 'Pedido' },
-      { key: 'cliente_nome', label: 'Cliente' },
+      { key: 'cnpj', label: 'CNPJ' },
+      { key: 'razao_social', label: 'Razão Social' },
       { key: 'status', label: 'Status' },
       { key: 'valor_formatado', label: 'Valor' },
+      { key: 'qtd_pecas', label: 'Qtd. Peças' },
       { key: 'data_formatada', label: 'Data Pedido' },
-      { key: 'nf_numero', label: 'NF' },
       { key: 'data_faturamento', label: 'Data Faturamento' }
     ];
 
     // Preparar dados para exportação
-    const data = pedidosParaExportar.map(p => ({
-      id_formatado: `#${p.id?.slice(-8).toUpperCase() || 'N/A'}`,
-      cliente_nome: clientes.find(c => c.id === p.comprador_user_id)?.full_name || 'N/A',
-      status: p.status?.charAt(0).toUpperCase() + p.status?.slice(1) || 'N/A',
-      valor_formatado: formatCurrency(p.valor_total),
-      data_formatada: formatDate(p.created_date),
-      nf_numero: p.nf_numero || '-',
-      data_faturamento: p.nf_data_upload ? formatDate(p.nf_data_upload) : '-'
-    }));
+    const data = pedidosParaExportar.map(p => {
+      const cli = clientes.find(c => c.id === p.comprador_user_id);
+      let itens = p.itens || [];
+      if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch { itens = []; } }
+      const qtdPecas = (itens || []).reduce((sum, it) => {
+        const isGrade = it.tipo_venda === 'grade' && (it.total_pecas_grade || 0) > 0;
+        return sum + (it.quantidade || 0) * (isGrade ? (it.total_pecas_grade || 1) : 1);
+      }, 0);
+      return {
+        id_formatado: `#${p.id?.slice(-8).toUpperCase() || 'N/A'}`,
+        cnpj: cli?.cnpj || '-',
+        razao_social: cli?.empresa || cli?.razao_social || cli?.full_name || 'N/A',
+        status: p.status?.charAt(0).toUpperCase() + p.status?.slice(1) || 'N/A',
+        valor_formatado: formatCurrency(p.valor_total),
+        qtd_pecas: qtdPecas,
+        data_formatada: formatDate(p.created_date),
+        data_faturamento: p.nf_data_upload ? formatDate(p.nf_data_upload) : '-'
+      };
+    });
 
-    exportToPDF(data, columns, 'Relatório de Pedidos', `pedidos-${new Date().toISOString().split('T')[0]}.pdf`);
+    exportToPDF(data, columns, 'Relatório de Pedidos', `pedidos-${new Date().toISOString().split('T')[0]}.pdf`, { orientation: 'landscape' });
   };
 
   const handleExportCSV = () => {
