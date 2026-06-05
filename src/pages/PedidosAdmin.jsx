@@ -80,7 +80,8 @@ export default function PedidosAdmin() {
       (lojasList || []).forEach(l => {
         map[l.id] = l.nome_fantasia || l.nome;
         detMap[l.id] = {
-          nome: l.nome_fantasia || l.nome || '',
+          nome: l.nome_fantasia || l.nome || '',     // nome fantasia (rotulo "Loja")
+          razao: l.nome || l.nome_fantasia || '',    // razao social legal (NF)
           cnpj: l.cnpj || ''
         };
       });
@@ -99,7 +100,8 @@ export default function PedidosAdmin() {
         return;
       }
 
-      // Mapa user_id → {cnpj, razao} para ter visao macro distinguindo matriz/filial
+      // Mapa user_id → {cnpj, razao} (fallback quando pedido nao tem loja_id).
+      // Quando ha loja_id, preferir razao+cnpj da LOJA (eh o que vai pra NF).
       const userDetalhesMap = new Map(users.map(u => [u.id, {
         cnpj: u.cnpj || '',
         razao: u.empresa || u.razao_social || u.full_name || ''
@@ -134,14 +136,15 @@ export default function PedidosAdmin() {
         }, 0);
 
         const detUser = userDetalhesMap.get(pedido.comprador_user_id) || { cnpj: '', razao: 'N/A' };
-        // Loja: prefere CNPJ da loja quando houver (matriz e filiais tem CNPJs diferentes)
+        // Loja: razao social e CNPJ da LOJA (eh o que vai para a NF).
+        // Fallback para os dados do user quando o pedido nao tem loja_id.
         const detLoja = pedido.loja_id ? lojasDetMap[pedido.loja_id] : null;
 
         return {
           id: `#${pedido.id.slice(-8).toUpperCase()}`,
           data: formatDateTime(pedido.created_date),
           cnpj: (detLoja && detLoja.cnpj) || detUser.cnpj || '-',
-          razao_social: detUser.razao || 'N/A',
+          razao_social: (detLoja && detLoja.razao) || detUser.razao || 'N/A',
           loja: (detLoja && detLoja.nome) || '-',
           fornecedor: fornecedorMap.get(pedido.fornecedor_id) || 'N/A',
           status: statusLabels[pedido.status] || pedido.status,
@@ -231,9 +234,10 @@ export default function PedidosAdmin() {
 
         const numero = `#${pedido.id.slice(-8).toUpperCase()}`;
         const det = userDet.get(pedido.comprador_user_id) || { cnpj: '', razao: 'N/A' };
-        // Prefere CNPJ da loja (matriz/filial); fallback no CNPJ do cliente
+        // Prefere razao+cnpj da loja (eh o que vai pra NF). Fallback no user.
         const detLoja = pedido.loja_id ? lojasDetMap[pedido.loja_id] : null;
         const cnpjLinha = (detLoja && detLoja.cnpj) || det.cnpj || '-';
+        const razaoLinha = (detLoja && detLoja.razao) || det.razao || '';
         const nomeLoja = (detLoja && detLoja.nome) || '';
         const formaPg = pgLabels[pedido.metodo_pagamento] || pedido.metodo_pagamento || '';
         const prazos = pedido.boleto_prazos_dias;
@@ -256,7 +260,7 @@ export default function PedidosAdmin() {
           linhas.push({
             numero_pedido: numero,
             cnpj: cnpjLinha,
-            razao: det.razao || '',
+            razao: razaoLinha,
             loja: nomeLoja,
             forma_pagamento: formaPgComPrazo,
             mes_faturamento: mesFat,

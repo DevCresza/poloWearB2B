@@ -896,7 +896,7 @@ export default function PedidosFornecedor() {
       return {
         id_formatado: `#${p.id?.slice(-8).toUpperCase() || 'N/A'}`,
         cnpj: loja?.cnpj || cli?.cnpj || '-',
-        razao_social: cli?.empresa || cli?.razao_social || cli?.full_name || 'N/A',
+        razao_social: loja?.nome || cli?.empresa || cli?.razao_social || cli?.full_name || 'N/A',
         loja: loja?.nome_fantasia || loja?.nome || '-',
         status: p.status?.charAt(0).toUpperCase() + p.status?.slice(1) || 'N/A',
         valor_formatado: formatCurrency(p.valor_total),
@@ -946,7 +946,7 @@ export default function PedidosFornecedor() {
       return {
         id_formatado: `#${p.id?.slice(-8).toUpperCase() || 'N/A'}`,
         cnpj: loja?.cnpj || cli?.cnpj || '-',
-        razao_social: cli?.empresa || cli?.razao_social || cli?.full_name || 'N/A',
+        razao_social: loja?.nome || cli?.empresa || cli?.razao_social || cli?.full_name || 'N/A',
         loja: loja?.nome_fantasia || loja?.nome || '-',
         status: p.status?.charAt(0).toUpperCase() + p.status?.slice(1) || 'N/A',
         qtd_pecas: qtdPecas,

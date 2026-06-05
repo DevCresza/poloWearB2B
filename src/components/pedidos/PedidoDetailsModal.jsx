@@ -1265,16 +1265,20 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                     <User className="w-5 h-5 text-blue-600" />
                     <h4 className="font-semibold text-blue-900">Cliente</h4>
                   </div>
+                  {/* Razao social: prefere a da loja escolhida (eh o que vai pra NF) */}
                   <p className="text-gray-800 font-medium">
-                    {userMap.get(pedido.comprador_user_id) || 'Cliente não encontrado'}
+                    {lojaInfo?.nome || userMap.get(pedido.comprador_user_id) || 'Cliente não encontrado'}
                   </p>
+                  {lojaInfo?.cnpj && (
+                    <p className="text-xs text-gray-500 mt-0.5">CNPJ {lojaInfo.cnpj}</p>
+                  )}
                   {lojaInfo && (
                     <div className="mt-2 pt-2 border-t border-blue-200 text-sm text-gray-700">
                       <span className="font-semibold text-blue-800">Loja:</span>{' '}
                       {lojaInfo.nome_fantasia || lojaInfo.nome}
-                      {lojaInfo.cnpj && (
-                        <span className="text-gray-500"> · CNPJ {lojaInfo.cnpj}</span>
-                      )}
+                      <span className="text-gray-500 block text-xs mt-0.5">
+                        Titular: {userMap.get(pedido.comprador_user_id)}
+                      </span>
                     </div>
                   )}
                 </div>
