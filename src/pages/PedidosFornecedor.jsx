@@ -869,12 +869,13 @@ export default function PedidosFornecedor() {
       pedidosParaExportar = pedidosParaExportar.filter(p => p.status === filtroStatus);
     }
 
-    // Definir colunas para o PDF — CNPJ + Razão para distinguir matriz/filial,
-    // e Qtd Peças no lugar de NF para uma visão macro.
+    // Colunas: CNPJ (da loja quando houver) + Razao + Loja para identificar
+    // qual filial fez o pedido (cliente multilojas tem mesma razao); Qtd Pecas.
     const columns = [
       { key: 'id_formatado', label: 'Pedido' },
       { key: 'cnpj', label: 'CNPJ' },
       { key: 'razao_social', label: 'Razão Social' },
+      { key: 'loja', label: 'Loja' },
       { key: 'status', label: 'Status' },
       { key: 'valor_formatado', label: 'Valor' },
       { key: 'qtd_pecas', label: 'Qtd. Peças' },
@@ -885,6 +886,7 @@ export default function PedidosFornecedor() {
     // Preparar dados para exportação
     const data = pedidosParaExportar.map(p => {
       const cli = clientes.find(c => c.id === p.comprador_user_id);
+      const loja = p.loja_id ? lojasMap[p.loja_id] : null;
       let itens = p.itens || [];
       if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch { itens = []; } }
       const qtdPecas = (itens || []).reduce((sum, it) => {
@@ -893,8 +895,9 @@ export default function PedidosFornecedor() {
       }, 0);
       return {
         id_formatado: `#${p.id?.slice(-8).toUpperCase() || 'N/A'}`,
-        cnpj: cli?.cnpj || '-',
+        cnpj: loja?.cnpj || cli?.cnpj || '-',
         razao_social: cli?.empresa || cli?.razao_social || cli?.full_name || 'N/A',
+        loja: loja?.nome_fantasia || loja?.nome || '-',
         status: p.status?.charAt(0).toUpperCase() + p.status?.slice(1) || 'N/A',
         valor_formatado: formatCurrency(p.valor_total),
         qtd_pecas: qtdPecas,

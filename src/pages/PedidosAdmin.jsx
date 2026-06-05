@@ -30,6 +30,7 @@ export default function PedidosAdmin() {
   const [users, setUsers] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
   const [lojasMap, setLojasMap] = useState({});
+  const [lojasDetMap, setLojasDetMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('kanban'); // 'kanban' ou 'list'
   const [selectedPedido, setSelectedPedido] = useState(null);
@@ -75,8 +76,16 @@ export default function PedidosAdmin() {
 
       // Build lojas map
       const map = {};
-      (lojasList || []).forEach(l => { map[l.id] = l.nome_fantasia || l.nome; });
+      const detMap = {};
+      (lojasList || []).forEach(l => {
+        map[l.id] = l.nome_fantasia || l.nome;
+        detMap[l.id] = {
+          nome: l.nome_fantasia || l.nome || '',
+          cnpj: l.cnpj || ''
+        };
+      });
       setLojasMap(map);
+      setLojasDetMap(detMap);
     } catch (_error) {
     } finally {
       setLoading(false);
@@ -125,12 +134,15 @@ export default function PedidosAdmin() {
         }, 0);
 
         const detUser = userDetalhesMap.get(pedido.comprador_user_id) || { cnpj: '', razao: 'N/A' };
+        // Loja: prefere CNPJ da loja quando houver (matriz e filiais tem CNPJs diferentes)
+        const detLoja = pedido.loja_id ? lojasDetMap[pedido.loja_id] : null;
 
         return {
           id: `#${pedido.id.slice(-8).toUpperCase()}`,
           data: formatDateTime(pedido.created_date),
-          cnpj: detUser.cnpj || '-',
+          cnpj: (detLoja && detLoja.cnpj) || detUser.cnpj || '-',
           razao_social: detUser.razao || 'N/A',
+          loja: (detLoja && detLoja.nome) || '-',
           fornecedor: fornecedorMap.get(pedido.fornecedor_id) || 'N/A',
           status: statusLabels[pedido.status] || pedido.status,
           status_pagamento: paymentLabels[pedido.status_pagamento] || pedido.status_pagamento,
@@ -141,12 +153,14 @@ export default function PedidosAdmin() {
         };
       });
 
-      // Definir colunas — CNPJ + Razão (matriz/filial distintas) e Qtd Pecas
+      // Colunas: CNPJ (da loja quando houver) + Razao + Loja para distinguir
+      // matriz/filial; Qtd Pecas para visao macro.
       const columns = [
         { key: 'id', label: 'Pedido' },
         { key: 'data', label: 'Data' },
         { key: 'cnpj', label: 'CNPJ' },
         { key: 'razao_social', label: 'Razão Social' },
+        { key: 'loja', label: 'Loja' },
         { key: 'fornecedor', label: 'Fornecedor' },
         { key: 'status', label: 'Status' },
         { key: 'status_pagamento', label: 'Pagamento' },
@@ -217,6 +231,10 @@ export default function PedidosAdmin() {
 
         const numero = `#${pedido.id.slice(-8).toUpperCase()}`;
         const det = userDet.get(pedido.comprador_user_id) || { cnpj: '', razao: 'N/A' };
+        // Prefere CNPJ da loja (matriz/filial); fallback no CNPJ do cliente
+        const detLoja = pedido.loja_id ? lojasDetMap[pedido.loja_id] : null;
+        const cnpjLinha = (detLoja && detLoja.cnpj) || det.cnpj || '-';
+        const nomeLoja = (detLoja && detLoja.nome) || '';
         const formaPg = pgLabels[pedido.metodo_pagamento] || pedido.metodo_pagamento || '';
         const prazos = pedido.boleto_prazos_dias;
         const formaPgComPrazo = (pedido.metodo_pagamento === 'boleto_faturado' && Array.isArray(prazos) && prazos.length)
@@ -237,8 +255,9 @@ export default function PedidosAdmin() {
           const precoTotal = Number(it.total) || precoUnit * totalItens;
           linhas.push({
             numero_pedido: numero,
-            cnpj: det.cnpj || '-',
+            cnpj: cnpjLinha,
             razao: det.razao || '',
+            loja: nomeLoja,
             forma_pagamento: formaPgComPrazo,
             mes_faturamento: mesFat,
             tipo_pedido: isGrade ? 'PGM' : 'PE',
@@ -263,6 +282,7 @@ export default function PedidosAdmin() {
         { key: 'numero_pedido', label: 'NÚMERO DO PEDIDO' },
         { key: 'cnpj', label: 'CNPJ' },
         { key: 'razao', label: 'RAZÃO' },
+        { key: 'loja', label: 'LOJA' },
         { key: 'forma_pagamento', label: 'FORMA DE PAGAMENTO' },
         { key: 'mes_faturamento', label: 'MÊS DE FATURAMENTO' },
         { key: 'tipo_pedido', label: 'TIPO DE PEDIDO (PE/PGM)' },
@@ -794,6 +814,7 @@ export default function PedidosAdmin() {
                           pedido={pedido}
                           userMap={userMap}
                           fornecedorMap={fornecedorMap}
+                          lojasMap={lojasMap}
                           onViewDetails={handleViewDetails}
                           onEdit={handleEditPedido}
                           onStatusChange={handleStatusChange}

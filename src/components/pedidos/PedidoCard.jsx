@@ -3,22 +3,23 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  Eye, Edit, Package, DollarSign, Calendar, User, 
-  Building, Clock, CheckCircle, Truck, X, FileText
+import {
+  Eye, Edit, Package, DollarSign, Calendar, User,
+  Building, Clock, CheckCircle, Truck, X, FileText, Store
 } from 'lucide-react';
 
-export default function PedidoCard({ 
-  pedido, 
-  userMap, 
-  fornecedorMap, 
-  onViewDetails, 
-  onEdit, 
-  onStatusChange, 
+export default function PedidoCard({
+  pedido,
+  userMap,
+  fornecedorMap,
+  lojasMap,
+  onViewDetails,
+  onEdit,
+  onStatusChange,
   onPaymentStatusChange,
   getStatusInfo,
   getPaymentStatusInfo,
-  updatingPedidoId 
+  updatingPedidoId
 }) {
   const statusInfo = getStatusInfo(pedido.status);
   const paymentStatusInfo = getPaymentStatusInfo(pedido.status_pagamento);
@@ -58,6 +59,13 @@ export default function PedidoCard({
             <User className="w-4 h-4 flex-shrink-0" />
             <span className="truncate">{userMap.get(pedido.comprador_user_id) || 'Cliente'}</span>
           </div>
+
+          {pedido.loja_id && lojasMap && lojasMap[pedido.loja_id] && (
+            <div className="flex items-center gap-2 text-blue-600 -mt-1">
+              <Store className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="truncate text-xs">{lojasMap[pedido.loja_id]}</span>
+            </div>
+          )}
 
           <div className="flex items-center gap-2 text-gray-600">
             <Building className="w-4 h-4 flex-shrink-0" />
