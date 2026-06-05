@@ -182,6 +182,94 @@ export default function Carrinho() {
     }
   };
 
+  // Helpers do mínimo da cápsula (fallback no que o cliente colocou se o
+  // item antigo não tiver `minimos_quantidades` salvo).
+  const getCapsulaMin = (item, produtoId, corId) => {
+    const mins = item.minimos_quantidades || item.produtos_quantidades || {};
+    const c = mins[produtoId];
+    if (c === undefined || c === null) return 0;
+    if (typeof c === 'number') return c;
+    if (Array.isArray(c.variantes)) {
+      const v = c.variantes.find(x => x.cor_id === corId);
+      return v?.quantidade || 0;
+    }
+    return 0;
+  };
+
+  // Ajusta a quantidade de uma cor/produto dentro de uma cápsula no carrinho,
+  // travando no mínimo configurado. Recalcula `preco_unitario` e `preco_total`.
+  const ajustarQtdCapsulaCart = (itemId, produtoId, corId, delta) => {
+    const novoCarrinho = carrinho.map(item => {
+      if (item.id !== itemId || item.tipo !== 'capsula') return item;
+
+      const pq = { ...(item.produtos_quantidades || {}) };
+      const c = pq[produtoId];
+      if (c === undefined || c === null) return item;
+
+      const min = getCapsulaMin(item, produtoId, corId);
+
+      if (typeof c === 'number') {
+        const novo = Math.max(min, c + delta);
+        pq[produtoId] = novo;
+      } else if (Array.isArray(c.variantes)) {
+        pq[produtoId] = {
+          ...c,
+          variantes: c.variantes.map(v => v.cor_id === corId
+            ? { ...v, quantidade: Math.max(min, (v.quantidade || 0) + delta) }
+            : v)
+        };
+      } else {
+        return item;
+      }
+
+      // Sincroniza detalhes_produtos (espelho usado pela renderizacao)
+      const novosDetalhes = (item.detalhes_produtos || []).map(det => {
+        if (det.id !== produtoId) return det;
+        const novaConfig = pq[produtoId];
+        if (typeof novaConfig === 'number') {
+          return { ...det, configuracao: novaConfig };
+        }
+        if (det.configuracao && Array.isArray(det.configuracao.variantes)) {
+          return {
+            ...det,
+            configuracao: {
+              ...det.configuracao,
+              variantes: det.configuracao.variantes.map(v => v.cor_id === corId
+                ? { ...v, quantidade: Math.max(min, (v.quantidade || 0) + delta) }
+                : v)
+            }
+          };
+        }
+        return { ...det, configuracao: novaConfig };
+      });
+
+      // Recalcula preco unitario com base em produtos atuais do banco
+      let precoUnitario = 0;
+      for (const pid of (item.produto_ids || [])) {
+        const produto = produtos.find(p => p.id === pid);
+        if (!produto) continue;
+        const qtdConf = pq[pid];
+        const precoItem = produto.tipo_venda === 'grade'
+          ? getPrecoGrade(produto, user)
+          : getPrecoPeca(produto, user);
+        if (typeof qtdConf === 'number') {
+          precoUnitario += precoItem * qtdConf;
+        } else if (qtdConf && Array.isArray(qtdConf.variantes)) {
+          qtdConf.variantes.forEach(v => { precoUnitario += precoItem * (v.quantidade || 0); });
+        }
+      }
+
+      return {
+        ...item,
+        produtos_quantidades: pq,
+        detalhes_produtos: novosDetalhes,
+        preco_unitario: precoUnitario,
+        preco_total: precoUnitario * (item.quantidade || 1),
+      };
+    });
+    salvarCarrinho(novoCarrinho);
+  };
+
   // Verificar quais itens do carrinho estão indisponíveis (produto excluído ou desativado)
   const getItensIndisponiveis = () => {
     if (produtos.length === 0) return new Set();
@@ -979,21 +1067,65 @@ export default function Carrinho() {
                                                     {produtoCompleto.referencia_polo ? ` - Ref: ${produtoCompleto.referencia_polo}` : ''}
                                                   </p>
                                                 )}
-                                                {/* Variantes por cor */}
+                                                {/* Variantes por cor com +/- (trava no minimo) */}
                                                 {isVariantes && config.variantes.length > 0 && (
                                                   <div className="flex flex-wrap gap-1.5 mt-1">
-                                                    {config.variantes.map((v, vIdx) => (
-                                                      <span key={vIdx} className="inline-flex items-center gap-1 text-xs bg-purple-50 border border-purple-200 rounded px-1.5 py-0.5">
-                                                        <span className="w-3 h-3 rounded-full border border-gray-300 flex-shrink-0" style={{ backgroundColor: v.cor_codigo_hex || v.cor_hex || '#000' }} />
-                                                        {v.cor_nome}: {v.quantidade}
-                                                      </span>
-                                                    ))}
+                                                    {config.variantes.map((v, vIdx) => {
+                                                      const min = getCapsulaMin(item, detalhe.id, v.cor_id);
+                                                      const podeDecrementar = (v.quantidade || 0) > min;
+                                                      return (
+                                                        <span key={vIdx} className="inline-flex items-center gap-1 text-xs bg-purple-50 border border-purple-200 rounded pl-1.5 pr-0.5 py-0.5">
+                                                          <span className="w-3 h-3 rounded-full border border-gray-300 flex-shrink-0" style={{ backgroundColor: v.cor_codigo_hex || v.cor_hex || '#000' }} />
+                                                          <span>{v.cor_nome}:</span>
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => ajustarQtdCapsulaCart(item.id, detalhe.id, v.cor_id, -1)}
+                                                            disabled={!podeDecrementar}
+                                                            title={podeDecrementar ? 'Diminuir' : `Mínimo: ${min}`}
+                                                            className="w-5 h-5 rounded border border-purple-300 bg-white flex items-center justify-center hover:bg-purple-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                          >
+                                                            <Minus className="w-3 h-3" />
+                                                          </button>
+                                                          <span className="font-semibold tabular-nums px-0.5">{v.quantidade}</span>
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => ajustarQtdCapsulaCart(item.id, detalhe.id, v.cor_id, +1)}
+                                                            className="w-5 h-5 rounded border border-purple-300 bg-white flex items-center justify-center hover:bg-purple-100"
+                                                          >
+                                                            <Plus className="w-3 h-3" />
+                                                          </button>
+                                                        </span>
+                                                      );
+                                                    })}
                                                   </div>
                                                 )}
-                                                {/* Quantidade simples */}
-                                                {qtdSimples && (
-                                                  <p className="text-xs text-purple-700 mt-0.5">Qtd: {qtdSimples}</p>
-                                                )}
+                                                {/* Quantidade simples com +/- (produto sem variantes) */}
+                                                {qtdSimples !== null && (() => {
+                                                  const min = getCapsulaMin(item, detalhe.id, null);
+                                                  const podeDecrementar = qtdSimples > min;
+                                                  return (
+                                                    <div className="flex items-center gap-1 text-xs text-purple-700 mt-1">
+                                                      <span>Qtd:</span>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => ajustarQtdCapsulaCart(item.id, detalhe.id, null, -1)}
+                                                        disabled={!podeDecrementar}
+                                                        title={podeDecrementar ? 'Diminuir' : `Mínimo: ${min}`}
+                                                        className="w-5 h-5 rounded border border-purple-300 bg-white flex items-center justify-center hover:bg-purple-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                      >
+                                                        <Minus className="w-3 h-3" />
+                                                      </button>
+                                                      <span className="font-semibold tabular-nums px-1">{qtdSimples}</span>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => ajustarQtdCapsulaCart(item.id, detalhe.id, null, +1)}
+                                                        className="w-5 h-5 rounded border border-purple-300 bg-white flex items-center justify-center hover:bg-purple-100"
+                                                      >
+                                                        <Plus className="w-3 h-3" />
+                                                      </button>
+                                                    </div>
+                                                  );
+                                                })()}
                                               </div>
                                             </div>
                                           );

@@ -344,6 +344,8 @@ export default function Catalogo() {
           produto_ids: produtoIds,
           // Salva os ajustes do cliente, nao a config original do admin
           produtos_quantidades: ajustesQtdCapsula,
+          // Minimos para travar o decremento dentro do carrinho
+          minimos_quantidades: minimosQtdCapsula,
           // Informações adicionais para exibição
           detalhes_produtos: produtoIds.map(produtoId => {
             const produto = todosProdutos.find(p => p.id === produtoId);
