@@ -83,24 +83,36 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
           // Continuar mesmo se falhar a verificação
         }
 
-        // Criar novo usuário com acesso imediato ao sistema
-        const userData = {
-          full_name: formData.full_name,
-          email: formData.email,
-          password: formData.password,
-          telefone: formData.telefone || null,
-          role: formData.role, // multimarca, fornecedor, franqueado, ou admin
-          tipo_negocio: formData.role, // Mesmo valor de role
-          categoria_cliente: formData.role === 'admin' ? 'admin' : formData.role,
-          ativo: true,
-          bloqueado: false,
-          permissoes: {},
-          limite_credito: 0,
-          total_em_aberto: 0,
-          total_vencido: 0
-        };
+        // Criar via Edge Function `create-user` (service_role). NAO usar
+        // User.signup direto porque `supabase.auth.signUp` troca a sessao
+        // do admin pela do novo user (deslogando o admin silenciosamente
+        // e quebrando chamadas seguintes de Edge Function por permissao).
+        const { data: cuData, error: cuError } = await supabase.functions.invoke('create-user', {
+          body: {
+            email: formData.email,
+            password: formData.password,
+            full_name: formData.full_name,
+            role: formData.role,
+            tipo_negocio: formData.role,
+            categoria_cliente: formData.role === 'admin' ? 'admin' : formData.role,
+            telefone: formData.telefone || null,
+            ativo: true
+          }
+        });
 
-        await User.signup(userData);
+        if (cuError) {
+          const msg = cuError.context && typeof cuError.context.json === 'function'
+            ? (await cuError.context.json().catch(() => ({})))?.error
+            : cuError.message;
+          toast.error(`Erro ao criar usuário: ${msg || 'falha desconhecida'}`);
+          setLoading(false);
+          return;
+        }
+        if (cuData?.error) {
+          toast.error(`Erro ao criar usuário: ${cuData.error}`);
+          setLoading(false);
+          return;
+        }
 
         const tipoLabel = {
           multimarca: 'Cliente Multimarca',
@@ -114,9 +126,7 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
 ✅ Acesso ao sistema:
 • Login: ${formData.email}
 • Senha: ${formData.password}
-• Tipo: ${tipoLabel}
-
-📧 Credenciais enviadas para: ${formData.email}`);
+• Tipo: ${tipoLabel}`);
 
       } else {
         // Editar usuário existente
