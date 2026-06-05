@@ -920,8 +920,11 @@ export default function PedidosFornecedor() {
 
     const columns = [
       { key: 'id_formatado', label: 'Pedido' },
-      { key: 'cliente_nome', label: 'Cliente' },
+      { key: 'cnpj', label: 'CNPJ' },
+      { key: 'razao_social', label: 'Razão Social' },
+      { key: 'loja', label: 'Loja' },
       { key: 'status', label: 'Status' },
+      { key: 'qtd_pecas', label: 'Qtd. Peças' },
       { key: 'valor_formatado', label: 'Valor Total' },
       { key: 'valor_faturado', label: 'Valor Faturado' },
       { key: 'data_formatada', label: 'Data Pedido' },
@@ -931,18 +934,31 @@ export default function PedidosFornecedor() {
       { key: 'metodo_pagamento', label: 'Método Pagamento' }
     ];
 
-    const data = pedidosParaExportar.map(p => ({
-      id_formatado: `#${p.id?.slice(-8).toUpperCase() || 'N/A'}`,
-      cliente_nome: clientes.find(c => c.id === p.comprador_user_id)?.full_name || clientes.find(c => c.id === p.comprador_user_id)?.empresa || 'N/A',
-      status: p.status?.charAt(0).toUpperCase() + p.status?.slice(1) || 'N/A',
-      valor_formatado: formatCurrency(p.valor_total),
-      valor_faturado: formatCurrency(p.valor_faturado || 0),
-      data_formatada: formatDate(p.created_date),
-      data_prevista: p.data_prevista_entrega ? formatDate(p.data_prevista_entrega) : '-',
-      nf_numero: p.nf_numero || '-',
-      data_faturamento: p.nf_data_upload ? formatDate(p.nf_data_upload) : '-',
-      metodo_pagamento: p.metodo_pagamento || '-'
-    }));
+    const data = pedidosParaExportar.map(p => {
+      const cli = clientes.find(c => c.id === p.comprador_user_id);
+      const loja = p.loja_id ? lojasMap[p.loja_id] : null;
+      let itens = p.itens || [];
+      if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch { itens = []; } }
+      const qtdPecas = (itens || []).reduce((sum, it) => {
+        const isGrade = it.tipo_venda === 'grade' && (it.total_pecas_grade || 0) > 0;
+        return sum + (it.quantidade || 0) * (isGrade ? (it.total_pecas_grade || 1) : 1);
+      }, 0);
+      return {
+        id_formatado: `#${p.id?.slice(-8).toUpperCase() || 'N/A'}`,
+        cnpj: loja?.cnpj || cli?.cnpj || '-',
+        razao_social: cli?.empresa || cli?.razao_social || cli?.full_name || 'N/A',
+        loja: loja?.nome_fantasia || loja?.nome || '-',
+        status: p.status?.charAt(0).toUpperCase() + p.status?.slice(1) || 'N/A',
+        qtd_pecas: qtdPecas,
+        valor_formatado: formatCurrency(p.valor_total),
+        valor_faturado: formatCurrency(p.valor_faturado || 0),
+        data_formatada: formatDate(p.created_date),
+        data_prevista: p.data_prevista_entrega ? formatDate(p.data_prevista_entrega) : '-',
+        nf_numero: p.nf_numero || '-',
+        data_faturamento: p.nf_data_upload ? formatDate(p.nf_data_upload) : '-',
+        metodo_pagamento: p.metodo_pagamento || '-'
+      };
+    });
 
     exportToCSV(data, columns, `pedidos-${new Date().toISOString().split('T')[0]}.csv`);
   };
