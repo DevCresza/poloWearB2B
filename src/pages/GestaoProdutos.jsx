@@ -28,6 +28,9 @@ export default function GestaoProdutos() {
   const [filterCategoria, setFilterCategoria] = useState('all');
   const [filterGenero, setFilterGenero] = useState('all');
   const [filterMesEntrega, setFilterMesEntrega] = useState('all');
+  // Por padrao mostra apenas ativos (default que o admin pediu, evita
+  // lista poluida quando produtos forem sendo desativados)
+  const [filterStatus, setFilterStatus] = useState('ativos');
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'table'
 
   const categorias = [
@@ -285,7 +288,11 @@ export default function GestaoProdutos() {
       matchesMesEntrega = false;
     }
 
-    return matchesSearch && matchesFornecedor && matchesCategoria && matchesGenero && matchesMesEntrega;
+    let matchesStatus = true;
+    if (filterStatus === 'ativos') matchesStatus = produto.ativo !== false;
+    else if (filterStatus === 'inativos') matchesStatus = produto.ativo === false;
+
+    return matchesSearch && matchesFornecedor && matchesCategoria && matchesGenero && matchesMesEntrega && matchesStatus;
   });
 
   if (loading) {
@@ -398,6 +405,17 @@ export default function GestaoProdutos() {
                         return <SelectItem key={m} value={m}>{label}</SelectItem>;
                       });
                     })()}
+                  </SelectContent>
+                </Select>
+
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="w-44">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ativos">Somente ativos</SelectItem>
+                    <SelectItem value="inativos">Somente inativos</SelectItem>
+                    <SelectItem value="all">Todos</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -2086,6 +2086,19 @@ export default function Catalogo() {
                               ) : null;
                             })()}
 
+                            {/* Preço unitário do produto (referência pro cliente) */}
+                            {(() => {
+                              const precoItem = produto.tipo_venda === 'grade'
+                                ? getPrecoGrade(produto, user)
+                                : getPrecoPeca(produto, user);
+                              const label = produto.tipo_venda === 'grade' ? 'por grade' : 'por peça';
+                              return precoItem > 0 ? (
+                                <p className="text-sm font-semibold text-green-700 mt-1">
+                                  {formatCurrency(precoItem)} <span className="text-xs font-normal text-gray-500">/ {label}</span>
+                                </p>
+                              ) : null;
+                            })()}
+
                             {/* Mostrar composição de cores se tiver variantes (com +/- por cor) */}
                             {qtdConfig && typeof qtdConfig === 'object' && qtdConfig.variantes && qtdConfig.variantes.length > 0 && (
                               <div className="mt-3 space-y-2">
