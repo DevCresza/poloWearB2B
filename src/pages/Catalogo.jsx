@@ -2086,17 +2086,38 @@ export default function Catalogo() {
                               ) : null;
                             })()}
 
-                            {/* Preço unitário do produto (referência pro cliente) */}
+                            {/* Preço unitário do produto (referência pro cliente).
+                               Para produto em grade, mostra valor da grade E
+                               valor por peça (cliente entende de onde vem o total). */}
                             {(() => {
-                              const precoItem = produto.tipo_venda === 'grade'
-                                ? getPrecoGrade(produto, user)
-                                : getPrecoPeca(produto, user);
-                              const label = produto.tipo_venda === 'grade' ? 'por grade' : 'por peça';
-                              return precoItem > 0 ? (
-                                <p className="text-sm font-semibold text-green-700 mt-1">
-                                  {formatCurrency(precoItem)} <span className="text-xs font-normal text-gray-500">/ {label}</span>
-                                </p>
-                              ) : null;
+                              const isGrade = produto.tipo_venda === 'grade';
+                              const precoGrade = isGrade ? getPrecoGrade(produto, user) : 0;
+                              let precoPeca = getPrecoPeca(produto, user);
+                              // Fallback: se peça não cadastrada e é grade, deriva da grade
+                              if (isGrade && (!precoPeca || precoPeca <= 0) && precoGrade > 0 && produto.total_pecas_grade > 0) {
+                                precoPeca = precoGrade / produto.total_pecas_grade;
+                              }
+                              if (!isGrade) {
+                                return precoPeca > 0 ? (
+                                  <p className="text-sm font-semibold text-green-700 mt-1">
+                                    {formatCurrency(precoPeca)} <span className="text-xs font-normal text-gray-500">/ por peça</span>
+                                  </p>
+                                ) : null;
+                              }
+                              return (
+                                <div className="text-sm font-semibold text-green-700 mt-1 flex flex-wrap items-baseline gap-x-2">
+                                  {precoGrade > 0 && (
+                                    <span>
+                                      {formatCurrency(precoGrade)} <span className="text-xs font-normal text-gray-500">/ grade</span>
+                                    </span>
+                                  )}
+                                  {precoPeca > 0 && (
+                                    <span className="text-gray-700">
+                                      · {formatCurrency(precoPeca)} <span className="text-xs font-normal text-gray-500">/ peça</span>
+                                    </span>
+                                  )}
+                                </div>
+                              );
                             })()}
 
                             {/* Mostrar composição de cores se tiver variantes (com +/- por cor) */}
