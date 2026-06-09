@@ -70,6 +70,12 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
     try {
       const updateData = { ...formData };
 
+      // Postgres rejeita '' em colunas DATE: normaliza pra null
+      for (const k of ['data_prevista_entrega', 'data_envio_real', 'data_entrega_real',
+                       'nf_data_upload', 'boleto_data_upload', 'data_pagamento']) {
+        if (updateData[k] === '') updateData[k] = null;
+      }
+
       // Registrar data de envio
       if (formData.status === 'em_transporte' && pedido.status !== 'em_transporte') {
         updateData.data_envio_real = new Date().toISOString();
