@@ -29,6 +29,12 @@ export default function PedidoItensEditModal({ pedido, onClose, onUpdate, curren
   // Pedidos finalizados/cancelados não devem ser editados aqui
   const bloqueado = ['entregue', 'cancelado', 'finalizado'].includes(pedido.status);
 
+  // Fornecedor só pode REDUZIR/REMOVER itens (nunca aumentar acima do
+  // pedido original do cliente). Admin pode tudo. Evita fornecedor
+  // inflar quantidade sem o cliente ter pedido.
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.tipo_negocio === 'admin';
+  const apenasReduzir = !isAdmin;
+
   const itensAtivos = itens.filter(i => !i._removido && i._novaQuantidade > 0);
 
   // Novo valor total = soma de (preço × nova_quantidade) só dos itens ativos
@@ -46,7 +52,12 @@ export default function PedidoItensEditModal({ pedido, onClose, onUpdate, curren
   const houveAlteracao = itens.some(i => i._removido || i._novaQuantidade !== i._quantidadeOriginal);
 
   const handleQuantidadeChange = (idx, valor) => {
-    const num = Math.max(0, parseInt(valor, 10) || 0);
+    let num = Math.max(0, parseInt(valor, 10) || 0);
+    // Fornecedor não pode aumentar acima do pedido original
+    if (apenasReduzir) {
+      const original = itens.find(i => i._idx === idx)?._quantidadeOriginal ?? 0;
+      if (num > original) num = original;
+    }
     setItens(prev => prev.map(i => i._idx === idx ? { ...i, _novaQuantidade: num, _removido: num === 0 } : i));
   };
 
@@ -62,6 +73,11 @@ export default function PedidoItensEditModal({ pedido, onClose, onUpdate, curren
     if (bloqueado) return;
     if (itensAtivos.length === 0) {
       toast.error('O pedido precisa ter pelo menos 1 item. Para cancelar tudo, use a opção "Cancelar pedido".');
+      return;
+    }
+    // Defense in depth: bloqueia caso fornecedor tenha conseguido aumentar
+    if (apenasReduzir && itens.some(i => i._novaQuantidade > i._quantidadeOriginal)) {
+      toast.error('Você não pode aumentar a quantidade acima do pedido original do cliente.');
       return;
     }
 
@@ -200,6 +216,11 @@ Valor: ${formatCurrency(valorAtual)} → ${formatCurrency(novoValorTotal)}`;
             <AlertDescription className="text-yellow-900">
               <strong>Atenção:</strong> alterar quantidades vai recalcular o valor total, ajustar o estoque
               e redistribuir os títulos pendentes da carteira. O cliente recebe um e-mail informando.
+              {apenasReduzir && (
+                <span className="block mt-1">
+                  Você pode <strong>reduzir ou remover</strong> itens, mas não aumentar quantidades acima do pedido original do cliente.
+                </span>
+              )}
             </AlertDescription>
           </Alert>
         )}
@@ -245,9 +266,11 @@ Valor: ${formatCurrency(valorAtual)} → ${formatCurrency(novoValorTotal)}`;
                           <Input
                             type="number"
                             min="0"
+                            max={apenasReduzir ? item._quantidadeOriginal : undefined}
                             value={item._novaQuantidade}
                             disabled={bloqueado}
                             onChange={(e) => handleQuantidadeChange(item._idx, e.target.value)}
+                            title={apenasReduzir ? `Máximo: ${item._quantidadeOriginal} (pedido original)` : ''}
                             className="w-20 h-9 text-center"
                           />
                         </div>
