@@ -255,8 +255,13 @@ export default function PedidosAdmin() {
         for (const it of itens) {
           const isGrade = it.tipo_venda === 'grade' && (it.total_pecas_grade || 0) > 0;
           const totalItens = (it.quantidade || 0) * (isGrade ? (it.total_pecas_grade || 1) : 1);
-          const precoUnit = Number(it.preco) || 0;
-          const precoTotal = Number(it.total) || precoUnit * totalItens;
+          const precoBase = Number(it.preco) || 0;
+          const precoTotal = Number(it.total) || precoBase * (it.quantidade || 0);
+          // PRECO UNITARIO sempre por PECA (consistente com TOTAL DE ITENS).
+          // Para grade, divide o preco da grade pelo numero de pecas.
+          const precoUnit = isGrade
+            ? precoBase / (it.total_pecas_grade || 1)
+            : precoBase;
           linhas.push({
             numero_pedido: numero,
             cnpj: cnpjLinha,
