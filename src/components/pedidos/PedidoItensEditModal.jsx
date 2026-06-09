@@ -26,14 +26,19 @@ export default function PedidoItensEditModal({ pedido, onClose, onUpdate, curren
   );
   const [salvando, setSalvando] = useState(false);
 
-  // Pedidos finalizados/cancelados não devem ser editados aqui
-  const bloqueado = ['entregue', 'cancelado', 'finalizado'].includes(pedido.status);
-
-  // Fornecedor só pode REDUZIR/REMOVER itens (nunca aumentar acima do
-  // pedido original do cliente). Admin pode tudo. Evita fornecedor
-  // inflar quantidade sem o cliente ter pedido.
   const isAdmin = currentUser?.role === 'admin' || currentUser?.tipo_negocio === 'admin';
-  const apenasReduzir = !isAdmin;
+  const isCliente = currentUser?.tipo_negocio === 'multimarca' || currentUser?.tipo_negocio === 'franqueado';
+
+  // Para CLIENTE: só pode editar enquanto o pedido ainda nao foi
+  // recebido pelo fornecedor (status novo_pedido). Depois disso, bloqueia.
+  // Para admin/fornecedor: bloqueia apenas em estados finais.
+  const bloqueado = isCliente
+    ? pedido.status !== 'novo_pedido'
+    : ['entregue', 'cancelado', 'finalizado'].includes(pedido.status);
+
+  // Fornecedor só pode REDUZIR/REMOVER (nunca aumentar acima do pedido).
+  // Admin e cliente dono podem aumentar/reduzir/remover livremente.
+  const apenasReduzir = !isAdmin && !isCliente;
 
   const itensAtivos = itens.filter(i => !i._removido && i._novaQuantidade > 0);
 
