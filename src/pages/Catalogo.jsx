@@ -788,8 +788,10 @@ export default function Catalogo() {
                   {fotos.length > 1 && (
                     <>
                       <button
+                        type="button"
                         className="absolute left-1 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity z-10"
                         onClick={(e) => {
+                          e.preventDefault();
                           e.stopPropagation();
                           setCardFotoIndex(prev => ({ ...prev, [produto.id]: (currentIdx - 1 + fotos.length) % fotos.length }));
                         }}
@@ -797,8 +799,10 @@ export default function Catalogo() {
                         <ChevronLeft className="w-4 h-4 text-gray-700" />
                       </button>
                       <button
+                        type="button"
                         className="absolute right-1 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity z-10"
                         onClick={(e) => {
+                          e.preventDefault();
                           e.stopPropagation();
                           setCardFotoIndex(prev => ({ ...prev, [produto.id]: (currentIdx + 1) % fotos.length }));
                         }}
@@ -1297,6 +1301,7 @@ export default function Catalogo() {
                             {fotosParaMostrar.map((foto, index) => (
                               <button
                                 key={`foto-${index}`}
+                                type="button"
                                 onClick={() => setFotoAtualIndex(index)}
                                 className={`aspect-square bg-gray-100 rounded-lg overflow-hidden border-2 transition-all hover:border-blue-500 ${
                                   fotoAtualIndex === index ? 'border-blue-500 ring-2 ring-blue-300' : 'border-transparent'
@@ -1312,6 +1317,7 @@ export default function Catalogo() {
                             {hasVideo && (
                               <button
                                 key="video"
+                                type="button"
                                 onClick={() => setFotoAtualIndex(fotosParaMostrar.length)}
                                 className={`aspect-square bg-gray-900 rounded-lg overflow-hidden border-2 transition-all hover:border-blue-500 relative ${
                                   fotoAtualIndex === fotosParaMostrar.length ? 'border-blue-500 ring-2 ring-blue-300' : 'border-transparent'
@@ -1944,6 +1950,7 @@ export default function Catalogo() {
                     {capsulaFotos.length > 1 && (
                       <>
                         <button
+                          type="button"
                           onClick={() => setCapsulaFotoIndex(prev => prev === 0 ? capsulaFotos.length - 1 : prev - 1)}
                           className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-2 shadow-lg transition-all"
                         >
@@ -1952,6 +1959,7 @@ export default function Catalogo() {
                           </svg>
                         </button>
                         <button
+                          type="button"
                           onClick={() => setCapsulaFotoIndex(prev => prev === capsulaFotos.length - 1 ? 0 : prev + 1)}
                           className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-2 shadow-lg transition-all"
                         >
@@ -1995,6 +2003,7 @@ export default function Catalogo() {
                     {capsulaFotos.map((foto, idx) => (
                       <button
                         key={idx}
+                        type="button"
                         onClick={() => setCapsulaFotoIndex(idx)}
                         className={`relative transition-all ${
                           capsulaFotoIndex === idx
