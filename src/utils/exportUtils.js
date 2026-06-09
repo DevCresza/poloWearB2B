@@ -16,8 +16,12 @@ export const exportToCSV = (data, columns, filename = 'export.csv') => {
     return;
   }
 
+  // Separador pt-BR: ponto-e-virgula. Evita colisao com a virgula decimal
+  // dos numeros em formato brasileiro (Excel pt-BR usa ; por padrao).
+  const SEP = ';';
+
   // Criar cabeçalhos
-  const headers = columns.map(col => col.label).join(',');
+  const headers = columns.map(col => col.label).join(SEP);
 
   // Criar linhas
   const rows = data.map(item => {
@@ -27,23 +31,32 @@ export const exportToCSV = (data, columns, filename = 'export.csv') => {
       // Formatar valores
       if (value === null || value === undefined) {
         value = '';
+      } else if (typeof value === 'number') {
+        value = Number.isInteger(value)
+          ? String(value)
+          : value.toLocaleString('pt-BR', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+              useGrouping: false
+            });
       } else if (typeof value === 'object') {
         value = JSON.stringify(value);
       } else {
         value = String(value);
       }
 
-      // Escapar vírgulas e aspas
-      if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+      // Escapar separador, aspas e quebras de linha
+      if (value.includes(SEP) || value.includes('"') || value.includes('\n')) {
         value = `"${value.replace(/"/g, '""')}"`;
       }
 
       return value;
-    }).join(',');
+    }).join(SEP);
   }).join('\n');
 
   // Combinar cabeçalhos e linhas
-  const csv = `\uFEFF${headers}\n${rows}`; // \uFEFF é BOM para UTF-8
+  // Diretiva sep=; ajuda o Excel a detectar o separador automaticamente
+  const csv = `\uFEFFsep=${SEP}\n${headers}\n${rows}`; // \uFEFF é BOM para UTF-8
 
   // Criar blob e download
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
