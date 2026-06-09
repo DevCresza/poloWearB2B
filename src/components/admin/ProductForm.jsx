@@ -423,30 +423,45 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
           return;
         }
 
-        // Atualizar formData com variantes normalizadas
-        formData.variantes_cor = variantesNormalizadas;
-
-        // Reconstroi o array `fotos` a partir das variantes (source of truth).
-        // Garante que cor_nome/cor_codigo_hex de cada foto reflitam SEMPRE
-        // o estado atual da variante a qual a foto pertence (mesmo apos rename).
-        // Preserva fotos "orfas" (uploadadas direto no campo de fotos sem cor).
-        const urlsDeVariantes = new Set();
-        const fotosDeVariantes = [];
+        // Mapa URL -> {cor_nome, cor_codigo_hex} a partir das variantes.
+        // Source of truth dos METADADOS de cada foto (nome da cor + hex).
+        // Nao define ordem nem presenca: respeita o que o admin reorganizou
+        // no painel de fotos.
+        const urlToCor = new Map();
         for (const v of variantesNormalizadas) {
           for (const u of (v.fotos_urls || [])) {
-            if (!u || urlsDeVariantes.has(u)) continue;
-            urlsDeVariantes.add(u);
-            fotosDeVariantes.push({
-              url: u,
-              cor_nome: v.cor_nome,
-              cor_codigo_hex: v.cor_codigo_hex
-            });
+            if (u && !urlToCor.has(u)) {
+              urlToCor.set(u, {
+                cor_nome: v.cor_nome,
+                cor_codigo_hex: v.cor_codigo_hex
+              });
+            }
           }
         }
-        const fotosOrfas = (formData.fotos || [])
+
+        // Preserva a ORDEM e as EXCLUSOES do admin: itera o array `fotos`
+        // atual e so atualiza cor_nome/cor_codigo_hex quando a URL bate
+        // com alguma variante. URLs que o admin removeu nao voltam.
+        const fotosAtualizadas = (formData.fotos || [])
           .map(p => typeof p === 'string' ? { url: p } : p)
-          .filter(p => p && p.url && !urlsDeVariantes.has(p.url));
-        formData.fotos = [...fotosDeVariantes, ...fotosOrfas];
+          .filter(p => p && p.url)
+          .map(p => {
+            const meta = urlToCor.get(p.url);
+            return meta
+              ? { ...p, cor_nome: meta.cor_nome, cor_codigo_hex: meta.cor_codigo_hex }
+              : p;
+          });
+
+        // Sincroniza o lado das variantes: remove de variante.fotos_urls
+        // toda URL que o admin tirou do array principal. Assim "excluir foto"
+        // remove dos dois lugares e a reabertura do form nao recoloca.
+        const urlsAindaPresentes = new Set(fotosAtualizadas.map(p => p.url));
+        formData.variantes_cor = variantesNormalizadas.map(v => ({
+          ...v,
+          fotos_urls: (v.fotos_urls || []).filter(u => urlsAindaPresentes.has(u))
+        }));
+
+        formData.fotos = fotosAtualizadas;
       } else if (formData.estoque_atual_grades < 0) {
         toast.error('O estoque atual não pode ser negativo.');
         setSubmitting(false);
