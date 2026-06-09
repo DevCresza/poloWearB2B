@@ -34,10 +34,15 @@ const buttonVariants = cva(
   }
 )
 
-const Button = React.forwardRef(({ className, variant, size, asChild = false, ...props }, ref) => {
+const Button = React.forwardRef(({ className, variant, size, asChild = false, type, ...props }, ref) => {
   const Comp = asChild ? Slot : "button"
+  // Default type="button". Sem isso o HTML trata <button> como submit
+  // dentro de form, causando reload e scroll pro topo a cada click.
+  // Quem precisar de submit deve passar explicitamente type="submit".
+  const buttonType = asChild ? type : (type ?? "button")
   return (
     (<Comp
+      type={buttonType}
       className={cn(buttonVariants({ variant, size, className }))}
       ref={ref}
       {...props} />)
