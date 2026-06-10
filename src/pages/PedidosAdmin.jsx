@@ -195,9 +195,9 @@ export default function PedidosAdmin() {
   };
 
   // Extrato detalhado por item (linha por item de pedido).
-  // Modelo: NUMERO PEDIDO | CNPJ | RAZAO | FORMA DE PAGAMENTO | MES FATURAMENTO |
-  // TIPO PEDIDO (PE/PGM) | NOME ITEM | REF FORNECEDOR | REF LINX | COR |
-  // PRECO UNITARIO | TOTAL DE ITENS | PRECO TOTAL | STATUS PEDIDO
+  // Modelo: NUMERO PEDIDO | CNPJ | RAZAO | LOJA | FORNECEDOR | FORMA DE PAGAMENTO |
+  // MES FATURAMENTO | TIPO PEDIDO (PE/PGM) | NOME ITEM | REF FORNECEDOR | REF LINX |
+  // COR | PRECO UNITARIO | TOTAL DE ITENS | PRECO TOTAL | STATUS PEDIDO
   const handleExportExtratoItens = () => {
     try {
       if (!filteredPedidos || filteredPedidos.length === 0) {
@@ -251,6 +251,7 @@ export default function PedidosAdmin() {
               .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' })
           : '';
         const statusPedido = statusLabels[pedido.status] || pedido.status || '';
+        const nomeFornecedor = fornecedorMap.get(pedido.fornecedor_id) || 'N/A';
 
         for (const it of itens) {
           const isGrade = it.tipo_venda === 'grade' && (it.total_pecas_grade || 0) > 0;
@@ -267,6 +268,7 @@ export default function PedidosAdmin() {
             cnpj: cnpjLinha,
             razao: razaoLinha,
             loja: nomeLoja,
+            fornecedor: nomeFornecedor,
             forma_pagamento: formaPgComPrazo,
             mes_faturamento: mesFat,
             tipo_pedido: isGrade ? 'PGM' : 'PE',
@@ -292,6 +294,7 @@ export default function PedidosAdmin() {
         { key: 'cnpj', label: 'CNPJ' },
         { key: 'razao', label: 'RAZÃO' },
         { key: 'loja', label: 'LOJA' },
+        { key: 'fornecedor', label: 'FORNECEDOR' },
         { key: 'forma_pagamento', label: 'FORMA DE PAGAMENTO' },
         { key: 'mes_faturamento', label: 'MÊS DE FATURAMENTO' },
         { key: 'tipo_pedido', label: 'TIPO DE PEDIDO (PE/PGM)' },
