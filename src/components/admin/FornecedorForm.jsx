@@ -147,6 +147,10 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
         setFormData({
           ...formData,
           ...fornecedor,
+          // Em edição a senha SEMPRE começa vazia (vazio = manter senha atual).
+          // Sem isso, o default 'Polo12345' ficava pré-preenchido e cada salvar
+          // resetava silenciosamente a senha do fornecedor para Polo12345.
+          senha_fornecedor: '',
           clientes_boleto_faturado: fornecedor.clientes_boleto_faturado || []
         });
         // Inicializa o texto bruto dos prazos do banco
