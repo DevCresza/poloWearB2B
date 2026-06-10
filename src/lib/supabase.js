@@ -15,10 +15,11 @@ export const supabase = supabaseUrl && supabaseAnonKey
       },
       db: {
         schema: 'public'
-      },
-      global: {
-        headers: { 'x-my-custom-header': 'polo-b2b' }
       }
+      // NAO adicionar headers globais customizados aqui: todo header novo
+      // entra no preflight CORS e precisa estar no Access-Control-Allow-Headers
+      // de TODAS as Edge Functions, senao o navegador bloqueia o POST
+      // ("Failed to send a request to the Edge Function").
     })
   : null
 
