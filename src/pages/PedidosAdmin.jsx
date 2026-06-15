@@ -278,6 +278,7 @@ export default function PedidosAdmin() {
             cor: it.cor_selecionada?.cor_nome || '',
             preco_unitario: precoUnit,
             total_itens: totalItens,
+            grades: isGrade ? (it.quantidade || 0) : '-',
             preco_total: precoTotal,
             status_pedido: statusPedido
           });
@@ -304,6 +305,7 @@ export default function PedidosAdmin() {
         { key: 'cor', label: 'COR' },
         { key: 'preco_unitario', label: 'PREÇO UNITÁRIO' },
         { key: 'total_itens', label: 'TOTAL DE ITENS' },
+        { key: 'grades', label: 'GRADES' },
         { key: 'preco_total', label: 'PREÇO TOTAL' },
         { key: 'status_pedido', label: 'STATUS DO PEDIDO' }
       ];
