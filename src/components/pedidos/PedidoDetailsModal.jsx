@@ -1127,6 +1127,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
         { header: 'Ref. Linx', dataKey: 'ref_linx' },
         { header: 'Cor', dataKey: 'cor' },
         { header: 'Qtde', dataKey: 'quantidade' },
+        { header: 'Grades', dataKey: 'grades' },
         { header: 'V. Unitário', dataKey: 'preco_unit' },
         { header: 'Valor Total', dataKey: 'total' }
       ];
@@ -1135,7 +1136,8 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
         // Para itens de grade, converter para unidades e preço por peça
         const pecasGrade = parseInt(item.total_pecas_grade) || 0;
         const isGrade = item.tipo_venda === 'grade' && pecasGrade > 0;
-        const qtdUnidades = isGrade ? (item.quantidade || 0) * pecasGrade : (item.quantidade || 0);
+        const qtdGrades = item.quantidade || 0;
+        const qtdUnidades = isGrade ? qtdGrades * pecasGrade : qtdGrades;
         const precoUnitario = isGrade ? (item.preco || 0) / pecasGrade : (item.preco || 0);
         const valorTotal = precoUnitario * qtdUnidades;
 
@@ -1145,6 +1147,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
           ref_linx: item.referencia_linx || item.codigo_linx || '-',
           cor: item.cor_selecionada?.cor_nome || '-',
           quantidade: qtdUnidades,
+          grades: isGrade ? qtdGrades : '-',
           preco_unit: `R$ ${precoUnitario.toFixed(2)}`,
           total: `R$ ${valorTotal.toFixed(2)}`
         };
@@ -1156,6 +1159,12 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
         return sum + (isGrade ? (item.quantidade || 0) * pecasGrade : (item.quantidade || 0));
       }, 0);
 
+      const totalGrades = itens.reduce((sum, item) => {
+        const pecasGrade = parseInt(item.total_pecas_grade) || 0;
+        const isGrade = item.tipo_venda === 'grade' && pecasGrade > 0;
+        return sum + (isGrade ? (item.quantidade || 0) : 0);
+      }, 0);
+
       autoTable(doc, {
         columns: tableColumns,
         body: tableRows,
@@ -1164,18 +1173,20 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
         headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
         alternateRowStyles: { fillColor: [245, 247, 250] },
         columnStyles: {
-          ref_forn: { cellWidth: 25 },
-          nome: { cellWidth: 50 },
-          ref_linx: { cellWidth: 25 },
-          cor: { cellWidth: 25 },
-          quantidade: { cellWidth: 18, halign: 'center' },
-          preco_unit: { cellWidth: 25, halign: 'right' },
-          total: { cellWidth: 25, halign: 'right' }
+          ref_forn: { cellWidth: 22 },
+          nome: { cellWidth: 45 },
+          ref_linx: { cellWidth: 22 },
+          cor: { cellWidth: 22 },
+          quantidade: { cellWidth: 14, halign: 'center' },
+          grades: { cellWidth: 14, halign: 'center' },
+          preco_unit: { cellWidth: 22, halign: 'right' },
+          total: { cellWidth: 22, halign: 'right' }
         },
         margin: { left: 14, right: 14 },
         foot: [[
           '', '', '', 'TOTAL:',
           totalQtd.toString(),
+          totalGrades > 0 ? totalGrades.toString() : '-',
           '',
           `R$ ${(pedido.valor_total || 0).toFixed(2)}`
         ]],
@@ -1345,12 +1356,30 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       <Badge variant="outline">
                         {item.tipo_venda === 'grade' ? 'Grade Completa' : 'Unitário'}
                       </Badge>
-                      <span className="text-sm">
-                        Quantidade: <strong>{item.quantidade}</strong>
-                      </span>
-                      <span className="text-sm">
-                        Preço Unit: <strong>R$ {item.preco?.toFixed(2)}</strong>
-                      </span>
+                      {(() => {
+                        const pecasGrade = parseInt(item.total_pecas_grade) || 0;
+                        const isGrade = item.tipo_venda === 'grade' && pecasGrade > 0;
+                        const qtdGrades = item.quantidade || 0;
+                        const qtdPecas = isGrade ? qtdGrades * pecasGrade : qtdGrades;
+                        const precoPorPeca = isGrade
+                          ? (item.preco || 0) / pecasGrade
+                          : (item.preco || 0);
+                        return (
+                          <>
+                            {isGrade && (
+                              <span className="text-sm">
+                                Grades: <strong>{qtdGrades}</strong>
+                              </span>
+                            )}
+                            <span className="text-sm">
+                              {isGrade ? 'Peças' : 'Quantidade'}: <strong>{qtdPecas}</strong>
+                            </span>
+                            <span className="text-sm">
+                              Preço por peça: <strong>R$ {precoPorPeca.toFixed(2)}</strong>
+                            </span>
+                          </>
+                        );
+                      })()}
                     </div>
                     {/* Item faturamento status */}
                     {(item.qtd_faturada > 0 || item.qtd_quebra > 0) && (
