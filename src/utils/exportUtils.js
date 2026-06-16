@@ -54,9 +54,11 @@ export const exportToCSV = (data, columns, filename = 'export.csv') => {
     }).join(SEP);
   }).join('\n');
 
-  // Combinar cabeçalhos e linhas
-  // Diretiva sep=; ajuda o Excel a detectar o separador automaticamente
-  const csv = `\uFEFFsep=${SEP}\n${headers}\n${rows}`; // \uFEFF é BOM para UTF-8
+  // CRLF (RFC 4180) + BOM UTF-8. NAO usar diretiva "sep=;" antes do
+  // BOM: o Excel ignora o BOM quando ve "sep=" como primeira linha
+  // e cai pra Windows-1252, gerando mojibakes "Ã£", "Ã§", "RAZAO".
+  // Sem o sep=, o Excel pt-BR detecta o ";" pela config regional.
+  const csv = `\uFEFF${headers}\r\n${rows.replace(/\n/g, "\r\n")}`;
 
   // Criar blob e download
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
