@@ -1117,12 +1117,18 @@ export default function PedidosFornecedor() {
         const key = `${item.produto_id || item.nome}_${cor}_${mesEntrega}`;
 
         if (!agregado[key]) {
+          // Preco unitario sempre por PECA. Para grade, divide o preco
+          // da grade inteira pelo numero de pecas da grade.
+          const isGradePreco = item.tipo_venda === 'grade' && (item.total_pecas_grade || 0) > 0;
+          const precoPorPeca = isGradePreco
+            ? (item.preco || 0) / (item.total_pecas_grade || 1)
+            : (item.preco || 0);
           agregado[key] = {
             nome: item.nome || '',
             referencia_fornecedor: item.referencia_fornecedor || item.referencia || '',
             referencia_linx: item.referencia_linx || item.referencia_polo || '',
             cor: cor,
-            preco_unitario: item.preco || 0,
+            preco_unitario: precoPorPeca,
             mes_entrega: mesEntrega,
             qtd_total_pecas: 0,
             qtd_grades: 0
