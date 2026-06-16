@@ -146,10 +146,38 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
           cep: formData.cep || null
         };
 
-        await User.update(user.id, dataToSubmit);
+        // Detecta troca de e-mail. Se mudou, NAO faz User.update direto
+        // (so atualiza public.users e deixa auth.users defasado). Em vez
+        // disso, delega pra Edge Function update-user-email, que faz a
+        // sincronizacao atomica auth + public + fornecedores.
+        const emailAntigo = (user.email || '').trim().toLowerCase();
+        const emailNovo = (formData.email || '').trim();
+        const emailMudou = emailAntigo !== emailNovo.toLowerCase();
 
-        // Se informou nova senha, atualizar via Edge Function
-        if (formData.password && formData.password.trim() !== '') {
+        if (emailMudou) {
+          const { data: ueData, error: ueErr } = await supabase.functions.invoke('update-user-email', {
+            body: {
+              user_id: user.id,
+              new_email: emailNovo,
+              new_password: (formData.password && formData.password.length >= 6) ? formData.password : undefined,
+            }
+          });
+          const ueMsg = ueData?.error || ueErr?.message;
+          if (ueMsg) {
+            toast.error(`Erro ao atualizar e-mail de acesso: ${ueMsg}`);
+            setLoading(false);
+            return;
+          }
+          // Remove email do payload para nao tentar setar de novo no User.update
+          const { email: _ignore, ...dataSemEmail } = dataToSubmit;
+          await User.update(user.id, dataSemEmail);
+        } else {
+          await User.update(user.id, dataToSubmit);
+        }
+
+        // Se informou nova senha (e e-mail NAO mudou — caso de e-mail mudou
+        // a senha ja foi enviada junto na chamada acima), atualizar via Edge Function
+        if (!emailMudou && formData.password && formData.password.trim() !== '') {
           if (formData.password.length < 6) {
             toast.error('A senha deve ter no mínimo 6 caracteres.');
             setLoading(false);
