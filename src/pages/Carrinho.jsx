@@ -473,13 +473,19 @@ export default function Carrinho() {
               fotoUrl = getPrimeiraFoto(produtoCompleto);
             }
 
+            // Quando o produto eh vendido em grade, o pedido guarda:
+            //   quantidade = num. de GRADES (nao pecas)
+            //   preco      = preco da GRADE inteira (= preco_grade_completa)
+            // Quando eh avulso, guarda peca: quantidade = pecas, preco = por peca.
+            // (mesmo padrao do checkout de produto normal, linhas ~537-540)
+            const isGrade = tipoVenda === 'grade';
+
             // Se tem variantes por cor, criar um item por cor
             if (config && typeof config === 'object' && config.variantes && Array.isArray(config.variantes)) {
               return config.variantes.map(variante => {
                 const numGrades = (variante.quantidade || 1) * capsulaQtd;
-                // Quantidade em unidades e preço por peça
-                const totalUnidades = tipoVenda === 'grade' ? numGrades * pecasGrade : numGrades;
-                const preco = tipoVenda === 'grade' ? precoUnitario : (precoUnitario || precoGrade);
+                const qtdSalva = isGrade ? numGrades : numGrades;  // capsula trabalha em "grades" como unidade
+                const precoSalvo = isGrade ? precoGrade : precoUnitario;
                 return {
                   produto_id: detalhe.id,
                   nome: produtoCompleto.nome,
@@ -488,10 +494,10 @@ export default function Carrinho() {
                   referencia_fornecedor: produtoCompleto.referencia_fornecedor || '',
                   referencia_linx: produtoCompleto.referencia_polo || '',
                   tipo_venda: tipoVenda,
-                  quantidade: totalUnidades,
+                  quantidade: qtdSalva,
                   total_pecas_grade: pecasGrade,
-                  preco: preco,
-                  total: preco * totalUnidades,
+                  preco: precoSalvo,
+                  total: precoSalvo * qtdSalva,
                   foto: fotoUrl,
                   grade_selecionada: null,
                   cor_selecionada: {
@@ -505,8 +511,7 @@ export default function Carrinho() {
 
             // Quantidade simples (sem variantes de cor)
             const qtdSimples = (typeof config === 'number' ? config : 1) * capsulaQtd;
-            const totalUnidades = tipoVenda === 'grade' ? qtdSimples * pecasGrade : qtdSimples;
-            const preco = tipoVenda === 'grade' ? precoUnitario : (precoUnitario || precoGrade);
+            const precoSimples = isGrade ? precoGrade : precoUnitario;
             return [{
               produto_id: detalhe.id,
               nome: produtoCompleto.nome,
@@ -515,10 +520,10 @@ export default function Carrinho() {
               referencia_fornecedor: produtoCompleto.referencia_fornecedor || '',
               referencia_linx: produtoCompleto.referencia_polo || '',
               tipo_venda: tipoVenda,
-              quantidade: totalUnidades,
+              quantidade: qtdSimples,
               total_pecas_grade: pecasGrade,
-              preco: preco,
-              total: preco * totalUnidades,
+              preco: precoSimples,
+              total: precoSimples * qtdSimples,
               foto: fotoUrl,
               grade_selecionada: null,
               cor_selecionada: null,
