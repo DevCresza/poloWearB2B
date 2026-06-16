@@ -963,6 +963,126 @@ export default function PedidosFornecedor() {
     exportToCSV(data, columns, `pedidos-${new Date().toISOString().split('T')[0]}.csv`);
   };
 
+  // Extrato detalhado por item (1 linha por item) — visao de faturamento.
+  // Filtra os pedidos do fornecedor logado (admin ve todos) e respeita
+  // filtros de status/cliente da tela.
+  const handleExportExtratoItens = () => {
+    try {
+      let pedidosParaExportar = pedidos;
+      if (user?.role !== 'admin' && fornecedorAtual) {
+        pedidosParaExportar = pedidos.filter(p => p.fornecedor_id === fornecedorAtual.id);
+      }
+      if (filtroStatus !== 'todos') {
+        pedidosParaExportar = pedidosParaExportar.filter(p => p.status === filtroStatus);
+      }
+
+      if (!pedidosParaExportar || pedidosParaExportar.length === 0) {
+        toast.info('Não há pedidos para exportar');
+        return;
+      }
+
+      const statusLabels = {
+        novo_pedido: 'Novo Pedido',
+        em_producao: 'Em Produção',
+        parcialmente_faturado: 'Parcialmente Faturado',
+        faturado: 'Faturado',
+        em_transporte: 'Em Transporte',
+        pendente_pagamento: 'Aguardando Pagamento',
+        finalizado: 'Finalizado',
+        cancelado: 'Cancelado'
+      };
+      const pgLabels = {
+        pix: 'PIX',
+        cartao_credito: 'Cartão de Crédito',
+        boleto_faturado: 'Boleto Faturado',
+        transferencia: 'Transferência Bancária'
+      };
+
+      const linhas = [];
+      for (const pedido of pedidosParaExportar) {
+        let itens = pedido.itens || [];
+        if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch { itens = []; } }
+        if (!Array.isArray(itens) || itens.length === 0) continue;
+
+        const numero = `#${pedido.id?.slice(-8).toUpperCase()}`;
+        const cliente = clientes.find(c => c.id === pedido.comprador_user_id);
+        const loja = pedido.loja_id ? lojasMap[pedido.loja_id] : null;
+        const cnpjLinha = loja?.cnpj || cliente?.cnpj || '-';
+        const razaoLinha = loja?.nome || cliente?.empresa || cliente?.razao_social || cliente?.full_name || '';
+        const nomeLoja = loja?.nome_fantasia || loja?.nome || '';
+        const formaPg = pgLabels[pedido.metodo_pagamento] || pedido.metodo_pagamento || '';
+        const prazos = pedido.boleto_prazos_dias;
+        const formaPgComPrazo = (pedido.metodo_pagamento === 'boleto_faturado' && Array.isArray(prazos) && prazos.length)
+          ? `${formaPg} (${prazos.join('/')} dias)`
+          : formaPg;
+        const dataFat = pedido.nf_data_upload || pedido.data_prevista_entrega || pedido.created_date;
+        const mesFat = dataFat
+          ? new Date(typeof dataFat === 'string' && dataFat.length === 10 ? dataFat + 'T00:00:00' : dataFat)
+              .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' })
+          : '';
+        const statusPedido = statusLabels[pedido.status] || pedido.status || '';
+
+        for (const it of itens) {
+          const isGrade = it.tipo_venda === 'grade' && (it.total_pecas_grade || 0) > 0;
+          const totalItens = (it.quantidade || 0) * (isGrade ? (it.total_pecas_grade || 1) : 1);
+          const precoBase = Number(it.preco) || 0;
+          const precoTotal = Number(it.total) || precoBase * (it.quantidade || 0);
+          const precoUnit = isGrade
+            ? precoBase / (it.total_pecas_grade || 1)
+            : precoBase;
+          linhas.push({
+            numero_pedido: numero,
+            cnpj: cnpjLinha,
+            razao: razaoLinha,
+            loja: nomeLoja,
+            forma_pagamento: formaPgComPrazo,
+            mes_faturamento: mesFat,
+            tipo_pedido: isGrade ? 'PGM' : 'PE',
+            nome_item: it.nome || '',
+            ref_fornecedor: it.referencia_fornecedor || it.referencia || '',
+            ref_linx: it.referencia_linx || it.referencia_polo || it.referencia || '',
+            cor: it.cor_selecionada?.cor_nome || '',
+            preco_unitario: precoUnit,
+            total_itens: totalItens,
+            grades: isGrade ? (it.quantidade || 0) : '-',
+            preco_total: precoTotal,
+            status_pedido: statusPedido
+          });
+        }
+      }
+
+      if (linhas.length === 0) {
+        toast.info('Os pedidos filtrados não têm itens para extrair');
+        return;
+      }
+
+      const columns = [
+        { key: 'numero_pedido', label: 'NÚMERO DO PEDIDO' },
+        { key: 'cnpj', label: 'CNPJ' },
+        { key: 'razao', label: 'RAZÃO' },
+        { key: 'loja', label: 'LOJA' },
+        { key: 'forma_pagamento', label: 'FORMA DE PAGAMENTO' },
+        { key: 'mes_faturamento', label: 'MÊS DE FATURAMENTO' },
+        { key: 'tipo_pedido', label: 'TIPO DE PEDIDO (PE/PGM)' },
+        { key: 'nome_item', label: 'NOME DO ITEM' },
+        { key: 'ref_fornecedor', label: 'REF FORNECEDOR' },
+        { key: 'ref_linx', label: 'REF LINX' },
+        { key: 'cor', label: 'COR' },
+        { key: 'preco_unitario', label: 'PREÇO UNITÁRIO' },
+        { key: 'total_itens', label: 'TOTAL DE ITENS' },
+        { key: 'grades', label: 'GRADES' },
+        { key: 'preco_total', label: 'PREÇO TOTAL' },
+        { key: 'status_pedido', label: 'STATUS DO PEDIDO' }
+      ];
+
+      exportToCSV(linhas, columns, `extrato-itens-${new Date().toISOString().split('T')[0]}.csv`);
+      toast.success(`Extrato gerado com ${linhas.length} linha(s)`);
+    } catch (error) {
+      console.error('Erro ao gerar extrato:', error);
+      toast.error('Erro ao gerar extrato de itens.');
+    }
+  };
+
   // Relatório de Produção — agrega quantidade total por produto/cor
   const handleExportRelatorioProducao = () => {
     // Pedidos em produção ou aprovados (ainda não faturados por completo)
@@ -1350,6 +1470,10 @@ export default function PedidosFornecedor() {
           <Button onClick={handleExportRelatorioProducao} variant="outline" className="border-indigo-300 text-indigo-700 hover:bg-indigo-50">
             <BarChart3 className="w-4 h-4 mr-2" />
             Relatório Produção
+          </Button>
+          <Button onClick={handleExportExtratoItens} variant="outline" className="border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+            <FileText className="w-4 h-4 mr-2" />
+            Extrato Detalhado
           </Button>
           <Button onClick={handleExportCSV} variant="outline">
             <Download className="w-4 h-4 mr-2" />
