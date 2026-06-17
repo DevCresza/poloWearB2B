@@ -41,6 +41,8 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
     inscricao_estadual: '',
     responsavel_user_id: '',
     pedido_minimo_valor: 0,
+    pedido_minimo_franqueado: 0,
+    pedido_minimo_multimarca: 0,
     metodos_pagamento_aceitos: ['pix', 'cartao_credito', 'boleto_faturado', 'transferencia'],
     boleto_faturado_prazos_dias: [],
     email_fornecedor: '',
@@ -189,11 +191,18 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
         return;
       }
 
-      if (!formData.pedido_minimo_valor || formData.pedido_minimo_valor <= 0) {
-        toast.error('Por favor, informe um valor de pedido mínimo válido.');
+      if (!formData.pedido_minimo_franqueado || formData.pedido_minimo_franqueado <= 0) {
+        toast.error('Por favor, informe o pedido mínimo para Franquia.');
         setLoading(false);
         return;
       }
+      if (!formData.pedido_minimo_multimarca || formData.pedido_minimo_multimarca <= 0) {
+        toast.error('Por favor, informe o pedido mínimo para Multimarca.');
+        setLoading(false);
+        return;
+      }
+      // Mantem pedido_minimo_valor (legado) sincronizado com o de franquia
+      formData.pedido_minimo_valor = formData.pedido_minimo_franqueado;
 
       // Validações de conta de acesso (evita ficar com fornecedor sem login válido)
       if (!fornecedor) {
@@ -460,13 +469,35 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="pedido_minimo_valor">Pedido Mínimo (R$) *</Label>
+                  <Label htmlFor="pedido_minimo_franqueado">Pedido Mínimo Franquia (R$) *</Label>
                   <Input
-                    id="pedido_minimo_valor"
+                    id="pedido_minimo_franqueado"
                     type="number"
                     step="0.01"
-                    value={formData.pedido_minimo_valor}
-                    onChange={(e) => setFormData({...formData, pedido_minimo_valor: parseFloat(e.target.value) || 0})}
+                    value={formData.pedido_minimo_franqueado}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value) || 0;
+                      setFormData({
+                        ...formData,
+                        pedido_minimo_franqueado: v,
+                        // mantem o campo legado em sync para nao quebrar telas antigas
+                        pedido_minimo_valor: v
+                      });
+                    }}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="pedido_minimo_multimarca">Pedido Mínimo Multimarca (R$) *</Label>
+                  <Input
+                    id="pedido_minimo_multimarca"
+                    type="number"
+                    step="0.01"
+                    value={formData.pedido_minimo_multimarca}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      pedido_minimo_multimarca: parseFloat(e.target.value) || 0
+                    })}
                   />
                 </div>
               </div>

@@ -127,6 +127,20 @@ export default function Carrinho() {
     localStorage.setItem(carrinhoKey, JSON.stringify(novoCarrinho));
   };
 
+  // Pedido minimo do fornecedor conforme o tipo do cliente logado.
+  // Multimarca: pedido_minimo_multimarca; Franqueado: pedido_minimo_franqueado.
+  // Fallback: pedido_minimo_valor (legado) se o campo especifico nao estiver setado.
+  const getMinimoFornecedor = (fornecedor) => {
+    if (!fornecedor) return 0;
+    const isMulti = user?.tipo_negocio === 'multimarca';
+    const especifico = isMulti
+      ? fornecedor.pedido_minimo_multimarca
+      : fornecedor.pedido_minimo_franqueado;
+    const v = Number(especifico);
+    if (Number.isFinite(v) && v > 0) return v;
+    return Number(fornecedor.pedido_minimo_valor) || 0;
+  };
+
   // Helper para parsear fotos do produto (vem como JSON string do banco)
   const getPrimeiraFoto = (item) => {
     try {
@@ -441,9 +455,9 @@ export default function Carrinho() {
 
       // Verificar pedido mínimo
       const fornecedor = fornecedores.find(f => f.id === grupoData.fornecedor_id);
-      if (fornecedor && fornecedor.pedido_minimo_valor > 0) {
-        if (grupoData.total < fornecedor.pedido_minimo_valor) {
-          return { success: false, error: `Valor abaixo do mínimo de ${formatCurrency(fornecedor.pedido_minimo_valor)}.` };
+      if (fornecedor && getMinimoFornecedor(fornecedor) > 0) {
+        if (grupoData.total < getMinimoFornecedor(fornecedor)) {
+          return { success: false, error: `Valor abaixo do mínimo de ${formatCurrency(getMinimoFornecedor(fornecedor))}.` };
         }
       }
 
@@ -779,10 +793,10 @@ export default function Carrinho() {
       }
 
       const fornecedor = fornecedores.find(f => f.id === fornecedorId);
-      if (fornecedor && fornecedor.pedido_minimo_valor > 0) {
-        if (grupo.total < fornecedor.pedido_minimo_valor) {
+      if (fornecedor && getMinimoFornecedor(fornecedor) > 0) {
+        if (grupo.total < getMinimoFornecedor(fornecedor)) {
           toast.error(
-            `O pedido para ${fornecedor.nome_marca} não atingiu o valor mínimo de ${formatCurrency(fornecedor.pedido_minimo_valor)}. ` +
+            `O pedido para ${fornecedor.nome_marca} não atingiu o valor mínimo de ${formatCurrency(getMinimoFornecedor(fornecedor))}. ` +
             `Valor atual: ${formatCurrency(grupo.total)}`
           );
           setFinalizando(prev => ({ ...prev, [fornecedorId]: false }));
@@ -921,7 +935,7 @@ export default function Carrinho() {
             {/* Lista de Produtos por Fornecedor */}
             {grupos.map((grupo) => {
               const fornecedor = fornecedores.find(f => f.id === grupo.fornecedor_id);
-              const valorMinimo = fornecedor?.pedido_minimo_valor || 0;
+              const valorMinimo = getMinimoFornecedor(fornecedor);
               const atingiuMinimo = grupo.total >= valorMinimo;
               const metodosPagamento = getMetodosPagamentoDisponiveis(grupo.fornecedor_id);
               const selectedLojas = getSelectedLojasForGroup(grupo.fornecedor_id);
