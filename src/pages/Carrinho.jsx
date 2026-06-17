@@ -1602,6 +1602,7 @@ export default function Carrinho() {
           lojas={lojas}
           preSelectedLojaIds={replicarPreSelectedIds}
           fornecedores={fornecedores}
+          user={user}
           criarPedidoParaLoja={criarPedidoParaLoja}
           getMetodosPagamentoDisponiveis={getMetodosPagamentoDisponiveis}
           onSuccess={handleReplicarSuccess}

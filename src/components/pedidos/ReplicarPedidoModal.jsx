@@ -61,6 +61,7 @@ export default function ReplicarPedidoModal({
   lojas,
   preSelectedLojaIds: preSelectedProp,
   fornecedores,
+  user,
   criarPedidoParaLoja,
   getMetodosPagamentoDisponiveis,
   onSuccess
@@ -79,7 +80,17 @@ export default function ReplicarPedidoModal({
 
   const fornecedor = fornecedores.find(f => f.id === grupo.fornecedor_id);
   const fornecedorNome = fornecedor?.nome_marca || fornecedor?.nome_fantasia || 'Fornecedor';
-  const valorMinimo = fornecedor?.pedido_minimo_valor || 0;
+  // Pedido minimo do fornecedor conforme o tipo do cliente que esta replicando
+  const valorMinimo = (() => {
+    if (!fornecedor) return 0;
+    const isMulti = user?.tipo_negocio === 'multimarca';
+    const especifico = isMulti
+      ? fornecedor.pedido_minimo_multimarca
+      : fornecedor.pedido_minimo_franqueado;
+    const v = Number(especifico);
+    if (Number.isFinite(v) && v > 0) return v;
+    return Number(fornecedor.pedido_minimo_valor) || 0;
+  })();
   const metodosPagamento = getMetodosPagamentoDisponiveis(grupo.fornecedor_id);
 
   const outrasLojas = useMemo(() =>

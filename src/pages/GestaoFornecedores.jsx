@@ -204,7 +204,8 @@ export default function GestaoFornecedores() {
                     <TableHead>Nome da Marca</TableHead>
                     <TableHead>Razão Social</TableHead>
                     <TableHead>CNPJ</TableHead>
-                    <TableHead>Pedido Mínimo</TableHead>
+                    <TableHead>Mínimo Franquia</TableHead>
+                    <TableHead>Mínimo Multimarca</TableHead>
                     <TableHead>Email Acesso</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Ações</TableHead>
@@ -216,7 +217,8 @@ export default function GestaoFornecedores() {
                       <TableCell className="font-medium">{fornecedor.nome_marca}</TableCell>
                       <TableCell>{fornecedor.razao_social}</TableCell>
                       <TableCell>{fornecedor.cnpj}</TableCell>
-                      <TableCell>{formatCurrency(fornecedor.pedido_minimo_valor || 0)}</TableCell>
+                      <TableCell>{formatCurrency(fornecedor.pedido_minimo_franqueado ?? fornecedor.pedido_minimo_valor ?? 0)}</TableCell>
+                      <TableCell>{formatCurrency(fornecedor.pedido_minimo_multimarca ?? fornecedor.pedido_minimo_valor ?? 0)}</TableCell>
                       <TableCell> {/* E-mail e status da conta */}
                         <div>
                           <div className="font-medium">{fornecedor.email_fornecedor || '-'}</div>
