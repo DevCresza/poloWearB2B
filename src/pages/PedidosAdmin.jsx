@@ -562,19 +562,27 @@ export default function PedidosAdmin() {
   // Calcular totais por status
   const calcularTotaisPorStatus = () => {
     const totais = {
-      novo_pedido: { count: 0, valor: 0 },
-      em_producao: { count: 0, valor: 0 },
-      faturado: { count: 0, valor: 0 },
-      em_transporte: { count: 0, valor: 0 },
-      pendente_pagamento: { count: 0, valor: 0 },
-      finalizado: { count: 0, valor: 0 },
-      cancelado: { count: 0, valor: 0 }
+      novo_pedido: { count: 0, valor: 0, pecas: 0 },
+      em_producao: { count: 0, valor: 0, pecas: 0 },
+      faturado: { count: 0, valor: 0, pecas: 0 },
+      em_transporte: { count: 0, valor: 0, pecas: 0 },
+      pendente_pagamento: { count: 0, valor: 0, pecas: 0 },
+      finalizado: { count: 0, valor: 0, pecas: 0 },
+      cancelado: { count: 0, valor: 0, pecas: 0 }
     };
 
     filteredPedidos.forEach(pedido => {
       if (totais.hasOwnProperty(pedido.status)) {
         totais[pedido.status].count++;
         totais[pedido.status].valor += pedido.valor_total || 0;
+        // Soma total de pecas dos itens (multiplica por total_pecas_grade quando for grade)
+        let itens = pedido.itens || [];
+        if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch { itens = []; } }
+        const qtdPecas = (itens || []).reduce((sum, it) => {
+          const isGrade = it.tipo_venda === 'grade' && (it.total_pecas_grade || 0) > 0;
+          return sum + (it.quantidade || 0) * (isGrade ? (it.total_pecas_grade || 1) : 1);
+        }, 0);
+        totais[pedido.status].pecas += qtdPecas;
       }
     });
 
@@ -657,6 +665,9 @@ export default function PedidosAdmin() {
                 <p className="text-lg font-bold text-gray-900">
                   R$ {total.valor.toFixed(0)}
                 </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {total.pecas.toLocaleString('pt-BR')} peça{total.pecas === 1 ? '' : 's'}
+                </p>
               </CardContent>
             </Card>
           );
@@ -675,7 +686,8 @@ export default function PedidosAdmin() {
           </div>
           <div className="mt-4 pt-4 border-t border-white/20">
             <p className="text-sm opacity-90">
-              Total de {filteredPedidos.length} pedido(s) • 
+              Total de {filteredPedidos.length} pedido(s) •{' '}
+              {Object.values(totaisPorStatus).reduce((s, t) => s + (t.pecas || 0), 0).toLocaleString('pt-BR')} peça(s) •{' '}
               Finalizados: {totaisPorStatus.finalizado.count} ({formatCurrency(totaisPorStatus.finalizado.valor)})
             </p>
           </div>
