@@ -44,6 +44,8 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   // Estados para pagamento via PIX (aba Documentos)
   const [pixInfo, setPixInfo] = useState(pedido.pix_info || '');
   const [savingPix, setSavingPix] = useState(false);
+  const [cartaoLink, setCartaoLink] = useState(pedido.cartao_link_pagamento || '');
+  const [savingCartao, setSavingCartao] = useState(false);
 
   // Estados para parcelas/títulos
   const [parcelas, setParcelas] = useState([]);
@@ -339,6 +341,19 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       toast.error('Erro ao salvar: ' + (err?.message || ''));
     } finally {
       setSavingPix(false);
+    }
+  };
+
+  const handleSalvarCartao = async () => {
+    setSavingCartao(true);
+    try {
+      await Pedido.update(pedido.id, { cartao_link_pagamento: cartaoLink });
+      toast.success('Link de pagamento salvo');
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      toast.error('Erro ao salvar: ' + (err?.message || ''));
+    } finally {
+      setSavingCartao(false);
     }
   };
 
@@ -2300,8 +2315,69 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
 
             {/* Tab: Documentos */}
             <TabsContent value="documentos" className="space-y-4">
-              {/* Pagamento (PIX ou Boleto, conforme método do pedido) */}
-              {pedido.metodo_pagamento === 'pix' ? (
+              {/* Pagamento (PIX, Cartao ou Boleto, conforme metodo do pedido) */}
+              {pedido.metodo_pagamento === 'cartao_credito' ? (
+                <div className={`p-4 rounded-lg ${pedido.cartao_link_pagamento ? 'bg-blue-50' : 'bg-gray-50 border-2 border-dashed border-gray-300'}`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <CreditCard className="w-5 h-5 text-blue-600" />
+                    <h4 className="font-semibold">Pagamento via Cartão de Crédito</h4>
+                  </div>
+                  {canUpload ? (
+                    <div className="space-y-3">
+                      <p className="text-sm text-gray-600">
+                        Cole o link de pagamento (Stripe, PagSeguro, Cielo, etc.) ou as instruções para o cliente realizar o pagamento via cartão.
+                      </p>
+                      <Textarea
+                        value={cartaoLink}
+                        onChange={(e) => setCartaoLink(e.target.value)}
+                        placeholder={'Ex: https://pag.ae/abc123\nOu instrucoes de pagamento'}
+                        rows={5}
+                        className="font-mono text-sm"
+                      />
+                      <Button
+                        onClick={handleSalvarCartao}
+                        disabled={savingCartao || (cartaoLink || '').trim() === (pedido.cartao_link_pagamento || '').trim()}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        {savingCartao ? 'Salvando...' : (pedido.cartao_link_pagamento ? 'Atualizar Link de Pagamento' : 'Salvar Link de Pagamento')}
+                      </Button>
+                    </div>
+                  ) : pedido.cartao_link_pagamento ? (
+                    <div className="space-y-3">
+                      <div className="bg-white p-3 rounded border border-blue-200 whitespace-pre-wrap text-sm break-all">
+                        {pedido.cartao_link_pagamento}
+                      </div>
+                      <div className="flex gap-2 flex-wrap">
+                        {/^https?:\/\//.test((pedido.cartao_link_pagamento || '').trim()) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(pedido.cartao_link_pagamento.trim(), '_blank')}
+                          >
+                            Abrir link de pagamento
+                          </Button>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            navigator.clipboard.writeText(pedido.cartao_link_pagamento || '');
+                            toast.success('Copiado!');
+                          }}
+                        >
+                          Copiar
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Alert>
+                      <AlertDescription>
+                        Aguardando o fornecedor cadastrar o link de pagamento via cartão.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              ) : pedido.metodo_pagamento === 'pix' ? (
                 <div className={`p-4 rounded-lg ${pedido.pix_info ? 'bg-blue-50' : 'bg-gray-50 border-2 border-dashed border-gray-300'}`}>
                   <div className="flex items-center gap-2 mb-3">
                     <CreditCard className="w-5 h-5 text-blue-600" />
