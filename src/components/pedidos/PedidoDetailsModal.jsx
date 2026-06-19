@@ -1305,9 +1305,6 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                     <div className="mt-2 pt-2 border-t border-blue-200 text-sm text-gray-700">
                       <span className="font-semibold text-blue-800">Loja:</span>{' '}
                       {lojaInfo.nome_fantasia || lojaInfo.nome}
-                      <span className="text-gray-500 block text-xs mt-0.5">
-                        Titular: {userMap.get(pedido.comprador_user_id)}
-                      </span>
                     </div>
                   )}
                 </div>

@@ -130,16 +130,15 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
 
       } else {
         // Editar usuário existente
+        // empresa/cnpj nao saem mais daqui — razao social/CNPJ ficam por loja
         const dataToSubmit = {
           full_name: formData.full_name,
           email: formData.email,
           role: formData.role,
-          tipo_negocio: formData.role, // Manter sincronizado com role
+          tipo_negocio: formData.role,
           categoria_cliente: formData.role === 'admin' ? 'admin' : formData.role,
-          empresa: formData.empresa || null,
           telefone: formData.telefone || null,
           whatsapp: formData.whatsapp || null,
-          cnpj: formData.cnpj || null,
           endereco_completo: formData.endereco_completo || null,
           cidade: formData.cidade || null,
           estado: formData.estado || null,
@@ -375,30 +374,9 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
             </div>
           </div>
 
-          {/* Informações da Loja/Empresa */}
+          {/* Razao social / CNPJ ficam por loja em "Minhas Lojas".
+              Aqui cadastramos so dados de contato/endereco do titular. */}
           <div className="border-t pt-6 mt-6">
-            <h3 className="font-semibold text-gray-900 mb-4">Informações da Loja/Empresa</h3>
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="empresa">Nome da Empresa/Loja</Label>
-                <Input
-                  id="empresa"
-                  value={formData.empresa}
-                  onChange={e => setFormData({...formData, empresa: e.target.value})}
-                  placeholder="Nome comercial"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="cnpj">CNPJ</Label>
-                <Input
-                  id="cnpj"
-                  value={formData.cnpj}
-                  onChange={e => setFormData({...formData, cnpj: e.target.value})}
-                  placeholder="00.000.000/0000-00"
-                />
-              </div>
-            </div>
 
             <div className="grid md:grid-cols-2 gap-4 mt-4">
               <div className="space-y-2">
