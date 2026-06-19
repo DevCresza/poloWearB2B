@@ -19,7 +19,7 @@ import {
 import { Pedido, Produto } from '@/api/entities';
 import { Carteira } from '@/api/entities';
 import { User as UserEntity } from '@/api/entities';
-import { Loja } from '@/api/entities';
+import { Loja, Fornecedor } from '@/api/entities';
 import { Faturamento } from '@/api/entities';
 import { UploadFile } from '@/api/integrations';
 import { formatDateTime, formatCurrency } from '@/utils/exportUtils';
@@ -29,6 +29,7 @@ import autoTable from 'jspdf-autotable';
 
 export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentUser, userMap, fornecedorMap, defaultTab = 'itens' }) {
   const [lojaInfo, setLojaInfo] = useState(null);
+  const [fornecedorInfo, setFornecedorInfo] = useState(null);
   const [confirmando, setConfirmando] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [boletoFile, setBoletoFile] = useState(null);
@@ -104,6 +105,15 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       setLojaInfo(null);
     }
   }, [pedido?.loja_id]);
+
+  // Carrega o fornecedor pra ter acesso aos prazos de boleto faturado
+  useEffect(() => {
+    if (pedido?.fornecedor_id) {
+      Fornecedor.get(pedido.fornecedor_id).then(setFornecedorInfo).catch(() => setFornecedorInfo(null));
+    } else {
+      setFornecedorInfo(null);
+    }
+  }, [pedido?.fornecedor_id]);
 
   useEffect(() => {
     const loadParcelas = async () => {
@@ -598,11 +608,19 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   };
 
   const getMetodoPagamentoLabel = (metodo) => {
+    // Boleto faturado: prazos vem do cadastro do fornecedor (ex.: 30/60/90).
+    // Fallback pra "30 dias" se o fornecedor nao tiver prazos definidos.
+    if (metodo === 'boleto_faturado') {
+      const prazos = fornecedorInfo?.boleto_faturado_prazos_dias;
+      if (Array.isArray(prazos) && prazos.length > 0) {
+        return `Boleto Faturado (${prazos.join('/')} dias)`;
+      }
+      return 'Boleto Faturado (30 dias)';
+    }
     const labels = {
       'pix': 'PIX',
       'cartao_credito': 'Cartão de Crédito',
       'boleto': 'Boleto',
-      'boleto_faturado': 'Boleto Faturado (30 dias)',
       'transferencia': 'Transferência Bancária',
       'a_vista': 'À Vista'
     };
