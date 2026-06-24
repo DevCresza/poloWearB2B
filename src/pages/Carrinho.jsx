@@ -494,37 +494,42 @@ export default function Carrinho() {
             // (mesmo padrao do checkout de produto normal, linhas ~537-540)
             const isGrade = tipoVenda === 'grade';
 
-            // Se tem variantes por cor, criar um item por cor
+            // Se tem variantes por cor, criar um item por cor.
+            // IMPORTANTE: variantes com quantidade 0 sao IGNORADAS (cliente
+            // viu a cor disponivel mas optou por nao pedir).
             if (config && typeof config === 'object' && config.variantes && Array.isArray(config.variantes)) {
-              return config.variantes.map(variante => {
-                const numGrades = (variante.quantidade || 1) * capsulaQtd;
-                const qtdSalva = isGrade ? numGrades : numGrades;  // capsula trabalha em "grades" como unidade
-                const precoSalvo = isGrade ? precoGrade : precoUnitario;
-                return {
-                  produto_id: detalhe.id,
-                  nome: produtoCompleto.nome,
-                  marca: produtoCompleto.marca || '',
-                  referencia: produtoCompleto.referencia_polo || produtoCompleto.referencia_fornecedor || '',
-                  referencia_fornecedor: produtoCompleto.referencia_fornecedor || '',
-                  referencia_linx: produtoCompleto.referencia_polo || '',
-                  tipo_venda: tipoVenda,
-                  quantidade: qtdSalva,
-                  total_pecas_grade: pecasGrade,
-                  preco: precoSalvo,
-                  total: precoSalvo * qtdSalva,
-                  foto: fotoUrl,
-                  grade_selecionada: null,
-                  cor_selecionada: {
-                    cor_nome: variante.cor_nome,
-                    cor_codigo_hex: variante.cor_codigo_hex || variante.cor_hex || '#000000'
-                  },
-                  origem_capsula: item.capsula_id
-                };
-              });
+              return config.variantes
+                .map(variante => {
+                  const numGrades = (Number(variante.quantidade) || 0) * capsulaQtd;
+                  if (numGrades <= 0) return null; // pula cor zerada
+                  const precoSalvo = isGrade ? precoGrade : precoUnitario;
+                  return {
+                    produto_id: detalhe.id,
+                    nome: produtoCompleto.nome,
+                    marca: produtoCompleto.marca || '',
+                    referencia: produtoCompleto.referencia_polo || produtoCompleto.referencia_fornecedor || '',
+                    referencia_fornecedor: produtoCompleto.referencia_fornecedor || '',
+                    referencia_linx: produtoCompleto.referencia_polo || '',
+                    tipo_venda: tipoVenda,
+                    quantidade: numGrades,
+                    total_pecas_grade: pecasGrade,
+                    preco: precoSalvo,
+                    total: precoSalvo * numGrades,
+                    foto: fotoUrl,
+                    grade_selecionada: null,
+                    cor_selecionada: {
+                      cor_nome: variante.cor_nome,
+                      cor_codigo_hex: variante.cor_codigo_hex || variante.cor_hex || '#000000'
+                    },
+                    origem_capsula: item.capsula_id
+                  };
+                })
+                .filter(Boolean);
             }
 
             // Quantidade simples (sem variantes de cor)
-            const qtdSimples = (typeof config === 'number' ? config : 1) * capsulaQtd;
+            const qtdSimples = (typeof config === 'number' ? config : 0) * capsulaQtd;
+            if (qtdSimples <= 0) return []; // produto opcional nao pedido
             const precoSimples = isGrade ? precoGrade : precoUnitario;
             return [{
               produto_id: detalhe.id,
