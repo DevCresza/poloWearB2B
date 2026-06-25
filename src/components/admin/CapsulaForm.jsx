@@ -49,6 +49,43 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
         quantidades = {};
       }
 
+      // Sincroniza variantes: para cada produto da capsula que tem variantes_cor,
+      // se alguma cor do produto NAO esta no array salvo, adiciona com qtd 0.
+      // Isso garante que capsulas antigas mostrem todas as cores disponiveis.
+      try {
+        const produtoIds = capsula.produto_ids || [];
+        produtoIds.forEach(pid => {
+          const produto = allProdutos.find(p => p.id === pid);
+          if (!produto?.tem_variantes_cor) return;
+          let variantesProduto = [];
+          try {
+            variantesProduto = typeof produto.variantes_cor === 'string'
+              ? JSON.parse(produto.variantes_cor)
+              : (produto.variantes_cor || []);
+          } catch { variantesProduto = []; }
+          if (variantesProduto.length === 0) return;
+          const config = quantidades[pid];
+          const variantesAtuais = (config && Array.isArray(config.variantes)) ? config.variantes : [];
+          const corIdsAtuais = new Set(variantesAtuais.map(v => v.cor_id));
+          const faltantes = variantesProduto
+            .filter(v => !corIdsAtuais.has(v.id))
+            .map(v => ({
+              cor_id: v.id,
+              cor_nome: v.cor_nome,
+              cor_hex: v.cor_codigo_hex || v.cor_hex,
+              quantidade: 0
+            }));
+          if (faltantes.length > 0) {
+            quantidades[pid] = {
+              ...(config || {}),
+              variantes: [...variantesAtuais, ...faltantes]
+            };
+          }
+        });
+      } catch (e) {
+        console.warn('Erro ao sincronizar variantes da capsula:', e);
+      }
+
       setFormData({
         nome: capsula.nome || '',
         descricao: capsula.descricao || '',
@@ -92,7 +129,7 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
       }
     };
     loadData();
-  }, [capsula, currentUser]);
+  }, [capsula, currentUser, allProdutos]);
 
   // Detectar fornecedor travado baseado nos produtos selecionados
   const fornecedorTravado = (() => {
@@ -117,7 +154,22 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
         delete newQuantidades[productId];
       } else if (!newQuantidades[productId]) {
         if (produto?.tem_variantes_cor) {
-          newQuantidades[productId] = { variantes: [] };
+          // Pre-popula TODAS as cores do produto com qtd 0. Assim o cliente
+          // ve todas as opcoes na capsula e pode aumentar as que quer.
+          let variantesProduto = [];
+          try {
+            variantesProduto = typeof produto.variantes_cor === 'string'
+              ? JSON.parse(produto.variantes_cor)
+              : (produto.variantes_cor || []);
+          } catch { variantesProduto = []; }
+          newQuantidades[productId] = {
+            variantes: variantesProduto.map(v => ({
+              cor_id: v.id,
+              cor_nome: v.cor_nome,
+              cor_hex: v.cor_codigo_hex || v.cor_hex,
+              quantidade: 0
+            }))
+          };
         } else {
           newQuantidades[productId] = 1;
         }
@@ -485,13 +537,16 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
                                                   size="sm"
                                                   className="h-6 w-6 p-0"
                                                   onClick={() => {
-                                                    const newQuantidadesVariantes = qtdVariante > 0
-                                                      ? quantidadesVariantes.map(v =>
-                                                          v.cor_id === variante.id
-                                                            ? { ...v, quantidade: Math.max(0, v.quantidade - 1) }
-                                                            : v
-                                                        ).filter(v => v.quantidade > 0)
-                                                      : quantidadesVariantes;
+                                                    // Decrementa mas MANTEM a cor no array mesmo em 0
+                                                    // (cliente precisa ver a cor pra eventualmente aumentar).
+                                                    let newQuantidadesVariantes = [...quantidadesVariantes];
+                                                    const idx = newQuantidadesVariantes.findIndex(v => v.cor_id === variante.id);
+                                                    if (idx >= 0) {
+                                                      newQuantidadesVariantes[idx] = {
+                                                        ...newQuantidadesVariantes[idx],
+                                                        quantidade: Math.max(0, (newQuantidadesVariantes[idx].quantidade || 0) - 1)
+                                                      };
+                                                    }
 
                                                     setFormData(prev => ({
                                                       ...prev,
@@ -511,23 +566,22 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
                                                   min="0"
                                                   value={qtdVariante}
                                                   onChange={(e) => {
-                                                    const newQtd = parseInt(e.target.value) || 0;
+                                                    // Sempre MANTEM a cor no array (mesmo qtd 0)
+                                                    const newQtd = Math.max(0, parseInt(e.target.value) || 0);
                                                     let newQuantidadesVariantes = [...quantidadesVariantes];
-
-                                                    if (newQtd === 0) {
-                                                      newQuantidadesVariantes = newQuantidadesVariantes.filter(v => v.cor_id !== variante.id);
+                                                    const existingIndex = newQuantidadesVariantes.findIndex(v => v.cor_id === variante.id);
+                                                    if (existingIndex >= 0) {
+                                                      newQuantidadesVariantes[existingIndex] = {
+                                                        ...newQuantidadesVariantes[existingIndex],
+                                                        quantidade: newQtd
+                                                      };
                                                     } else {
-                                                      const existingIndex = newQuantidadesVariantes.findIndex(v => v.cor_id === variante.id);
-                                                      if (existingIndex >= 0) {
-                                                        newQuantidadesVariantes[existingIndex].quantidade = newQtd;
-                                                      } else {
-                                                        newQuantidadesVariantes.push({
-                                                          cor_id: variante.id,
-                                                          cor_nome: variante.cor_nome,
-                                                          cor_hex: variante.cor_codigo_hex || variante.cor_hex,
-                                                          quantidade: newQtd
-                                                        });
-                                                      }
+                                                      newQuantidadesVariantes.push({
+                                                        cor_id: variante.id,
+                                                        cor_nome: variante.cor_nome,
+                                                        cor_hex: variante.cor_codigo_hex || variante.cor_hex,
+                                                        quantidade: newQtd
+                                                      });
                                                     }
 
                                                     setFormData(prev => ({
