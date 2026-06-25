@@ -252,6 +252,10 @@ export default function PedidosAdmin() {
           : '';
         const statusPedido = statusLabels[pedido.status] || pedido.status || '';
         const nomeFornecedor = fornecedorMap.get(pedido.fornecedor_id) || 'N/A';
+        // Data e hora do pedido em pt-BR (fuso SP)
+        const dataPedido = pedido.created_date
+          ? new Date(pedido.created_date).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+          : '';
 
         for (const it of itens) {
           const isGrade = it.tipo_venda === 'grade' && (it.total_pecas_grade || 0) > 0;
@@ -265,6 +269,7 @@ export default function PedidosAdmin() {
             : precoBase;
           linhas.push({
             numero_pedido: numero,
+            data_pedido: dataPedido,
             cnpj: cnpjLinha,
             razao: razaoLinha,
             loja: nomeLoja,
@@ -292,6 +297,7 @@ export default function PedidosAdmin() {
 
       const columns = [
         { key: 'numero_pedido', label: 'NÚMERO DO PEDIDO' },
+        { key: 'data_pedido', label: 'DATA DO PEDIDO' },
         { key: 'cnpj', label: 'CNPJ' },
         { key: 'razao', label: 'RAZÃO' },
         { key: 'loja', label: 'LOJA' },
