@@ -999,6 +999,7 @@ export default function PedidosAdmin() {
         <PedidoItensEditModal
           pedido={selectedPedido}
           currentUser={currentUser}
+          fornecedor={fornecedores.find(f => f.id === selectedPedido.fornecedor_id)}
           onClose={() => {
             setShowItensEditModal(false);
             setSelectedPedido(null);

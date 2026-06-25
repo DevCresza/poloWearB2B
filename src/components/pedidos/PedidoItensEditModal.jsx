@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 // de um pedido já criado. Faz a cascata: atualiza pedido.itens,
 // recalcula valor_total/final, ajusta estoque pelo delta, redistribui
 // títulos pendentes da carteira e registra audit log em observacoes_internas.
-export default function PedidoItensEditModal({ pedido, onClose, onUpdate, currentUser }) {
+export default function PedidoItensEditModal({ pedido, onClose, onUpdate, currentUser, fornecedor }) {
   // Estado local: cada linha aceita uma nova quantidade
   const [itens, setItens] = useState(() =>
     (pedido.itens || []).map((it, idx) => ({
@@ -31,10 +31,26 @@ export default function PedidoItensEditModal({ pedido, onClose, onUpdate, curren
 
   // Para CLIENTE: só pode editar enquanto o pedido ainda nao foi
   // recebido pelo fornecedor (status novo_pedido). Depois disso, bloqueia.
-  // Para admin/fornecedor: bloqueia apenas em estados finais.
+  // Para admin/fornecedor: bloqueia em estados finais E em faturado
+  // (depois de faturar, NF emitida, nao reabre quantidade).
   const bloqueado = isCliente
     ? pedido.status !== 'novo_pedido'
-    : ['entregue', 'cancelado', 'finalizado'].includes(pedido.status);
+    : ['entregue', 'cancelado', 'finalizado', 'faturado'].includes(pedido.status);
+
+  // Pedido minimo conforme o tipo do CLIENTE do pedido (nao do user logado).
+  // Usa o tipo_negocio do comprador. Se nao tiver fornecedor disponivel, retorna 0.
+  const valorMinimoPedido = (() => {
+    if (!fornecedor) return 0;
+    // Detecta se o pedido eh de multimarca usando os campos do pedido/cliente
+    const isMulti = pedido?.tipo_cliente === 'multimarca'
+      || pedido?.comprador_tipo === 'multimarca';
+    const especifico = isMulti
+      ? fornecedor.pedido_minimo_multimarca
+      : fornecedor.pedido_minimo_franqueado;
+    const v = Number(especifico);
+    if (Number.isFinite(v) && v > 0) return v;
+    return Number(fornecedor.pedido_minimo_valor) || 0;
+  })();
 
   // Fornecedor só pode REDUZIR/REMOVER (nunca aumentar acima do pedido).
   // Admin e cliente dono podem aumentar/reduzir/remover livremente.
@@ -83,6 +99,15 @@ export default function PedidoItensEditModal({ pedido, onClose, onUpdate, curren
     // Defense in depth: bloqueia caso fornecedor tenha conseguido aumentar
     if (apenasReduzir && itens.some(i => i._novaQuantidade > i._quantidadeOriginal)) {
       toast.error('Você não pode aumentar a quantidade acima do pedido original do cliente.');
+      return;
+    }
+    // Trava: nao deixa o novo total ficar ABAIXO do pedido minimo do fornecedor.
+    // Admin pode forcar (passa por cima). Fornecedor/cliente nao.
+    if (valorMinimoPedido > 0 && novoValorTotal < valorMinimoPedido && !isAdmin) {
+      toast.error(
+        `O novo total (${formatCurrency(novoValorTotal)}) ficaria abaixo do pedido mínimo do fornecedor (${formatCurrency(valorMinimoPedido)}).`,
+        { duration: 6000 }
+      );
       return;
     }
 
@@ -324,6 +349,15 @@ Valor: ${formatCurrency(valorAtual)} → ${formatCurrency(novoValorTotal)}`;
               <span>{delta > 0 ? '+' : ''}{formatCurrency(delta)}</span>
             </div>
           )}
+          {valorMinimoPedido > 0 && (
+            <div className={`flex justify-between text-xs mt-1 pt-1 border-t border-blue-200 ${novoValorTotal < valorMinimoPedido ? 'text-red-700 font-semibold' : 'text-gray-600'}`}>
+              <span>Pedido mínimo do fornecedor:</span>
+              <span>
+                {formatCurrency(valorMinimoPedido)}
+                {novoValorTotal < valorMinimoPedido && ' ⚠ abaixo do mínimo'}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 pt-2 border-t">
@@ -333,7 +367,10 @@ Valor: ${formatCurrency(valorAtual)} → ${formatCurrency(novoValorTotal)}`;
           </Button>
           <Button
             onClick={handleSalvar}
-            disabled={salvando || bloqueado || !houveAlteracao || itensAtivos.length === 0}
+            disabled={
+              salvando || bloqueado || !houveAlteracao || itensAtivos.length === 0
+              || (valorMinimoPedido > 0 && novoValorTotal < valorMinimoPedido && !isAdmin)
+            }
             className="bg-blue-600 hover:bg-blue-700"
           >
             <Save className="w-4 h-4 mr-2" />
