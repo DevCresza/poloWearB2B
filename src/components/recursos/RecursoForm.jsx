@@ -46,11 +46,27 @@ export default function RecursoForm({ recurso, onClose, onSuccess }) {
     }
 
     try {
+      // Validacao de tamanho ANTES do upload (evita esperar pelo erro 413)
+      const limiteMB = 500;
+      const tamanhoMB = (file.size || 0) / (1024 * 1024);
+      if (tamanhoMB > limiteMB) {
+        toast.error(`Arquivo muito grande: ${tamanhoMB.toFixed(1)} MB. Limite: ${limiteMB} MB.`);
+        return;
+      }
       const result = await UploadFile({ file });
       const fileUrl = result.url || result.file_url;
       setFormData({ ...formData, [field]: fileUrl });
-    } catch (_error) {
-      toast.error('Erro ao fazer upload do arquivo.');
+      toast.success(`Upload concluído (${tamanhoMB.toFixed(1)} MB)`);
+    } catch (error) {
+      const msg = error?.message || '';
+      if (msg.toLowerCase().includes('payload too large') || msg.includes('413')) {
+        toast.error(`Arquivo maior que o limite do servidor. Tente comprimir o PDF.`);
+      } else if (msg.toLowerCase().includes('mime')) {
+        toast.error(`Tipo de arquivo não permitido: ${file.type || 'desconhecido'}.`);
+      } else {
+        toast.error(`Erro ao fazer upload: ${msg || 'tente novamente'}`);
+      }
+      console.error('Upload error detail:', error);
     } finally {
       setUploadingFile(false);
       setUploadingThumb(false);
