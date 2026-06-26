@@ -196,10 +196,13 @@ export default function Carrinho() {
     }
   };
 
-  // Helpers do mínimo da cápsula (fallback no que o cliente colocou se o
-  // item antigo não tiver `minimos_quantidades` salvo).
+  // Helpers do mínimo da cápsula. Quando `minimos_quantidades` nao existe
+  // (capsulas adicionadas antes do fix de 03/06), trata como minimo 0 —
+  // jamais cai em `produtos_quantidades` como fallback, porque esse campo
+  // reflete o ESTADO ATUAL ajustado pelo cliente, e usa-lo como minimo
+  // travava qualquer tentativa de diminuir/desmarcar.
   const getCapsulaMin = (item, produtoId, corId) => {
-    const mins = item.minimos_quantidades || item.produtos_quantidades || {};
+    const mins = item.minimos_quantidades || {};
     const c = mins[produtoId];
     if (c === undefined || c === null) return 0;
     if (typeof c === 'number') return c;
