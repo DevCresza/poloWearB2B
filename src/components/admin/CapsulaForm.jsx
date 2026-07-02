@@ -537,8 +537,9 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
                                                   size="sm"
                                                   className="h-6 w-6 p-0"
                                                   onClick={() => {
-                                                    // Decrementa mas MANTEM a cor no array mesmo em 0
-                                                    // (cliente precisa ver a cor pra eventualmente aumentar).
+                                                    // Decrementa mas MANTEM a cor no array mesmo em 0.
+                                                    // Se a cor ainda nao existe no array (capsulas antigas),
+                                                    // adiciona com qtd 0 pra manter presenca visivel.
                                                     let newQuantidadesVariantes = [...quantidadesVariantes];
                                                     const idx = newQuantidadesVariantes.findIndex(v => v.cor_id === variante.id);
                                                     if (idx >= 0) {
@@ -546,6 +547,13 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
                                                         ...newQuantidadesVariantes[idx],
                                                         quantidade: Math.max(0, (newQuantidadesVariantes[idx].quantidade || 0) - 1)
                                                       };
+                                                    } else {
+                                                      newQuantidadesVariantes.push({
+                                                        cor_id: variante.id,
+                                                        cor_nome: variante.cor_nome,
+                                                        cor_hex: variante.cor_codigo_hex || variante.cor_hex,
+                                                        quantidade: 0
+                                                      });
                                                     }
 
                                                     setFormData(prev => ({
@@ -602,11 +610,15 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
                                                   size="sm"
                                                   className="h-6 w-6 p-0"
                                                   onClick={() => {
+                                                    // Incremento imutavel (spread), sem mutar objeto original.
                                                     let newQuantidadesVariantes = [...quantidadesVariantes];
                                                     const existingIndex = newQuantidadesVariantes.findIndex(v => v.cor_id === variante.id);
 
                                                     if (existingIndex >= 0) {
-                                                      newQuantidadesVariantes[existingIndex].quantidade++;
+                                                      newQuantidadesVariantes[existingIndex] = {
+                                                        ...newQuantidadesVariantes[existingIndex],
+                                                        quantidade: (newQuantidadesVariantes[existingIndex].quantidade || 0) + 1
+                                                      };
                                                     } else {
                                                       newQuantidadesVariantes.push({
                                                         cor_id: variante.id,
