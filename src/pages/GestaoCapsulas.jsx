@@ -117,7 +117,14 @@ export default function GestaoCapsulas() {
               <p>Carregando...</p>
             ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {capsulas.map(capsula => (
+                {[...capsulas]
+                  .sort((a, b) => {
+                    const oa = Number(a.ordem_exibicao) || 0;
+                    const ob = Number(b.ordem_exibicao) || 0;
+                    if (oa !== ob) return oa - ob;
+                    return (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
+                  })
+                  .map(capsula => (
                   <Card key={capsula.id} className="bg-slate-100 rounded-2xl shadow-[5px_5px_10px_#b8b9be,-5px_-5px_10px_#ffffff] p-4 space-y-3">
                     <div className="rounded-lg aspect-video overflow-hidden bg-gradient-to-br from-purple-100 to-pink-100">
                       {capsula.imagem_capa_url ? (
@@ -136,7 +143,12 @@ export default function GestaoCapsulas() {
                         </div>
                       )}
                     </div>
-                    <h3 className="font-bold text-lg text-gray-800">{capsula.nome}</h3>
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-bold text-lg text-gray-800">{capsula.nome}</h3>
+                      <span className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full" title="Ordem de exibição">
+                        #{Number(capsula.ordem_exibicao) || 0}
+                      </span>
+                    </div>
                     <p className="text-sm text-gray-600 line-clamp-2">{capsula.descricao}</p>
                     <p className="text-sm font-medium text-blue-600">{capsula.produto_ids?.length || 0} produtos</p>
                     {capsula.fornecedor_id && fornecedoresMap[capsula.fornecedor_id] && (

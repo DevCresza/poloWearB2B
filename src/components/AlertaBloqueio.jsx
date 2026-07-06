@@ -42,6 +42,10 @@ export default function AlertaBloqueio() {
           const titulosVencidos = (titulosCliente || []).filter(t => {
             if (t.status !== 'pendente') return false;
             if (!t.data_vencimento) return false;
+            // Ignora placeholders (sem parcela_numero) — sao criados no checkout
+            // com vencimento generico e viram lixo apos o fornecedor emitir NF
+            // com as parcelas reais. Sem esse filtro geram bloqueio fantasma.
+            if (!t.parcela_numero) return false;
             const dv = new Date(t.data_vencimento + 'T00:00:00');
             return dv < hoje;
           });
@@ -109,6 +113,8 @@ export default function AlertaBloqueio() {
       const titulosVencidos = (titulosLoja || []).filter(t => {
         if (t.status !== 'pendente') return false;
         if (!t.data_vencimento) return false;
+        // Idem checkUser: ignora placeholders sem parcela_numero
+        if (!t.parcela_numero) return false;
         const dv = new Date(t.data_vencimento + 'T00:00:00');
         return dv < hoje;
       });

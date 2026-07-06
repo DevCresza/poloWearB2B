@@ -27,6 +27,7 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
     fornecedor_id: null,
     disponivel_franqueado: true,
     disponivel_multimarca: false,
+    ordem_exibicao: 0,
   });
   const [allProdutos, setAllProdutos] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
@@ -93,6 +94,7 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
         produto_ids: capsula.produto_ids || [],
         produtos_quantidades: quantidades,
         ativa: capsula.ativa !== undefined ? capsula.ativa : true,
+        ordem_exibicao: Number.isFinite(Number(capsula.ordem_exibicao)) ? Number(capsula.ordem_exibicao) : 0,
         fornecedor_id: capsula.fornecedor_id || null,
         disponivel_franqueado: capsula.disponivel_franqueado !== false,
         disponivel_multimarca: capsula.disponivel_multimarca === true,
@@ -377,6 +379,19 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
               <div className="flex items-center space-x-2">
                 <Switch id="ativa" checked={formData.ativa} onCheckedChange={checked => setFormData({...formData, ativa: checked})} />
                 <Label htmlFor="ativa">Cápsula Ativa</Label>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="ordem_exibicao">Ordem de exibição</Label>
+                <Input
+                  id="ordem_exibicao"
+                  type="number"
+                  min="0"
+                  value={formData.ordem_exibicao}
+                  onChange={e => setFormData({...formData, ordem_exibicao: Math.max(0, parseInt(e.target.value) || 0)})}
+                  className="max-w-[120px]"
+                />
+                <p className="text-xs text-gray-500">Menor número aparece primeiro no catálogo. Empates ficam em ordem alfabética.</p>
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">

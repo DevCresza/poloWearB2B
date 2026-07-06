@@ -523,7 +523,14 @@ export default function Catalogo() {
     (!p.controla_estoque || p.permite_venda_sem_estoque || getProductTotalStock(p) > 0)
   );
   
-  const activeCapsulas = capsulas.filter(c => c.ativa);
+  const activeCapsulas = capsulas
+    .filter(c => c.ativa)
+    .sort((a, b) => {
+      const oa = Number(a.ordem_exibicao) || 0;
+      const ob = Number(b.ordem_exibicao) || 0;
+      if (oa !== ob) return oa - ob;
+      return (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
+    });
 
   // IDs dos produtos campeões de venda (top 8) — usado para o selo "Mais Vendido"
   const topVendidosIds = useMemo(() => {

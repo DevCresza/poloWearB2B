@@ -225,8 +225,12 @@ export default function CarteiraFinanceira() {
 
   const calculateStats = (titulosList) => {
     const hoje = new Date();
-    const proximos7Dias = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const proximos7Dias = new Date(hoje);
     proximos7Dias.setDate(hoje.getDate() + 7);
+
+    // Helper: converte 'YYYY-MM-DD' pra Date local sem escorregar de fuso
+    const parseDataVenc = (s) => (s ? new Date(s + 'T00:00:00') : null);
 
     const totalAberto = titulosList
       .filter(t => t.status === 'pendente')
@@ -234,15 +238,17 @@ export default function CarteiraFinanceira() {
 
     const totalVencido = titulosList
       .filter(t => {
-        const vencimento = new Date(t.data_vencimento);
-        return t.status === 'pendente' && vencimento < hoje;
+        if (t.status !== 'pendente') return false;
+        const vencimento = parseDataVenc(t.data_vencimento);
+        return vencimento && vencimento < hoje;
       })
       .reduce((sum, t) => sum + (t.valor || 0), 0);
 
     const proximosVencimentos = titulosList
       .filter(t => {
-        const vencimento = new Date(t.data_vencimento);
-        return t.status === 'pendente' && vencimento >= hoje && vencimento <= proximos7Dias;
+        if (t.status !== 'pendente') return false;
+        const vencimento = parseDataVenc(t.data_vencimento);
+        return vencimento && vencimento >= hoje && vencimento <= proximos7Dias;
       })
       .length;
 
