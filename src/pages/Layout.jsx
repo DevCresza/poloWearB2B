@@ -28,6 +28,7 @@ import {
   BookOpen,
   Mail,
   Menu,
+  Send,
   X
 } from 'lucide-react';
 import AlertaBloqueio from '../components/AlertaBloqueio';
@@ -95,7 +96,7 @@ export default function Layout({ children, currentPageName }) {
         const portalPages = [
           'PortalDashboard', 'UserManagement', 'Catalogo', 'MeusPedidos',
           'PedidosAdmin', 'Admin', 'GestaoProdutos', 'GestaoFornecedores',
-          'CrmDashboard', 'GestaoClientes', 'GestaoCapsulas', 'GestaoEstoque',
+          'CrmDashboard', 'GestaoClientes', 'GestaoCapsulas', 'EmissaoLote', 'GestaoEstoque',
           'Carrinho', 'PedidosFornecedor', 'CarteiraFinanceira', 'HistoricoCompras',
           'DashboardAdmin', 'GestaoMetas', 'Recursos', 'MeuPerfil'
         ];
@@ -122,7 +123,7 @@ export default function Layout({ children, currentPageName }) {
   const portalPages = [
     'PortalDashboard', 'UserManagement', 'Catalogo', 'MeusPedidos',
     'PedidosAdmin', 'Admin', 'GestaoProdutos', 'GestaoFornecedores',
-    'CrmDashboard', 'GestaoClientes', 'GestaoCapsulas', 'GestaoEstoque',
+    'CrmDashboard', 'GestaoClientes', 'GestaoCapsulas', 'EmissaoLote', 'GestaoEstoque',
     'Carrinho', 'PedidosFornecedor', 'CarteiraFinanceira', 'HistoricoCompras',
     'DashboardAdmin', 'GestaoMetas', 'Recursos', 'MeuPerfil' // Added 'MeuPerfil'
   ];
@@ -259,6 +260,10 @@ export default function Layout({ children, currentPageName }) {
             <ImageIcon className="w-5 h-5" />
             <span>Cápsulas</span>
           </Link>
+          <Link to={createPageUrl('EmissaoLote')} className={getNavLinkClasses('EmissaoLote')} onClick={() => setMobileMenuOpen(false)}>
+            <Send className="w-5 h-5" />
+            <span>Emissão em Lote</span>
+          </Link>
 
           <p className={sectionTitleClasses}>Gestão</p>
           <Link to={createPageUrl('Admin')} className={getNavLinkClasses('Admin')} onClick={() => setMobileMenuOpen(false)}>
@@ -387,6 +392,7 @@ export default function Layout({ children, currentPageName }) {
                   'GestaoProdutos': 'Gestão de Produtos',
                   'GestaoEstoque': 'Gestão de Estoque',
                   'GestaoCapsulas': 'Gestão de Cápsulas',
+                  'EmissaoLote': 'Emissão em Lote',
                   'GestaoFornecedores': 'Gestão de Fornecedores',
                   'GestaoClientes': 'Gestão de Clientes',
                   'GestaoMetas': 'Gestão de Metas',

@@ -28,6 +28,8 @@ import GestaoClientes from "./GestaoClientes";
 
 import GestaoCapsulas from "./GestaoCapsulas";
 
+import EmissaoLote from "./EmissaoLote";
+
 import GestaoEstoque from "./GestaoEstoque";
 
 import Carrinho from "./Carrinho";
@@ -83,6 +85,8 @@ const PAGES = {
     GestaoClientes: GestaoClientes,
     
     GestaoCapsulas: GestaoCapsulas,
+
+    EmissaoLote: EmissaoLote,
     
     GestaoEstoque: GestaoEstoque,
     
@@ -160,6 +164,8 @@ function PagesContent() {
                 <Route path="/GestaoClientes" element={<GestaoClientes />} />
                 
                 <Route path="/GestaoCapsulas" element={<GestaoCapsulas />} />
+
+                <Route path="/EmissaoLote" element={<EmissaoLote />} />
                 
                 <Route path="/GestaoEstoque" element={<GestaoEstoque />} />
                 
