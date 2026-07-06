@@ -35,24 +35,66 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Effect 1: carrega produtos e fornecedores UMA VEZ ao montar.
+  // NAO depende de allProdutos — se dependesse, criaria loop (o proprio
+  // setAllProdutos rederiva a dep e o effect roda de novo pra sempre).
   useEffect(() => {
-    if (capsula) {
-      let quantidades = {};
+    const loadData = async () => {
       try {
-        // JSONB pode vir como objeto ou string
-        if (typeof capsula.produtos_quantidades === 'string') {
-          quantidades = JSON.parse(capsula.produtos_quantidades);
-        } else if (typeof capsula.produtos_quantidades === 'object' && capsula.produtos_quantidades !== null) {
-          quantidades = capsula.produtos_quantidades;
+        let produtosList;
+        if (currentUser?.tipo_negocio === 'fornecedor' && currentUser?.fornecedor_id) {
+          produtosList = await Produto.filter({ fornecedor_id: currentUser.fornecedor_id });
+        } else {
+          produtosList = await Produto.list();
         }
-      } catch (e) {
-        console.error('Erro ao fazer parse de produtos_quantidades:', e);
-        quantidades = {};
+        const fornecedoresList = await Fornecedor.list();
+        setAllProdutos(produtosList || []);
+        setFornecedores(fornecedoresList || []);
+      } catch (error) {
+        console.error('Erro ao carregar dados:', error);
       }
+    };
+    loadData();
 
-      // Sincroniza variantes: para cada produto da capsula que tem variantes_cor,
-      // se alguma cor do produto NAO esta no array salvo, adiciona com qtd 0.
-      // Isso garante que capsulas antigas mostrem todas as cores disponiveis.
+    if (currentUser?.tipo_negocio === 'fornecedor' && currentUser?.fornecedor_id) {
+      setSelectedFornecedor(currentUser.fornecedor_id);
+    }
+  }, [currentUser]);
+
+  // Effect 2: inicializa o formData a partir da capsula. Roda so quando
+  // a capsula editada muda (id) OU quando os produtos terminam de
+  // carregar pela primeira vez. NAO re-executa nas edicoes locais do
+  // formData — se rodasse, sobrescreveria o que o admin acabou de mexer.
+  useEffect(() => {
+    if (!capsula) {
+      if (currentUser?.tipo_negocio === 'fornecedor' && currentUser?.fornecedor_id) {
+        setFormData(prev => ({ ...prev, fornecedor_id: currentUser.fornecedor_id }));
+      }
+      return;
+    }
+    // Espera os produtos carregarem antes de setar formData, pra que
+    // a sincronia de variantes rode junto e nao vire flicker (formData
+    // primeiro seta com valores do banco, depois seria sobrescrito).
+    if (allProdutos.length === 0) return;
+
+    let quantidades = {};
+    try {
+      if (typeof capsula.produtos_quantidades === 'string') {
+        quantidades = JSON.parse(capsula.produtos_quantidades);
+      } else if (typeof capsula.produtos_quantidades === 'object' && capsula.produtos_quantidades !== null) {
+        // Clona pra nao mutar o objeto original (que ficaria compartilhado
+        // com props externas)
+        quantidades = JSON.parse(JSON.stringify(capsula.produtos_quantidades));
+      }
+    } catch (e) {
+      console.error('Erro ao fazer parse de produtos_quantidades:', e);
+      quantidades = {};
+    }
+
+    // Sincroniza variantes: cores do produto que nao estao no array salvo
+    // sao adicionadas com qtd 0. Isso permite editar capsulas antigas sem
+    // perder cores novas do produto.
+    {
       try {
         const produtoIds = capsula.produto_ids || [];
         produtoIds.forEach(pid => {
@@ -86,52 +128,26 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
       } catch (e) {
         console.warn('Erro ao sincronizar variantes da capsula:', e);
       }
-
-      setFormData({
-        nome: capsula.nome || '',
-        descricao: capsula.descricao || '',
-        imagem_capa_url: capsula.imagem_capa_url || '',
-        produto_ids: capsula.produto_ids || [],
-        produtos_quantidades: quantidades,
-        ativa: capsula.ativa !== undefined ? capsula.ativa : true,
-        ordem_exibicao: Number.isFinite(Number(capsula.ordem_exibicao)) ? Number(capsula.ordem_exibicao) : 0,
-        fornecedor_id: capsula.fornecedor_id || null,
-        disponivel_franqueado: capsula.disponivel_franqueado !== false,
-        disponivel_multimarca: capsula.disponivel_multimarca === true,
-      });
-    } else if (currentUser?.tipo_negocio === 'fornecedor' && currentUser?.fornecedor_id) {
-      // Se é um novo cadastro e o usuário é fornecedor, pré-definir o fornecedor_id
-      setFormData(prev => ({
-        ...prev,
-        fornecedor_id: currentUser.fornecedor_id
-      }));
     }
 
-    // Se for fornecedor, pré-selecionar o próprio fornecedor no filtro
-    if (currentUser?.tipo_negocio === 'fornecedor' && currentUser?.fornecedor_id) {
-      setSelectedFornecedor(currentUser.fornecedor_id);
-    }
-
-    const loadData = async () => {
-      try {
-        let produtosList;
-
-        // Se for fornecedor, carregar apenas produtos do próprio fornecedor
-        if (currentUser?.tipo_negocio === 'fornecedor' && currentUser?.fornecedor_id) {
-          produtosList = await Produto.filter({ fornecedor_id: currentUser.fornecedor_id });
-        } else {
-          produtosList = await Produto.list();
-        }
-
-        const fornecedoresList = await Fornecedor.list();
-        setAllProdutos(produtosList || []);
-        setFornecedores(fornecedoresList || []);
-      } catch (error) {
-        console.error('Erro ao carregar dados:', error);
-      }
-    };
-    loadData();
-  }, [capsula, currentUser, allProdutos]);
+    setFormData({
+      nome: capsula.nome || '',
+      descricao: capsula.descricao || '',
+      imagem_capa_url: capsula.imagem_capa_url || '',
+      produto_ids: capsula.produto_ids || [],
+      produtos_quantidades: quantidades,
+      ativa: capsula.ativa !== undefined ? capsula.ativa : true,
+      ordem_exibicao: Number.isFinite(Number(capsula.ordem_exibicao)) ? Number(capsula.ordem_exibicao) : 0,
+      fornecedor_id: capsula.fornecedor_id || null,
+      disponivel_franqueado: capsula.disponivel_franqueado !== false,
+      disponivel_multimarca: capsula.disponivel_multimarca === true,
+    });
+  // Reagimos ao id da capsula editada e a chegada dos produtos.
+  // NAO depender de `capsula` inteiro (referencia nova a cada render pai
+  // faria o effect resetar o form). NAO depender de allProdutos.length
+  // 'sempre' — usamos so quando muda de 0 para >0.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capsula?.id, allProdutos.length > 0]);
 
   // Detectar fornecedor travado baseado nos produtos selecionados
   const fornecedorTravado = (() => {
@@ -341,9 +357,13 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
       } else {
         await Capsula.create(dataToSave);
       }
+      toast.success(capsula ? 'Cápsula atualizada!' : 'Cápsula criada!');
       onSuccess();
     } catch (error) {
-      toast.error('Falha ao salvar a cápsula.');
+      // Expor detalhe do erro pra diagnostico (antes ficava so 'Falha ao salvar')
+      const msg = error?.message || String(error) || 'erro desconhecido';
+      toast.error(`Falha ao salvar a cápsula: ${msg}`);
+      console.error('Erro ao salvar capsula:', error);
     } finally {
       setLoading(false);
     }
