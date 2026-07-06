@@ -13,7 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { AlertTriangle, Store, Package, Search, Send, CheckCircle, XCircle, Filter } from 'lucide-react';
 import { getPrecoGrade, getPrecoPeca } from '@/utils/precoCliente';
-import { formatCurrency } from '@/utils';
+import { formatCurrency } from '@/utils/exportUtils';
 
 // Expande a capsula em itens de pedido, respeitando o tipo_negocio do
 // user destinatario (franqueado vs multimarca). Preco vem de getPrecoGrade
