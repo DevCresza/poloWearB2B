@@ -153,13 +153,16 @@ export default function Carrinho() {
     }
   };
 
-  const removerItem = (itemId, corSelecionada = null, isCapsula = false) => {
+  const removerItem = (itemId, corSelecionada = null, isCapsula = false, tamanhoSelecionado = null) => {
     const novoCarrinho = carrinho.filter(item => {
       // Se é cápsula, apenas comparar o ID
       if (isCapsula || item.tipo === 'capsula') {
         return item.id !== itemId;
       }
-
+      // Se tem tamanho, precisa bater id + tamanho
+      if (tamanhoSelecionado) {
+        return !(item.id === itemId && item.tamanho_selecionado === tamanhoSelecionado);
+      }
       // Se não é cápsula, usar lógica antiga de produto
       if (corSelecionada) {
         return !(item.id === itemId && item.cor_selecionada?.cor_nome === corSelecionada.cor_nome);
@@ -169,9 +172,9 @@ export default function Carrinho() {
     salvarCarrinho(novoCarrinho);
   };
 
-  const atualizarQuantidade = (itemId, novaQuantidade, corSelecionada = null, isCapsula = false) => {
+  const atualizarQuantidade = (itemId, novaQuantidade, corSelecionada = null, isCapsula = false, tamanhoSelecionado = null) => {
     if (novaQuantidade <= 0) {
-      removerItem(itemId, corSelecionada, isCapsula);
+      removerItem(itemId, corSelecionada, isCapsula, tamanhoSelecionado);
       return;
     }
 
@@ -181,8 +184,10 @@ export default function Carrinho() {
         return item.id === itemId ? { ...item, quantidade: novaQuantidade } : item;
       }
 
-      // Se não é cápsula, usar lógica antiga de produto
-      const match = corSelecionada
+      // Match: por tamanho tem prioridade
+      const match = tamanhoSelecionado
+        ? item.id === itemId && item.tamanho_selecionado === tamanhoSelecionado
+        : corSelecionada
         ? item.id === itemId && item.cor_selecionada?.cor_nome === corSelecionada.cor_nome
         : item.id === itemId && !item.cor_selecionada;
 
@@ -555,6 +560,19 @@ export default function Carrinho() {
             }];
           });
         }
+        // Produto por tamanho: quantidade eh sempre em PECAS. Se for grade,
+        // o preco por peca vem da grade dividida (grade R$120 / 6 pcs = R$20).
+        const isPorTamanho = !!item.tamanho_selecionado;
+        let precoBase;
+        if (isPorTamanho) {
+          if (item.tipo_venda === 'grade' && (item.total_pecas_grade || 0) > 0) {
+            precoBase = getPrecoGrade(item, user) / item.total_pecas_grade;
+          } else {
+            precoBase = getPrecoPeca(item, user);
+          }
+        } else {
+          precoBase = item.tipo_venda === 'grade' ? getPrecoGrade(item, user) : getPrecoPeca(item, user);
+        }
         return [{
           produto_id: item.id,
           nome: item.nome,
@@ -565,11 +583,12 @@ export default function Carrinho() {
           tipo_venda: item.tipo_venda,
           quantidade: item.quantidade,
           total_pecas_grade: item.total_pecas_grade || 0,
-          preco: item.tipo_venda === 'grade' ? getPrecoGrade(item, user) : getPrecoPeca(item, user),
-          total: (item.tipo_venda === 'grade' ? getPrecoGrade(item, user) : getPrecoPeca(item, user)) * item.quantidade,
+          preco: precoBase,
+          total: precoBase * item.quantidade,
           foto: getPrimeiraFoto(item),
           grade_selecionada: item.grade_configuracao || null,
-          cor_selecionada: item.cor_selecionada || null
+          cor_selecionada: item.cor_selecionada || null,
+          tamanho_selecionado: item.tamanho_selecionado || null,
         }];
       });
 
@@ -1303,6 +1322,13 @@ export default function Carrinho() {
                                   </span>
                                 </div>
                               )}
+                              {/* Tamanho Selecionado */}
+                              {item.tamanho_selecionado && (
+                                <div className="mt-2 inline-flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5 ml-1">
+                                  <span className="text-xs font-medium text-gray-600">Tamanho:</span>
+                                  <span className="text-sm font-bold text-purple-900">{item.tamanho_selecionado}</span>
+                                </div>
+                              )}
                               <p className="text-sm text-gray-600 mt-2">
                                 {formatCurrency(preco)} cada
                               </p>
@@ -1312,7 +1338,7 @@ export default function Carrinho() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => removerItem(item.id, item.cor_selecionada)}
+                                onClick={() => removerItem(item.id, item.cor_selecionada, false, item.tamanho_selecionado)}
                                 className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -1323,7 +1349,7 @@ export default function Carrinho() {
                                   variant="outline"
                                   size="icon"
                                   className="h-8 w-8"
-                                  onClick={() => atualizarQuantidade(item.id, item.quantidade - 1, item.cor_selecionada)}
+                                  onClick={() => atualizarQuantidade(item.id, item.quantidade - 1, item.cor_selecionada, false, item.tamanho_selecionado)}
                                 >
                                   <Minus className="w-3 h-3" />
                                 </Button>
@@ -1334,7 +1360,7 @@ export default function Carrinho() {
                                   variant="outline"
                                   size="icon"
                                   className="h-8 w-8"
-                                  onClick={() => atualizarQuantidade(item.id, item.quantidade + 1, item.cor_selecionada)}
+                                  onClick={() => atualizarQuantidade(item.id, item.quantidade + 1, item.cor_selecionada, false, item.tamanho_selecionado)}
                                 >
                                   <Plus className="w-3 h-3" />
                                 </Button>

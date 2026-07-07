@@ -57,6 +57,7 @@ export default function Catalogo() {
   const [minimosQtdCapsula, setMinimosQtdCapsula] = useState({});
   const [selectedVariantColor, setSelectedVariantColor] = useState(null);
   const [quantidadesPorCor, setQuantidadesPorCor] = useState({}); // { cor_id: quantidade }
+  const [quantidadesPorTamanho, setQuantidadesPorTamanho] = useState({}); // { tamanho: qtd de pecas }
   const [adicionandoCarrinho, setAdicionandoCarrinho] = useState({});
   const [fotoAtualIndex, setFotoAtualIndex] = useState(0);
   const [capsulaFotoIndex, setCapsulaFotoIndex] = useState(0); // Índice da foto atual na galeria da cápsula
@@ -255,8 +256,37 @@ export default function Catalogo() {
     setShowDetailsModal(false);
   };
 
+  // Adiciona um item por tamanho (produto vendido por tamanho, sem variantes de cor).
+  // tamsSelecionados: Array<[tamanho, qtdPecas]> (ex.: [["36",2],["38",5]])
+  const adicionarMultiplosTamanhosAoCarrinho = (produto, tamsSelecionados) => {
+    let novoCarrinho = [...carrinho];
+    tamsSelecionados.forEach(([tamanho, qtd]) => {
+      if (!(qtd > 0)) return;
+      const idx = novoCarrinho.findIndex(item =>
+        item.id === produto.id
+        && item.tamanho_selecionado === tamanho
+        && !item.cor_selecionada
+        && item.tipo !== 'capsula'
+      );
+      if (idx >= 0) {
+        novoCarrinho[idx] = { ...novoCarrinho[idx], quantidade: (novoCarrinho[idx].quantidade || 0) + qtd };
+      } else {
+        novoCarrinho.push({
+          ...produto,
+          quantidade: qtd,
+          tamanho_selecionado: tamanho,
+          cor_selecionada: null,
+        });
+      }
+    });
+    salvarCarrinho(novoCarrinho);
+    toast.success(`${tamsSelecionados.length} tamanho(s) adicionado(s) ao carrinho!`);
+    setShowDetailsModal(false);
+  };
+
   const adicionarDiretoAoCarrinho = (produto) => {
-    if (produto.tem_variantes_cor) {
+    if (produto.tem_variantes_cor || produto.venda_por_tamanho) {
+      // Precisa abrir modal pra escolher cor ou tamanho
       openProductDetails(produto);
       return;
     }
@@ -747,6 +777,7 @@ export default function Catalogo() {
     setQuantidadeModal(produto.pedido_minimo_grades || 1);
     setSelectedVariantColor(null);
     setQuantidadesPorCor({}); // Reset quantidades por cor
+    setQuantidadesPorTamanho({}); // Reset quantidades por tamanho
     setFotoAtualIndex(0); // Reset foto para primeira
     setShowDetailsModal(true);
   };
@@ -1746,8 +1777,117 @@ export default function Catalogo() {
                   </div>
                 )}
                 
-                {/* Quantity Selector - Só para produtos sem variantes */}
-                {!selectedProduto.tem_variantes_cor && (
+                {/* Novo: Selecao por TAMANHO (venda_por_tamanho) — so quando NAO tem variantes de cor */}
+                {!selectedProduto.tem_variantes_cor && selectedProduto.venda_por_tamanho && (() => {
+                  let gradeConfig = {};
+                  try {
+                    gradeConfig = typeof selectedProduto.grade_configuracao === 'string'
+                      ? JSON.parse(selectedProduto.grade_configuracao)
+                      : (selectedProduto.grade_configuracao || {});
+                  } catch { gradeConfig = {}; }
+                  const tamanhos = gradeConfig.tamanhos_disponiveis || [];
+                  const estoqueMap = (() => {
+                    const raw = selectedProduto.estoque_por_tamanho;
+                    if (!raw) return {};
+                    if (typeof raw === 'string') { try { return JSON.parse(raw); } catch { return {}; } }
+                    return raw;
+                  })();
+                  const totalSelecionado = Object.values(quantidadesPorTamanho).reduce((s, v) => s + (Number(v) || 0), 0);
+                  const isGrade = selectedProduto.tipo_venda === 'grade';
+                  const alvoGrade = (selectedProduto.total_pecas_grade || 0);
+                  const precoPorPeca = getPricePerPiece(selectedProduto);
+                  const precoTotal = isGrade
+                    ? (getPrecoGrade(selectedProduto, user) * (alvoGrade > 0 ? Math.floor(totalSelecionado / alvoGrade) : 0))
+                    : (precoPorPeca * totalSelecionado);
+
+                  return (
+                    <div className="space-y-3">
+                      <div>
+                        <Label className="font-semibold">Quantidade por Tamanho</Label>
+                        <p className="text-xs text-gray-600">
+                          {isGrade
+                            ? `Distribua ${alvoGrade} peças entre os tamanhos pra formar 1 grade completa (múltiplos de ${alvoGrade}).`
+                            : 'Escolha quantas peças de cada tamanho quer.'}
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                        {tamanhos.map(t => {
+                          const qtd = quantidadesPorTamanho[t] || 0;
+                          const estoqueDisponivel = Number(estoqueMap[t] || 0);
+                          const semEstoque = selectedProduto.disponibilidade === 'pronta_entrega'
+                            && selectedProduto.controla_estoque
+                            && !selectedProduto.permite_venda_sem_estoque
+                            && estoqueDisponivel <= 0;
+                          const noLimite = selectedProduto.disponibilidade === 'pronta_entrega'
+                            && selectedProduto.controla_estoque
+                            && !selectedProduto.permite_venda_sem_estoque
+                            && qtd >= estoqueDisponivel;
+                          return (
+                            <div key={t} className={`p-3 rounded-lg border-2 transition-all ${qtd > 0 ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white'} ${semEstoque ? 'opacity-50' : ''}`}>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="font-semibold">{t}</span>
+                                <span className="text-xs text-gray-500">
+                                  {selectedProduto.disponibilidade === 'pronta_entrega' && selectedProduto.controla_estoque ? `(estoque: ${estoqueDisponivel})` : ''}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  type="button" variant="outline" size="sm" className="h-8 w-8 p-0"
+                                  disabled={qtd <= 0}
+                                  onClick={() => setQuantidadesPorTamanho(prev => ({ ...prev, [t]: Math.max(0, (prev[t] || 0) - 1) }))}
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </Button>
+                                <Input
+                                  type="number" min="0" value={qtd}
+                                  disabled={semEstoque}
+                                  className="w-full h-8 text-center text-sm"
+                                  onChange={(e) => {
+                                    let v = Math.max(0, parseInt(e.target.value) || 0);
+                                    if (selectedProduto.disponibilidade === 'pronta_entrega'
+                                        && selectedProduto.controla_estoque
+                                        && !selectedProduto.permite_venda_sem_estoque) {
+                                      v = Math.min(v, estoqueDisponivel);
+                                    }
+                                    setQuantidadesPorTamanho(prev => ({ ...prev, [t]: v }));
+                                  }}
+                                />
+                                <Button
+                                  type="button" variant="outline" size="sm" className="h-8 w-8 p-0"
+                                  disabled={semEstoque || noLimite}
+                                  onClick={() => setQuantidadesPorTamanho(prev => ({ ...prev, [t]: (prev[t] || 0) + 1 }))}
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="bg-gray-50 p-4 rounded-lg border">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="font-semibold text-gray-700">Total: </span>
+                            <span className="font-bold text-blue-600">{totalSelecionado} peças</span>
+                            {isGrade && alvoGrade > 0 && (
+                              <span className="text-sm text-gray-500 ml-2">
+                                {totalSelecionado % alvoGrade === 0 && totalSelecionado > 0
+                                  ? `✓ ${totalSelecionado / alvoGrade} grade(s) completa(s)`
+                                  : `precisa somar múltiplos de ${alvoGrade}`}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-2xl font-bold text-blue-600">
+                            {formatCurrency(precoTotal)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Quantity Selector - Só para produtos sem variantes e sem venda por tamanho */}
+                {!selectedProduto.tem_variantes_cor && !selectedProduto.venda_por_tamanho && (
                   <div className="space-y-3">
                     <Label className="font-semibold">Quantidade de {selectedProduto.tipo_venda === 'grade' ? 'Grades' : 'Unidades'}:</Label>
                     <div className="flex items-center gap-4">
@@ -1803,6 +1943,25 @@ export default function Catalogo() {
                 {/* Add to Cart Button */}
                 <Button
                   onClick={() => {
+                    // Prioridade 1: venda por tamanho (produto sem variantes de cor)
+                    if (!selectedProduto.tem_variantes_cor && selectedProduto.venda_por_tamanho) {
+                      const tamsSelecionados = Object.entries(quantidadesPorTamanho).filter(([_, q]) => q > 0);
+                      if (tamsSelecionados.length === 0) {
+                        toast.info('Escolha ao menos um tamanho com quantidade maior que zero');
+                        return;
+                      }
+                      const totalPecas = tamsSelecionados.reduce((s, [, q]) => s + q, 0);
+                      // Se grade, precisa somar multiplo do total_pecas_grade
+                      if (selectedProduto.tipo_venda === 'grade') {
+                        const alvo = selectedProduto.total_pecas_grade || 0;
+                        if (alvo > 0 && totalPecas % alvo !== 0) {
+                          toast.error(`Grade fechada: total precisa ser múltiplo de ${alvo} peças (atual: ${totalPecas}).`);
+                          return;
+                        }
+                      }
+                      adicionarMultiplosTamanhosAoCarrinho(selectedProduto, tamsSelecionados);
+                      return;
+                    }
                     // Se produto tem variantes de cor (unitário ou grade), adiciona múltiplas cores com BATCH PROCESSING
                     if (selectedProduto.tem_variantes_cor) {
                       const variantesComQuantidade = Object.entries(quantidadesPorCor).filter(([_, qtd]) => qtd > 0);

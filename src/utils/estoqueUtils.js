@@ -48,6 +48,29 @@ async function ajustarEstoque(itens, sinal) {
         continue;
       }
 
+      // Produto vendido POR TAMANHO: cada item tem tamanho_selecionado e
+      // a quantidade eh em pecas. Baixa em estoque_por_tamanho[tam].
+      if (produto.venda_por_tamanho) {
+        let mapa = produto.estoque_por_tamanho;
+        if (typeof mapa === 'string') {
+          try { mapa = JSON.parse(mapa); } catch { mapa = {}; }
+        }
+        mapa = { ...(mapa || {}) };
+        itensDoProduto.forEach((item) => {
+          const tam = item.tamanho_selecionado;
+          if (!tam) return;
+          const qtd = Number(item.quantidade) || 0;
+          const atual = Number(mapa[tam]) || 0;
+          mapa[tam] = Math.max(0, atual + sinal * qtd);
+        });
+        const totalGeral = Object.values(mapa).reduce((s, v) => s + (Number(v) || 0), 0);
+        await Produto.update(produtoId, {
+          estoque_por_tamanho: mapa,
+          estoque_atual_grades: totalGeral,
+        });
+        continue;
+      }
+
       if (produto.tem_variantes_cor) {
         const variantes = parseVariantes(produto.variantes_cor);
         if (variantes.length === 0) continue;
