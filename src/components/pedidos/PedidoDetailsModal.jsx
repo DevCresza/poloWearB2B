@@ -1381,6 +1381,13 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                         <span className="text-sm font-semibold text-gray-900">{item.cor_selecionada.cor_nome}</span>
                       </div>
                     )}
+                    {/* Mostrar tamanho selecionado se houver */}
+                    {item.tamanho_selecionado && (
+                      <div className="mt-2 ml-1 inline-flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5">
+                        <span className="text-xs font-medium text-gray-600">Tamanho:</span>
+                        <span className="text-sm font-bold text-purple-900">{item.tamanho_selecionado}</span>
+                      </div>
+                    )}
 
                     <div className="mt-2 flex items-center gap-4 flex-wrap">
                       <Badge variant="outline">

@@ -354,13 +354,23 @@ export default function GestaoEstoque() {
                           try { prodVariantes = typeof produto.variantes_cor === 'string' ? JSON.parse(produto.variantes_cor) : (produto.variantes_cor || []); } catch(e) { prodVariantes = []; }
                           if (!Array.isArray(prodVariantes)) prodVariantes = [];
                         }
+                        // Se venda por tamanho, montar lista de tamanhos com estoque
+                        let prodTamanhos = [];
+                        if (produto.venda_por_tamanho) {
+                          let gc = {};
+                          try { gc = typeof produto.grade_configuracao === 'string' ? JSON.parse(produto.grade_configuracao) : (produto.grade_configuracao || {}); } catch(e) { gc = {}; }
+                          const tams = gc.tamanhos_disponiveis || [];
+                          let estoqueMap = {};
+                          try { estoqueMap = typeof produto.estoque_por_tamanho === 'string' ? JSON.parse(produto.estoque_por_tamanho) : (produto.estoque_por_tamanho || {}); } catch(e) { estoqueMap = {}; }
+                          prodTamanhos = tams.map(t => ({ tamanho: t, estoque: Number(estoqueMap[t]) || 0 }));
+                        }
 
                         return (
                           <React.Fragment key={produto.id}>
                             <TableRow>
                               <TableCell>
                                 <div className="flex items-center gap-2">
-                                  {prodVariantes.length > 0 && (
+                                  {(prodVariantes.length > 0 || prodTamanhos.length > 0) && (
                                     <Button variant="ghost" size="sm" className="p-0 h-6 w-6" onClick={() => setExpandedProdutos(prev => ({...prev, [produto.id]: !prev[produto.id]}))}>
                                       {expandedProdutos[produto.id] ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                     </Button>
@@ -424,6 +434,30 @@ export default function GestaoEstoque() {
                                     if (est <= min) return <Badge className="bg-orange-100 text-orange-800 text-xs">Baixo</Badge>;
                                     return <Badge className="bg-green-100 text-green-800 text-xs">Normal</Badge>;
                                   })()}
+                                </TableCell>
+                                <TableCell></TableCell>
+                              </TableRow>
+                            ))}
+                            {expandedProdutos[produto.id] && prodTamanhos.map((t, ti) => (
+                              <TableRow key={`${produto.id}-tam-${ti}`} className="bg-purple-50/40">
+                                <TableCell className="pl-12">
+                                  <div className="flex items-center gap-2">
+                                    <span className="inline-flex items-center justify-center min-w-[36px] h-6 px-2 rounded-md border border-purple-200 bg-white text-xs font-bold text-purple-900">
+                                      {t.tamanho}
+                                    </span>
+                                    <span className="text-xs text-gray-500">tamanho</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell></TableCell>
+                                <TableCell className="text-center">
+                                  <span className="text-sm font-medium">{t.estoque}</span>
+                                  <span className="text-xs text-gray-600"> peças</span>
+                                </TableCell>
+                                <TableCell></TableCell>
+                                <TableCell className="text-center">
+                                  {t.estoque === 0
+                                    ? <Badge className="bg-red-100 text-red-800 text-xs">Sem Estoque</Badge>
+                                    : <Badge className="bg-green-100 text-green-800 text-xs">Disponível</Badge>}
                                 </TableCell>
                                 <TableCell></TableCell>
                               </TableRow>
