@@ -62,6 +62,10 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
     fotos: [],
     tem_variantes_cor: false, // New field
     variantes_cor: [], // New field
+    // Venda por tamanho: cliente escolhe qtd por tamanho no catalogo.
+    // Se tipo_venda=grade, deve somar total_pecas_grade. Se avulso, livre.
+    venda_por_tamanho: false,
+    estoque_por_tamanho: {}, // { "36": 20, "37": 15, ... }
     is_destaque: false,
     is_mais_vendido: false,
     ativo: true,
@@ -208,6 +212,10 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
         fotos: fotos,
         variantes_cor: variantes,
         tem_variantes_cor: produto.tem_variantes_cor || false,
+        venda_por_tamanho: produto.venda_por_tamanho === true,
+        estoque_por_tamanho: (typeof produto.estoque_por_tamanho === 'string'
+          ? (() => { try { return JSON.parse(produto.estoque_por_tamanho); } catch { return {}; } })()
+          : (produto.estoque_por_tamanho || {})),
         // Ensure date fields are correctly formatted for input type="date"
         data_inicio_venda: produto.data_inicio_venda ? new Date(produto.data_inicio_venda).toISOString().split('T')[0] : '',
         data_limite_venda: produto.data_limite_venda ? new Date(produto.data_limite_venda).toISOString().split('T')[0] : '',
@@ -763,6 +771,38 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                   Configuração de Grade
                 </h3>
 
+                {/* Novo: Venda por tamanho.
+                    Se marcado, o cliente escolhe qtd por tamanho no catalogo.
+                    Se tipo_venda = grade, deve somar total_pecas_grade.
+                    Se avulso/unitario, escolhe qtd livre por tamanho. */}
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="venda_por_tamanho"
+                      checked={!!formData.venda_por_tamanho}
+                      onCheckedChange={(checked) => setFormData(prev => ({
+                        ...prev,
+                        venda_por_tamanho: !!checked,
+                        // Ao desligar, zera estoque_por_tamanho
+                        estoque_por_tamanho: checked ? (prev.estoque_por_tamanho || {}) : {}
+                      }))}
+                      className="mt-0.5"
+                    />
+                    <div className="flex-1">
+                      <Label htmlFor="venda_por_tamanho" className="font-semibold text-purple-900 cursor-pointer">
+                        Vende por tamanho (cliente escolhe quantidade por tamanho)
+                      </Label>
+                      <p className="text-xs text-purple-800 mt-1">
+                        Marque quando o produto é vendido POR TAMANHO — ex.: chinelo em 36/37/38/39/40 ou camisa em P/M/G/GG.
+                        O cliente vai escolher quantas peças de cada tamanho quer.
+                        {' '}<strong>Selecione os tamanhos disponíveis abaixo.</strong>
+                        {' '}Se o tipo de venda for GRADE, ele precisará somar o total exigido pela grade;
+                        se for AVULSO, ele escolhe livremente.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label>Tipo de Venda</Label>
                   <Select value={formData.tipo_venda || 'grade'} onValueChange={(value) => setFormData({...formData, tipo_venda: value})}>
@@ -776,12 +816,14 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                   </Select>
                 </div>
 
-                {formData.tipo_venda === 'grade' && (
+                {(formData.tipo_venda === 'grade' || formData.venda_por_tamanho) && (
                   <>
                     <Alert>
                       <AlertTriangle className="h-4 w-4" />
                       <AlertDescription>
-                        Selecione os tamanhos disponíveis e defina a quantidade de cada um na grade.
+                        {formData.tipo_venda === 'grade'
+                          ? 'Selecione os tamanhos disponíveis e defina a quantidade de cada um na grade.'
+                          : 'Selecione os tamanhos disponíveis para venda unitária por tamanho.'}
                       </AlertDescription>
                     </Alert>
 
@@ -831,9 +873,9 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                       </div>
                     </div>
 
-                    {tamanhoSelecionado.length > 0 && (
+                    {tamanhoSelecionado.length > 0 && formData.tipo_venda === 'grade' && (
                       <div className="bg-white rounded-lg p-6 space-y-4">
-                        <h4 className="font-semibold">Quantidade por Tamanho:</h4>
+                        <h4 className="font-semibold">Quantidade por Tamanho na Grade:</h4>
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                           {ordenarTamanhos([...tamanhoSelecionado]).map(tamanho => (
                             <div key={tamanho} className="space-y-2">
@@ -854,6 +896,53 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                             <span className="font-semibold text-blue-900">Total de Peças na Grade:</span>
                             <span className="text-2xl font-bold text-blue-600">
                               {formData.total_pecas_grade} peças
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Estoque por tamanho (aparece so quando venda_por_tamanho=true) */}
+                    {tamanhoSelecionado.length > 0 && formData.venda_por_tamanho && (
+                      <div className="bg-white rounded-lg p-6 space-y-4 border-2 border-purple-200">
+                        <div>
+                          <h4 className="font-semibold text-purple-900">Estoque Disponível por Tamanho</h4>
+                          <p className="text-xs text-gray-600 mt-1">
+                            Informe quantas peças você tem em estoque de cada tamanho.
+                            {' '}<strong>Quando um cliente comprar, a quantidade escolhida por tamanho será descontada aqui.</strong>
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                          {ordenarTamanhos([...tamanhoSelecionado]).map(tamanho => (
+                            <div key={tamanho} className="space-y-2">
+                              <Label htmlFor={`est-${tamanho}`} className="flex items-center justify-between">
+                                <span>{tamanho}</span>
+                                <span className="text-xs text-gray-400 font-normal">pçs</span>
+                              </Label>
+                              <Input
+                                id={`est-${tamanho}`}
+                                type="number"
+                                min="0"
+                                value={(formData.estoque_por_tamanho || {})[tamanho] ?? 0}
+                                onChange={(e) => {
+                                  const v = Math.max(0, parseInt(e.target.value) || 0);
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    estoque_por_tamanho: {
+                                      ...(prev.estoque_por_tamanho || {}),
+                                      [tamanho]: v
+                                    }
+                                  }));
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-purple-900">Total em Estoque:</span>
+                            <span className="text-2xl font-bold text-purple-600">
+                              {ordenarTamanhos([...tamanhoSelecionado]).reduce((s, t) => s + ((formData.estoque_por_tamanho || {})[t] || 0), 0)} peças
                             </span>
                           </div>
                         </div>
