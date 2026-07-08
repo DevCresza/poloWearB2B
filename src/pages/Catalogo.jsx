@@ -335,6 +335,15 @@ export default function Catalogo() {
               : getPrecoPeca(produto, user);
             precoTotalCapsula += precoPorItem * quantidade;
           });
+        } else if (qtdConfig && typeof qtdConfig === 'object' && Array.isArray(qtdConfig.tamanhos)) {
+          // Produto por tamanho na capsula: quantidade eh em pecas
+          const pecasGrade = parseInt(produto.total_pecas_grade) || 1;
+          const precoPorPeca = produto.tipo_venda === 'grade'
+            ? (getPrecoGrade(produto, user) / pecasGrade)
+            : getPrecoPeca(produto, user);
+          qtdConfig.tamanhos.forEach(t => {
+            precoTotalCapsula += precoPorPeca * (t.quantidade || 0);
+          });
         } else if (typeof qtdConfig === 'number') {
           // Produto sem variantes
           const quantidade = qtdConfig;
@@ -768,6 +777,34 @@ export default function Catalogo() {
         });
         updated[produtoId] = { ...c, variantes };
       }
+      return updated;
+    });
+  };
+
+  // Helpers de tamanho na capsula (paralelo aos de cor)
+  const getQtdAjustadaTamanho = (produtoId, tamanho) => {
+    const c = ajustesQtdCapsula[produtoId];
+    if (!c || typeof c !== 'object' || !Array.isArray(c.tamanhos)) return 0;
+    return c.tamanhos.find(t => t.tamanho === tamanho)?.quantidade || 0;
+  };
+  const getQtdMinimaTamanho = (produtoId, tamanho) => {
+    const c = minimosQtdCapsula[produtoId];
+    if (!c || typeof c !== 'object' || !Array.isArray(c.tamanhos)) return 0;
+    return c.tamanhos.find(t => t.tamanho === tamanho)?.quantidade || 0;
+  };
+  const ajustarQtdTamanhoCapsula = (produtoId, tamanho, delta) => {
+    setAjustesQtdCapsula(prev => {
+      const updated = { ...prev };
+      const c = updated[produtoId];
+      if (!c || typeof c !== 'object' || !Array.isArray(c.tamanhos)) return prev;
+      const tamsMin = Array.isArray(minimosQtdCapsula[produtoId]?.tamanhos)
+        ? minimosQtdCapsula[produtoId].tamanhos
+        : [];
+      const min = (tamsMin.find(t => t.tamanho === tamanho)?.quantidade) || 0;
+      const tamanhos = c.tamanhos.map(t => t.tamanho === tamanho
+        ? { ...t, quantidade: Math.max(min, (t.quantidade || 0) + delta) }
+        : t);
+      updated[produtoId] = { ...c, tamanhos };
       return updated;
     });
   };
@@ -2294,6 +2331,46 @@ export default function Catalogo() {
                                 </div>
                               );
                             })()}
+
+                            {/* Mostrar composição de tamanhos (produto por tamanho na capsula) */}
+                            {qtdConfig && typeof qtdConfig === 'object' && Array.isArray(qtdConfig.tamanhos) && qtdConfig.tamanhos.length > 0 && (
+                              <div className="mt-3 space-y-2">
+                                <p className="text-xs font-semibold text-gray-700">Tamanhos incluídos:</p>
+                                {qtdConfig.tamanhos.map((tamConfig, idx) => {
+                                  const qtdAtual = getQtdAjustadaTamanho(produtoId, tamConfig.tamanho);
+                                  const qtdMin = getQtdMinimaTamanho(produtoId, tamConfig.tamanho);
+                                  const podeDecrementar = qtdAtual > qtdMin;
+                                  return (
+                                    <div key={idx} className="flex items-center gap-2 text-sm">
+                                      <span className="inline-flex items-center justify-center min-w-[38px] h-7 px-2 rounded-md border-2 border-purple-200 bg-white text-xs font-bold text-purple-900">
+                                        {tamConfig.tamanho}
+                                      </span>
+                                      <span className="font-medium flex-1 text-xs text-gray-600">tamanho</span>
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => ajustarQtdTamanhoCapsula(produtoId, tamConfig.tamanho, -1)}
+                                          disabled={!podeDecrementar}
+                                          title={podeDecrementar ? 'Diminuir' : `Mínimo: ${qtdMin}`}
+                                          className="w-7 h-7 rounded-md border border-gray-300 flex items-center justify-center hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                                        >
+                                          <Minus className="w-3.5 h-3.5" />
+                                        </button>
+                                        <span className="w-10 text-center font-semibold tabular-nums">{qtdAtual}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => ajustarQtdTamanhoCapsula(produtoId, tamConfig.tamanho, +1)}
+                                          className="w-7 h-7 rounded-md border border-gray-300 flex items-center justify-center hover:bg-gray-100"
+                                        >
+                                          <Plus className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                      <span className="text-gray-500 text-xs ml-1 w-14">pçs</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
 
                             {/* Mostrar composição de cores se tiver variantes (com +/- por cor) */}
                             {qtdConfig && typeof qtdConfig === 'object' && qtdConfig.variantes && qtdConfig.variantes.length > 0 && (

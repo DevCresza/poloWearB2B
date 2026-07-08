@@ -130,6 +130,41 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
       }
     }
 
+    // Sincroniza tamanhos: analogo ao de variantes, mas para produtos
+    // com venda_por_tamanho=true. Se o produto tem tamanhos disponiveis
+    // que ainda nao estao no array `tamanhos`, adiciona com qtd 0.
+    {
+      try {
+        const produtoIds = capsula.produto_ids || [];
+        produtoIds.forEach(pid => {
+          const produto = allProdutos.find(p => p.id === pid);
+          if (!produto?.venda_por_tamanho) return;
+          let gc = {};
+          try {
+            gc = typeof produto.grade_configuracao === 'string'
+              ? JSON.parse(produto.grade_configuracao)
+              : (produto.grade_configuracao || {});
+          } catch { gc = {}; }
+          const tamanhosDisponiveis = gc.tamanhos_disponiveis || [];
+          if (tamanhosDisponiveis.length === 0) return;
+          const config = quantidades[pid];
+          const tamanhosAtuais = (config && Array.isArray(config.tamanhos)) ? config.tamanhos : [];
+          const tamanhosSet = new Set(tamanhosAtuais.map(t => t.tamanho));
+          const faltantes = tamanhosDisponiveis
+            .filter(t => !tamanhosSet.has(t))
+            .map(t => ({ tamanho: t, quantidade: 0 }));
+          if (faltantes.length > 0 || !Array.isArray(config?.tamanhos)) {
+            quantidades[pid] = {
+              ...(config || {}),
+              tamanhos: [...tamanhosAtuais, ...faltantes]
+            };
+          }
+        });
+      } catch (e) {
+        console.warn('Erro ao sincronizar tamanhos da capsula:', e);
+      }
+    }
+
     setFormData({
       nome: capsula.nome || '',
       descricao: capsula.descricao || '',
@@ -187,6 +222,18 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
               cor_hex: v.cor_codigo_hex || v.cor_hex,
               quantidade: 0
             }))
+          };
+        } else if (produto?.venda_por_tamanho) {
+          // Pre-popula TODOS os tamanhos disponiveis com qtd 0.
+          let gc = {};
+          try {
+            gc = typeof produto.grade_configuracao === 'string'
+              ? JSON.parse(produto.grade_configuracao)
+              : (produto.grade_configuracao || {});
+          } catch { gc = {}; }
+          const tams = gc.tamanhos_disponiveis || [];
+          newQuantidades[productId] = {
+            tamanhos: tams.map(t => ({ tamanho: t, quantidade: 0 }))
           };
         } else {
           newQuantidades[productId] = 1;
@@ -691,8 +738,61 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
                                   }
                                 })()}
 
-                                {/* Se não tem variantes, mostrar quantidade simples */}
-                                {!produto.tem_variantes_cor && (
+                                {/* Se produto vende por tamanho: seletor de qtd por tamanho (min por tamanho) */}
+                                {!produto.tem_variantes_cor && produto.venda_por_tamanho && (() => {
+                                  let gc = {};
+                                  try {
+                                    gc = typeof produto.grade_configuracao === 'string'
+                                      ? JSON.parse(produto.grade_configuracao)
+                                      : (produto.grade_configuracao || {});
+                                  } catch { gc = {}; }
+                                  const tamsDisp = gc.tamanhos_disponiveis || [];
+                                  if (tamsDisp.length === 0) return null;
+                                  const config = formData.produtos_quantidades[produto.id] || {};
+                                  const quantidadesTamanhos = Array.isArray(config.tamanhos) ? config.tamanhos : [];
+                                  const setQtdTam = (tamanho, novaQtd) => {
+                                    const arr = [...quantidadesTamanhos];
+                                    const idx = arr.findIndex(t => t.tamanho === tamanho);
+                                    if (idx >= 0) arr[idx] = { ...arr[idx], quantidade: Math.max(0, novaQtd) };
+                                    else arr.push({ tamanho, quantidade: Math.max(0, novaQtd) });
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      produtos_quantidades: {
+                                        ...prev.produtos_quantidades,
+                                        [produto.id]: { ...(prev.produtos_quantidades[produto.id] || {}), tamanhos: arr }
+                                      }
+                                    }));
+                                  };
+                                  return (
+                                    <div className="space-y-2 bg-purple-50 p-2 rounded">
+                                      <Label className="text-xs font-semibold text-purple-900">Mínimo por Tamanho:</Label>
+                                      {tamsDisp.map((tam) => {
+                                        const qtdT = quantidadesTamanhos.find(t => t.tamanho === tam)?.quantidade || 0;
+                                        return (
+                                          <div key={tam} className="flex items-center gap-2">
+                                            <span className="inline-flex items-center justify-center min-w-[32px] h-6 px-1.5 rounded-md border border-purple-200 bg-white text-xs font-bold text-purple-900">{tam}</span>
+                                            <div className="flex items-center gap-1 flex-1">
+                                              <Button type="button" variant="outline" size="sm" className="h-6 w-6 p-0" onClick={() => setQtdTam(tam, qtdT - 1)}>
+                                                <Minus className="w-3 h-3" />
+                                              </Button>
+                                              <Input type="number" min="0" value={qtdT} onChange={(e) => setQtdTam(tam, parseInt(e.target.value) || 0)} className="w-14 h-6 text-center text-xs" />
+                                              <Button type="button" variant="outline" size="sm" className="h-6 w-6 p-0" onClick={() => setQtdTam(tam, qtdT + 1)}>
+                                                <Plus className="w-3 h-3" />
+                                              </Button>
+                                            </div>
+                                            <span className="text-xs text-gray-500 w-14">pçs</span>
+                                          </div>
+                                        );
+                                      })}
+                                      <div className="text-xs text-gray-600 mt-1 pt-1 border-t border-purple-200">
+                                        Total: {quantidadesTamanhos.reduce((s, t) => s + (t.quantidade || 0), 0)} peças
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+
+                                {/* Se não tem variantes NEM venda por tamanho, mostrar quantidade simples */}
+                                {!produto.tem_variantes_cor && !produto.venda_por_tamanho && (
                                   <div className="flex items-center gap-2">
                                     <Label className="text-xs">Qtd. Mínima:</Label>
                                     <div className="flex items-center gap-1">

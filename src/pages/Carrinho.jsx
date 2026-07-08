@@ -537,6 +537,38 @@ export default function Carrinho() {
                 .filter(Boolean);
             }
 
+            // Produto por tamanho na capsula: gera 1 item por tamanho.
+            // Quantidade eh em PECAS. Se grade, preco = preco_grade / total_pecas_grade.
+            if (config && typeof config === 'object' && Array.isArray(config.tamanhos)) {
+              const precoPorPecaTam = isGrade && pecasGrade > 0
+                ? (precoGrade / pecasGrade)
+                : precoUnitario;
+              return config.tamanhos
+                .map(tamConfig => {
+                  const qtdPecas = (Number(tamConfig.quantidade) || 0) * capsulaQtd;
+                  if (qtdPecas <= 0) return null;
+                  return {
+                    produto_id: detalhe.id,
+                    nome: produtoCompleto.nome,
+                    marca: produtoCompleto.marca || '',
+                    referencia: produtoCompleto.referencia_polo || produtoCompleto.referencia_fornecedor || '',
+                    referencia_fornecedor: produtoCompleto.referencia_fornecedor || '',
+                    referencia_linx: produtoCompleto.referencia_polo || '',
+                    tipo_venda: tipoVenda,
+                    quantidade: qtdPecas,
+                    total_pecas_grade: pecasGrade,
+                    preco: precoPorPecaTam,
+                    total: precoPorPecaTam * qtdPecas,
+                    foto: fotoUrl,
+                    grade_selecionada: null,
+                    cor_selecionada: null,
+                    tamanho_selecionado: tamConfig.tamanho,
+                    origem_capsula: item.capsula_id
+                  };
+                })
+                .filter(Boolean);
+            }
+
             // Quantidade simples (sem variantes de cor)
             const qtdSimples = (typeof config === 'number' ? config : 0) * capsulaQtd;
             if (qtdSimples <= 0) return []; // produto opcional nao pedido
