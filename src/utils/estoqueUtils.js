@@ -14,15 +14,23 @@ const parseVariantes = (valor) => {
   }
 };
 
-// Agrupa os itens do pedido por produto_id. Ignora cápsulas (a baixa de
-// estoque de itens vindos de cápsula não é suportada por enquanto).
+// Agrupa os itens do pedido por produto_id.
+// Itens vindos de capsula (com origem_capsula preenchida) ja foram expandidos
+// em produtos individuais no criarPedidoParaLoja e possuem produto_id real,
+// cor_selecionada ou tamanho_selecionado, e quantidade em pecas — devem
+// abater estoque normalmente, igual pedido direto do catalogo.
+// So descartamos:
+//  - item sem produto_id
+//  - item marcador do proprio agrupador de capsula (produto_id "capsula-...")
+//  - item que ainda esteja marcado tipo: "capsula" (nao deveria ocorrer apos
+//    expansao, mas guardamos por seguranca)
+//  - quantidade zero
 const agruparItensPorProduto = (itens) => {
   const grupos = {};
   (itens || []).forEach((item) => {
     const pid = item?.produto_id;
     if (!pid) return;
     if (item.tipo === 'capsula') return;
-    if (item.origem_capsula) return;
     if (String(pid).startsWith('capsula-')) return;
     if ((Number(item.quantidade) || 0) <= 0) return;
     if (!grupos[pid]) grupos[pid] = [];
