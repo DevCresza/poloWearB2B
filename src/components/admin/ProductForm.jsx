@@ -845,7 +845,10 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                                   quantidades_por_tamanho: {}
                                 }
                               }));
-                              setTotalPecas(0);
+                              // Zera o total da grade E os precos derivados dele.
+                              // Antes chamava setTotalPecas(), que nao existe —
+                              // clicar em "Desmarcar Todos" quebrava o formulario.
+                              calcularTotalPecas([], {});
                             }}
                             className="text-red-600 border-red-300 hover:bg-red-50"
                           >

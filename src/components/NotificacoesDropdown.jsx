@@ -25,7 +25,7 @@ const parseAsUTC = (dateStr) => {
   if (!dateStr) return new Date();
   const d = new Date(dateStr);
   // Se a string não contém indicador de timezone (Z, +, -) após a data, é UTC do Supabase
-  if (typeof dateStr === 'string' && !dateStr.match(/[Z+\-]\d{0,2}:?\d{0,2}$/i) && !dateStr.endsWith('Z')) {
+  if (typeof dateStr === 'string' && !dateStr.match(/[Z+-]\d{0,2}:?\d{0,2}$/i) && !dateStr.endsWith('Z')) {
     // Adicionar Z para interpretar como UTC
     return new Date(dateStr.replace(' ', 'T') + 'Z');
   }
