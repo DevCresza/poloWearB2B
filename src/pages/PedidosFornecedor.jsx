@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Pedido } from '@/api/entities';
 import { toast } from 'sonner';
-import { Produto } from '@/api/entities'; // Not used in this file, but kept from original imports
+import { Produto } from '@/api/entities';
 import { User } from '@/api/entities';
 import { Carteira } from '@/api/entities';
 import { Fornecedor } from '@/api/entities'; // Added import for Fornecedor
@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
 import PedidoItensEditModal from '@/components/pedidos/PedidoItensEditModal';
-import { formatCurrency, exportToPDF, exportToCSV, formatDate } from '@/utils/exportUtils';
+import { formatCurrency, exportToPDF, exportToCSV, formatDate, getMesFaturamentoItem, getMesEntregaItem } from '@/utils/exportUtils';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
 
@@ -41,6 +41,8 @@ export default function PedidosFornecedor() {
   const [clientes, setClientes] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
   const [lojasMap, setLojasMap] = useState({});
+  // produto_id -> data_prevista_entrega (define o mes de faturamento de cada item)
+  const [produtoEntregaMap, setProdutoEntregaMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('todos');
@@ -172,9 +174,10 @@ export default function PedidosFornecedor() {
       setPedidos(pedidosList || []);
       setClientes(clientesList || []);
 
-      const [fornecedoresList, lojasList] = await Promise.all([
+      const [fornecedoresList, lojasList, produtosList] = await Promise.all([
         Fornecedor.list(),
-        Loja.list()
+        Loja.list(),
+        Produto.list()
       ]);
       setFornecedores(fornecedoresList);
 
@@ -182,6 +185,12 @@ export default function PedidosFornecedor() {
       const map = {};
       (lojasList || []).forEach(l => { map[l.id] = l; });
       setLojasMap(map);
+
+      const entregaMap = {};
+      (produtosList || []).forEach(p => {
+        if (p.data_prevista_entrega) entregaMap[p.id] = p.data_prevista_entrega;
+      });
+      setProdutoEntregaMap(entregaMap);
     } catch (error) {
     } finally {
       setLoading(false);
@@ -1015,11 +1024,6 @@ export default function PedidosFornecedor() {
         const formaPgComPrazo = (pedido.metodo_pagamento === 'boleto_faturado' && Array.isArray(prazos) && prazos.length)
           ? `${formaPg} (${prazos.join('/')} dias)`
           : formaPg;
-        const dataFat = pedido.nf_data_upload || pedido.data_prevista_entrega || pedido.created_date;
-        const mesFat = dataFat
-          ? new Date(typeof dataFat === 'string' && dataFat.length === 10 ? dataFat + 'T00:00:00' : dataFat)
-              .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' })
-          : '';
         const statusPedido = statusLabels[pedido.status] || pedido.status || '';
         // Data e hora do pedido em pt-BR (fuso SP)
         const dataPedido = pedido.created_date
@@ -1041,7 +1045,7 @@ export default function PedidosFornecedor() {
             razao: razaoLinha,
             loja: nomeLoja,
             forma_pagamento: formaPgComPrazo,
-            mes_faturamento: mesFat,
+            mes_faturamento: getMesFaturamentoItem(pedido, it, produtoEntregaMap),
             tipo_pedido: isGrade ? 'PGM' : 'PE',
             nome_item: it.nome || '',
             ref_fornecedor: it.referencia_fornecedor || it.referencia || '',
@@ -1115,13 +1119,9 @@ export default function PedidosFornecedor() {
         try { itens = JSON.parse(itens); } catch (e) { itens = []; }
       }
 
-      // Mês de entrega = data_prevista_entrega ou mês de criação
-      const mesEntrega = pedido.data_prevista_entrega
-        ? new Date(pedido.data_prevista_entrega + 'T00:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-        : new Date(pedido.created_date).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-
       itens.forEach(item => {
         const cor = item.cor_selecionada?.cor_nome || 'Sem cor';
+        const mesEntrega = getMesEntregaItem(pedido, item, produtoEntregaMap);
         const key = `${item.produto_id || item.nome}_${cor}_${mesEntrega}`;
 
         if (!agregado[key]) {

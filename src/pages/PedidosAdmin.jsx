@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Pedido } from '@/api/entities';
 import { User } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
+import { Produto } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,7 @@ import PedidoCard from '../components/pedidos/PedidoCard';
 import PedidoDetailsModal from '../components/pedidos/PedidoDetailsModal';
 import PedidoEditModal from '../components/pedidos/PedidoEditModal';
 import PedidoItensEditModal from '../components/pedidos/PedidoItensEditModal';
-import { exportToCSV, exportToPDF, formatCurrency, formatDateTime, formatDate } from '@/utils/exportUtils';
+import { exportToCSV, exportToPDF, formatCurrency, formatDateTime, formatDate, getMesFaturamentoItem, getMesEntregaItem } from '@/utils/exportUtils';
 import MultiSelectFilter from '@/components/MultiSelectFilter';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
@@ -31,6 +32,8 @@ export default function PedidosAdmin() {
   const [fornecedores, setFornecedores] = useState([]);
   const [lojasMap, setLojasMap] = useState({});
   const [lojasDetMap, setLojasDetMap] = useState({});
+  // produto_id -> data_prevista_entrega (define o mes de faturamento de cada item)
+  const [produtoEntregaMap, setProdutoEntregaMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('kanban'); // 'kanban' ou 'list'
   const [selectedPedido, setSelectedPedido] = useState(null);
@@ -63,16 +66,23 @@ export default function PedidosAdmin() {
         return;
       }
 
-      const [pedidosList, usersList, fornecedoresList, lojasList] = await Promise.all([
+      const [pedidosList, usersList, fornecedoresList, lojasList, produtosList] = await Promise.all([
         Pedido.list({ sort: '-created_date' }),
         User.list(),
         Fornecedor.list(),
-        Loja.list()
+        Loja.list(),
+        Produto.list()
       ]);
       setCurrentUser(me);
       setPedidos(pedidosList || []);
       setUsers(usersList || []);
       setFornecedores(fornecedoresList || []);
+
+      const entregaMap = {};
+      (produtosList || []).forEach(p => {
+        if (p.data_prevista_entrega) entregaMap[p.id] = p.data_prevista_entrega;
+      });
+      setProdutoEntregaMap(entregaMap);
 
       // Build lojas map
       const map = {};
@@ -244,12 +254,6 @@ export default function PedidosAdmin() {
         const formaPgComPrazo = (pedido.metodo_pagamento === 'boleto_faturado' && Array.isArray(prazos) && prazos.length)
           ? `${formaPg} (${prazos.join('/')} dias)`
           : formaPg;
-        // Mes de faturamento: prefere data da NF, senao data prevista de entrega
-        const dataFat = pedido.nf_data_upload || pedido.data_prevista_entrega || pedido.created_date;
-        const mesFat = dataFat
-          ? new Date(typeof dataFat === 'string' && dataFat.length === 10 ? dataFat + 'T00:00:00' : dataFat)
-              .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' })
-          : '';
         const statusPedido = statusLabels[pedido.status] || pedido.status || '';
         const nomeFornecedor = fornecedorMap.get(pedido.fornecedor_id) || 'N/A';
         // Data e hora do pedido em pt-BR (fuso SP)
@@ -275,7 +279,7 @@ export default function PedidosAdmin() {
             loja: nomeLoja,
             fornecedor: nomeFornecedor,
             forma_pagamento: formaPgComPrazo,
-            mes_faturamento: mesFat,
+            mes_faturamento: getMesFaturamentoItem(pedido, it, produtoEntregaMap),
             tipo_pedido: isGrade ? 'PGM' : 'PE',
             nome_item: it.nome || '',
             ref_fornecedor: it.referencia_fornecedor || it.referencia || '',
@@ -341,12 +345,9 @@ export default function PedidosAdmin() {
       let itens = pedido.itens || [];
       if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch (e) { itens = []; } }
 
-      const mesEntrega = pedido.data_prevista_entrega
-        ? new Date(pedido.data_prevista_entrega + 'T00:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-        : new Date(pedido.created_date).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-
       itens.forEach(item => {
         const cor = item.cor_selecionada?.cor_nome || 'Sem cor';
+        const mesEntrega = getMesEntregaItem(pedido, item, produtoEntregaMap);
         const key = `${item.produto_id || item.nome}_${cor}_${mesEntrega}`;
         if (!agregado[key]) {
           // Preco unitario sempre por PECA. Para grade, divide o preco

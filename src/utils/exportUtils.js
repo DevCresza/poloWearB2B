@@ -217,3 +217,44 @@ export const toBrasiliaDateString = (date) => {
 export const formatNow = () => {
   return new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 };
+
+/**
+ * Formata "mês de ano" (ex: "setembro de 2026") no fuso de São Paulo.
+ * Datas puras (YYYY-MM-DD) recebem T00:00:00 para não retroceder um dia no UTC.
+ */
+export const formatMesAno = (date) => {
+  if (!date) return '';
+  const d = new Date(typeof date === 'string' && date.length === 10 ? `${date}T00:00:00` : date);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' });
+};
+
+/**
+ * Mês de entrega prevista de UM item do pedido.
+ *
+ * O mês é uma propriedade do ITEM, não do pedido: um mesmo pedido pode misturar
+ * itens de cápsulas com entregas diferentes (ex: CAPS3 setembro + CAPS4 outubro).
+ * Por isso a previsão cadastrada no PRODUTO manda na previsão do pedido.
+ *
+ * Prioridade: entrega do produto > entrega do pedido > data do pedido (último
+ * recurso, só quando nada foi cadastrado).
+ */
+export const getMesEntregaItem = (pedido, item, produtoEntregaMap = {}) => {
+  const entregaProduto = item?.produto_id ? produtoEntregaMap[item.produto_id] : null;
+  return formatMesAno(
+    entregaProduto
+      || pedido?.data_prevista_entrega
+      || pedido?.created_date
+  );
+};
+
+/**
+ * Mês de faturamento de UM item do pedido.
+ *
+ * Igual ao mês de entrega, mas a NF emitida vence a previsão: uma vez faturado,
+ * o mês real do faturamento é o da nota.
+ */
+export const getMesFaturamentoItem = (pedido, item, produtoEntregaMap = {}) => {
+  if (pedido?.nf_data_upload) return formatMesAno(pedido.nf_data_upload);
+  return getMesEntregaItem(pedido, item, produtoEntregaMap);
+};
