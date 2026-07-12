@@ -15,6 +15,8 @@ import { exportToCSV, exportToPDF, formatCurrency } from '@/utils/exportUtils';
 import ProductForm from '../components/admin/ProductForm';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
+import { can, PERM } from '@/utils/permissoes';
+import { isAdmin as ehAdmin } from '@/utils/roles';
 
 export default function GestaoProdutos() {
   const [user, setUser] = useState(null);
@@ -303,7 +305,11 @@ export default function GestaoProdutos() {
     );
   }
 
-  const isAdmin = user?.role === 'admin';
+  // Antes: `isAdmin` cobria so Novo/Duplicar/Excluir — Editar e o Switch de
+  // ativar/desativar ficavam abertos a qualquer um que abrisse a URL.
+  const podeCriar = can(user, PERM.CADASTRAR_PRODUTOS);
+  const podeEditar = can(user, PERM.EDITAR_PRODUTOS);
+  const podeExcluir = ehAdmin(user); // exclusao continua so do admin
 
   return (
     <div className="space-y-6">
@@ -324,7 +330,7 @@ export default function GestaoProdutos() {
               <p className="text-gray-600">Cadastre e gerencie produtos com grades personalizadas</p>
             </div>
 
-            {isAdmin && (
+            {podeCriar && (
               <Button onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-700 text-white">
                 <Plus className="w-4 h-4 mr-2" />
                 Novo Produto
@@ -516,36 +522,38 @@ export default function GestaoProdutos() {
                             </p>
                           )}
                           <div className="flex gap-1 mt-auto pt-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleEdit(produto)}
-                              className="flex-1 h-7 text-[10px] px-1"
-                              title="Editar"
-                            >
-                              <Edit className="w-3 h-3" />
-                            </Button>
-                            {isAdmin && (
-                              <>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleDuplicate(produto)}
-                                  className="h-7 px-1.5 text-blue-600 border-blue-300"
-                                  title="Duplicar"
-                                >
-                                  <Copy className="w-3 h-3" />
-                                </Button>
-                                <Button
-                                  variant="destructive"
-                                  size="sm"
-                                  onClick={() => handleDelete(produto)}
-                                  className="h-7 px-1.5"
-                                  title="Excluir"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </Button>
-                              </>
+                            {podeEditar && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEdit(produto)}
+                                className="flex-1 h-7 text-[10px] px-1"
+                                title="Editar"
+                              >
+                                <Edit className="w-3 h-3" />
+                              </Button>
+                            )}
+                            {podeCriar && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDuplicate(produto)}
+                                className="h-7 px-1.5 text-blue-600 border-blue-300"
+                                title="Duplicar"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </Button>
+                            )}
+                            {podeExcluir && (
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleDelete(produto)}
+                                className="h-7 px-1.5"
+                                title="Excluir"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
                             )}
                           </div>
                         </div>
@@ -678,51 +686,55 @@ export default function GestaoProdutos() {
                                 onCheckedChange={(checked) => handleDestaqueToggle(produto, checked)}
                                 aria-label="Destaque"
                                 size="sm"
+                                disabled={!podeEditar}
                               />
                               <span className="text-xs text-gray-500">Destaque</span>
                             </div>
-                            
+
                             <div className="flex items-center gap-2 mt-1">
                               <Switch
                                 checked={produto.ativo}
                                 onCheckedChange={(checked) => handleAtivoToggle(produto, checked)}
                                 aria-label="Ativo"
                                 size="sm"
+                                disabled={!podeEditar}
                               />
                               <span className="text-xs text-gray-500">Ativo</span>
                             </div>
                           </TableCell>
-                          
+
                           <TableCell>
                             <div className="flex gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleEdit(produto)}
-                              >
-                                <Edit className="w-4 h-4 mr-1" />
-                                Editar
-                              </Button>
-                              {isAdmin && (
-                                <>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleDuplicate(produto)}
-                                    className="text-blue-600 border-blue-300 hover:bg-blue-50"
-                                  >
-                                    <Copy className="w-4 h-4 mr-1" />
-                                    Duplicar
-                                  </Button>
-                                  <Button
-                                    variant="destructive"
-                                    size="sm"
-                                    onClick={() => handleDelete(produto)}
-                                  >
-                                    <Trash2 className="w-4 h-4 mr-1" />
-                                    Excluir
-                                  </Button>
-                                </>
+                              {podeEditar && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleEdit(produto)}
+                                >
+                                  <Edit className="w-4 h-4 mr-1" />
+                                  Editar
+                                </Button>
+                              )}
+                              {podeCriar && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDuplicate(produto)}
+                                  className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                                >
+                                  <Copy className="w-4 h-4 mr-1" />
+                                  Duplicar
+                                </Button>
+                              )}
+                              {podeExcluir && (
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleDelete(produto)}
+                                >
+                                  <Trash2 className="w-4 h-4 mr-1" />
+                                  Excluir
+                                </Button>
                               )}
                             </div>
                           </TableCell>

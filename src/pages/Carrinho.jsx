@@ -24,6 +24,8 @@ import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { formatCurrency } from '@/utils/exportUtils';
 import { useLojaContext } from '@/contexts/LojaContext';
+import { useRepresentacao } from '@/contexts/RepresentacaoContext';
+import { isVendedor as ehVendedor } from '@/utils/roles';
 import { getPrecoPeca, getPrecoGrade } from '@/utils/precoCliente';
 import { Store } from 'lucide-react';
 import { Loja } from '@/api/entities';
@@ -31,8 +33,19 @@ import ReplicarPedidoModal from '@/components/pedidos/ReplicarPedidoModal';
 
 export default function Carrinho() {
   const navigate = useNavigate();
-  const { lojas, carrinhoKey, hasNoLojas } = useLojaContext();
-  const [user, setUser] = useState(null);
+  const { lojas, carrinhoKey, hasNoLojas, exigeLoja } = useLojaContext();
+  const { isVendedor, clienteAlvo } = useRepresentacao();
+
+  // `usuarioLogado` = quem esta na frente da tela.
+  // `user`          = EM NOME DE QUEM se compra (o cliente alvo, se for vendedor).
+  //
+  // Praticamente tudo aqui — preco, pedido minimo, direito a boleto, checagem de
+  // inadimplencia, bloqueio, endereco de entrega e o comprador_user_id do pedido
+  // — e propriedade do COMPRADOR, nunca de quem opera a tela. Por isso `user`
+  // aponta para o sujeito: assim nenhuma regra pode olhar a pessoa errada por
+  // esquecimento.
+  const [usuarioLogado, setUsuarioLogado] = useState(null);
+  const user = isVendedor ? clienteAlvo : usuarioLogado;
   const [carrinho, setCarrinho] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
   const [produtos, setProdutos] = useState([]);
@@ -51,7 +64,8 @@ export default function Carrinho() {
 
   useEffect(() => {
     loadData();
-  }, []);
+    // Trocar de cliente alvo revalida inadimplencia/bloqueio do novo comprador.
+  }, [clienteAlvo?.id]);
 
   useEffect(() => {
     loadCarrinho();
@@ -61,7 +75,7 @@ export default function Carrinho() {
     setLoading(true);
     try {
       const currentUser = await User.me();
-      setUser(currentUser);
+      setUsuarioLogado(currentUser);
 
       const [fornecedoresList, produtosList] = await Promise.all([
         Fornecedor.list(),
@@ -71,10 +85,13 @@ export default function Carrinho() {
       setFornecedores(fornecedoresList || []);
       setProdutos(produtosList || []);
 
-      // Verificar inadimplência automaticamente
-      if (currentUser.tipo_negocio === 'multimarca') {
+      // Inadimplencia e do COMPRADOR (o cliente alvo, quando for vendedor).
+      const vendedorOperando = ehVendedor(currentUser);
+      const comprador = vendedorOperando ? clienteAlvo : currentUser;
+
+      if (comprador && comprador.tipo_negocio === 'multimarca') {
         try {
-          const titulosCliente = await Carteira.filter({ cliente_user_id: currentUser.id });
+          const titulosCliente = await Carteira.filter({ cliente_user_id: comprador.id });
           const hoje = new Date();
           hoje.setHours(0, 0, 0, 0);
 
@@ -89,20 +106,23 @@ export default function Carrinho() {
           const totalVencido = titulosVencidos.reduce((sum, t) => sum + (t.valor || 0), 0);
 
           if (titulosVencidos.length > 0 && totalVencido > 0) {
-            if (!currentUser.bloqueado) {
-              await User.update(currentUser.id, {
+            // O vendedor NAO bloqueia a conta do cliente: ele so abriu o carrinho
+            // dele. O auto-bloqueio continua sendo consequencia do proprio cliente
+            // acessar a conta. O checkout barra os dois casos de qualquer forma.
+            if (!comprador.bloqueado && !vendedorOperando) {
+              await User.update(comprador.id, {
                 bloqueado: true,
                 motivo_bloqueio: `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`,
                 data_bloqueio: new Date().toISOString(),
                 total_vencido: totalVencido
               });
-              currentUser.bloqueado = true;
-              currentUser.motivo_bloqueio = `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`;
+              comprador.bloqueado = true;
+              comprador.motivo_bloqueio = `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`;
+              setUsuarioLogado({ ...comprador });
             }
 
             setDadosInadimplencia({ titulosVencidos, totalVencido });
             setShowBloqueioModal(true);
-            setUser({ ...currentUser });
           }
         } catch (e) {
           console.warn('Erro ao verificar inadimplência:', e);
@@ -627,7 +647,9 @@ export default function Carrinho() {
       // Calcular total com base nos itens (pode ter sido editado no modal)
       const totalCalculado = itensPedido.reduce((sum, it) => sum + it.total, 0);
 
-      // Endereço de entrega
+      // Endereço de entrega. `user` aqui e o COMPRADOR — nunca o vendedor.
+      // Para o vendedor a loja e obrigatoria (exigeLoja), senao o pedido cairia
+      // no endereco de quem operou a tela.
       const src = loja || user;
       const enderecoEntrega = {
         endereco: src.endereco_completo,
@@ -652,7 +674,10 @@ export default function Carrinho() {
         endereco_entrega: enderecoEntrega,
         observacoes: obs || '',
         observacoes_comprador: obs || '',
-        estoque_baixado: true
+        estoque_baixado: true,
+        // Autoria: quem operou a tela (o cliente, ou o vendedor em nome dele).
+        criado_por_user_id: usuarioLogado?.id || null,
+        criado_por_papel: isVendedor ? 'vendedor' : 'cliente',
       };
 
       const pedido = await Pedido.create(pedidoData);
@@ -748,11 +773,24 @@ export default function Carrinho() {
   };
 
   const finalizarCompraPorFornecedor = async (fornecedorId) => {
+    // Vendedor sem cliente escolhido nao tem em nome de quem comprar.
+    if (!user) {
+      toast.error('Escolha o cliente no topo da tela antes de finalizar o pedido.');
+      return;
+    }
+
     // Determine which loja to use
     const selectedIds = getSelectedLojasForGroup(fornecedorId);
     const targetLoja = selectedIds.size === 1
       ? lojas.find(l => l.id === Array.from(selectedIds)[0]) || null
       : null; // No lojas = legacy (user address)
+
+    // Sem loja, o endereco cai no cadastro do comprador. Isso e legado e so vale
+    // para cliente sem loja — um vendedor PRECISA escolher a loja de entrega.
+    if (exigeLoja && !targetLoja) {
+      toast.info('Selecione a loja de entrega do cliente para finalizar o pedido.');
+      return;
+    }
 
     // Validate address source
     const enderecoSource = targetLoja || user;
@@ -797,10 +835,16 @@ export default function Carrinho() {
     // Verificação em tempo real de inadimplência antes de finalizar
     if (user.tipo_negocio === 'multimarca' || user.tipo_negocio === 'franqueado') {
       try {
-        const freshUser = await User.me();
+        // Sempre o COMPRADOR. Com um vendedor operando, User.me() traria o
+        // vendedor — e o checkout checaria o bloqueio da pessoa errada.
+        const freshUser = isVendedor ? await User.get(user.id) : await User.me();
         if (freshUser.bloqueado) {
-          setUser(freshUser);
-          toast.error(`Sua conta está bloqueada. ${freshUser.motivo_bloqueio ? `Motivo: ${freshUser.motivo_bloqueio}.` : ''} Regularize seus pagamentos para fazer novos pedidos.`);
+          if (!isVendedor) setUsuarioLogado(freshUser);
+          toast.error(
+            isVendedor
+              ? `A conta de ${freshUser.empresa || freshUser.full_name} está bloqueada. ${freshUser.motivo_bloqueio ? `Motivo: ${freshUser.motivo_bloqueio}.` : ''}`
+              : `Sua conta está bloqueada. ${freshUser.motivo_bloqueio ? `Motivo: ${freshUser.motivo_bloqueio}.` : ''} Regularize seus pagamentos para fazer novos pedidos.`
+          );
           return;
         }
 
@@ -823,20 +867,19 @@ export default function Carrinho() {
         const totalVencido = titulosVencidos.reduce((sum, t) => sum + (t.valor || 0), 0);
 
         if (titulosVencidos.length > 0 && totalVencido > 0) {
-          if (targetLoja) {
-            setDadosInadimplencia({ titulosVencidos, totalVencido });
-            setShowBloqueioModal(true);
-            return;
+          // Em todos os caminhos o checkout e barrado. A diferenca e so se a
+          // conta tambem passa a ficar bloqueada — e isso o vendedor nao faz.
+          if (!targetLoja && !isVendedor) {
+            await User.update(freshUser.id, {
+              bloqueado: true,
+              motivo_bloqueio: `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`,
+              data_bloqueio: new Date().toISOString(),
+              total_vencido: totalVencido
+            });
+            freshUser.bloqueado = true;
+            freshUser.motivo_bloqueio = `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`;
+            setUsuarioLogado({ ...freshUser });
           }
-          await User.update(freshUser.id, {
-            bloqueado: true,
-            motivo_bloqueio: `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`,
-            data_bloqueio: new Date().toISOString(),
-            total_vencido: totalVencido
-          });
-          freshUser.bloqueado = true;
-          freshUser.motivo_bloqueio = `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`;
-          setUser({ ...freshUser });
           setDadosInadimplencia({ titulosVencidos, totalVencido });
           setShowBloqueioModal(true);
           return;

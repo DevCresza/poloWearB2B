@@ -19,6 +19,7 @@ import PendingUserDetails from '../components/admin/PendingUserDetails';
 import { toast } from 'sonner';
 import ClientForm from '../components/admin/ClientForm';
 import { supabase } from '@/lib/supabase';
+import { LABELS_PAPEL, getPapel } from '@/utils/roles';
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -102,10 +103,13 @@ export default function UserManagement() {
   const handleRoleChange = async (userId, newRole) => {
     setUpdatingUserId(userId);
     try {
-      await User.update(userId, { role: newRole });
+      // `role` e `tipo_negocio` sao redundantes no schema e o codigo le ora um,
+      // ora outro. Manter os dois em sincronia evita o estado hibrido que ja
+      // causava bug (passar no guard da pagina mas nao ver o menu).
+      await User.update(userId, { role: newRole, tipo_negocio: newRole });
       await loadData();
     } catch (error) {
-      toast.info('Não foi possível atualizar a função do usuário.');
+      toast.error(error?.message || 'Não foi possível atualizar o perfil do usuário.');
     } finally {
       setUpdatingUserId(null);
     }
@@ -330,6 +334,8 @@ export default function UserManagement() {
                       <SelectContent position="popper" sideOffset={5}>
                         <SelectItem value="todos">Todos</SelectItem>
                         <SelectItem value="admin">Administrador</SelectItem>
+                        <SelectItem value="vendedor">Vendedor</SelectItem>
+                        <SelectItem value="cadastro">Cadastro</SelectItem>
                         <SelectItem value="multimarca">Multimarca</SelectItem>
                         <SelectItem value="franqueado">Franqueado</SelectItem>
                         <SelectItem value="fornecedor">Fornecedor</SelectItem>
@@ -370,11 +376,7 @@ export default function UserManagement() {
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">
-                            {(user.tipo_negocio === 'franqueado' || user.categoria_cliente === 'franqueado') ? 'Franqueado'
-                              : user.tipo_negocio === 'multimarca' ? 'Multimarca'
-                              : user.tipo_negocio === 'fornecedor' ? 'Fornecedor'
-                              : user.role === 'admin' ? 'Admin'
-                              : user.tipo_negocio || 'Usuário'}
+                            {LABELS_PAPEL[getPapel(user)] || getPapel(user) || 'Sem perfil'}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -391,17 +393,20 @@ export default function UserManagement() {
                           )}
                         </TableCell>
                         <TableCell>
+                          {/* Antes as opcoes eram Admin | "user" — e 'user' nem e
+                              um papel valido (o CHECK do banco rejeita). */}
                           <Select
-                            value={user.role || 'user'}
+                            value={getPapel(user) || ''}
                             onValueChange={(newRole) => handleRoleChange(user.id, newRole)}
                             disabled={updatingUserId === user.id || currentUser.id === user.id}
                           >
-                            <SelectTrigger className="w-[130px]">
+                            <SelectTrigger className="w-[150px]">
                               <SelectValue placeholder="Selecione" />
                             </SelectTrigger>
                             <SelectContent position="popper" sideOffset={5}>
-                              <SelectItem value="admin">Admin</SelectItem>
-                              <SelectItem value="user">Usuário</SelectItem>
+                              {Object.entries(LABELS_PAPEL).map(([papel, label]) => (
+                                <SelectItem key={papel} value={papel}>{label}</SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                           {currentUser.id === user.id && (

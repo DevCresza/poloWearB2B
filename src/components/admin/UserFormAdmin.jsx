@@ -8,25 +8,25 @@ import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Eye, EyeOff, Shield, Settings, Users, Package, BarChart, Activity } from 'lucide-react';
 
-const permissoesAdmin = {
-  ver_dashboard: true,
-  ver_catalogo: true,
-  ver_capsulas: true,
-  ver_pronta_entrega: true,
-  ver_programacao: true,
-  fazer_pedidos: true,
-  ver_meus_pedidos: true,
-  ver_todos_pedidos: true,
-  gerenciar_pedidos: true,
-  cadastrar_produtos: true,
-  editar_produtos: true,
-  gerenciar_usuarios: true,
-  ver_crm: true,
-  gerenciar_fornecedores: true,
-  ver_relatorios: true,
-  ver_precos_custo: true,
-  exportar_dados: true
-};
+import { PAPEIS } from '@/utils/roles';
+
+const PERFIS_INTERNOS = [
+  {
+    papel: PAPEIS.ADMIN,
+    titulo: 'Administrador',
+    descricao: 'Acesso geral: pedidos, faturamento, produtos, usuários, CRM e configurações.',
+  },
+  {
+    papel: PAPEIS.VENDEDOR,
+    titulo: 'Vendedor',
+    descricao: 'Vê o catálogo e as cápsulas como as lojas veem, monta pedidos em nome do cliente e acompanha os pedidos. Não vê totais de faturamento nem custo.',
+  },
+  {
+    papel: PAPEIS.CADASTRO,
+    titulo: 'Cadastro',
+    descricao: 'Cria, edita, ativa e desativa produtos e cápsulas (incluindo preços). Não vê pedidos nem faturamento.',
+  },
+];
 
 export default function UserFormAdmin({ onSubmit, onCancel, loading }) {
   const [formData, setFormData] = useState({
@@ -34,7 +34,7 @@ export default function UserFormAdmin({ onSubmit, onCancel, loading }) {
     email: '',
     password: '',
     telefone: '',
-    permissoes: permissoesAdmin,
+    papel: PAPEIS.ADMIN,
     observacoes: ''
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -59,83 +59,42 @@ export default function UserFormAdmin({ onSubmit, onCancel, loading }) {
       // Continuar mesmo se falhar a verificação
     }
 
+    // O papel define as permissoes (src/utils/permissoes.js). `permissoes` no
+    // banco e legado e nao autoriza nada — nao mandamos mais.
     const userData = {
       ...formData,
-      tipo_negocio: 'admin',
-      role: 'admin'
+      tipo_negocio: formData.papel,
+      role: formData.papel,
     };
+    delete userData.papel;
+    delete userData.permissoes;
     onSubmit(userData);
   };
-
-  const handlePermissaoChange = (permissao, checked) => {
-    setFormData(prev => ({
-      ...prev,
-      permissoes: {
-        ...prev.permissoes,
-        [permissao]: checked
-      }
-    }));
-  };
-
-  const permissoesGroups = [
-    {
-      title: 'Usuários e Acesso',
-      icon: Users,
-      permissions: [
-        { key: 'gerenciar_usuarios', label: 'Gerenciar Usuários' },
-        { key: 'ver_crm', label: 'Acessar CRM' }
-      ]
-    },
-    {
-      title: 'Produtos e Fornecedores',
-      icon: Package,
-      permissions: [
-        { key: 'cadastrar_produtos', label: 'Cadastrar Produtos' },
-        { key: 'editar_produtos', label: 'Editar Produtos' },
-        { key: 'gerenciar_fornecedores', label: 'Gerenciar Fornecedores' }
-      ]
-    },
-    {
-      title: 'Pedidos e Vendas',
-      icon: Activity,
-      permissions: [
-        { key: 'ver_todos_pedidos', label: 'Ver Todos os Pedidos' },
-        { key: 'gerenciar_pedidos', label: 'Gerenciar Pedidos' }
-      ]
-    },
-    {
-      title: 'Relatórios e Dados',
-      icon: BarChart,
-      permissions: [
-        { key: 'ver_relatorios', label: 'Ver Relatórios' },
-        { key: 'ver_precos_custo', label: 'Ver Preços de Custo' },
-        { key: 'exportar_dados', label: 'Exportar Dados' }
-      ]
-    }
-  ];
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Shield className="w-5 h-5" />
-          Novo Administrador
+          Novo Usuário Interno
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <Alert className="mb-6 border-red-200 bg-red-50">
-          <Shield className="h-4 w-4" />
-          <AlertDescription className="text-red-800">
-            <strong>Atenção:</strong> Administradores têm acesso completo ao sistema. Certifique-se de que esta pessoa é confiável.
-          </AlertDescription>
-        </Alert>
+        {formData.papel === PAPEIS.ADMIN && (
+          <Alert className="mb-6 border-red-200 bg-red-50">
+            <Shield className="h-4 w-4" />
+            <AlertDescription className="text-red-800">
+              <strong>Atenção:</strong> Administradores têm acesso completo ao sistema. Certifique-se de que esta pessoa é confiável.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Dados Pessoais */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold flex items-center gap-2">
               <Users className="w-4 h-4" />
-              Dados do Administrador
+              Dados do Usuário
             </h3>
             <div className="grid md:grid-cols-2 gap-6">
               <div className="space-y-2">
@@ -191,32 +150,36 @@ export default function UserFormAdmin({ onSubmit, onCancel, loading }) {
 
           <Separator />
 
-          {/* Permissões */}
+          {/* Perfil de acesso.
+              Antes eram checkboxes soltos gravados em users.permissoes — que o
+              sistema NUNCA lia. Agora o acesso vem do papel. */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold flex items-center gap-2">
               <Settings className="w-4 h-4" />
-              Permissões Administrativas
+              Perfil de Acesso
             </h3>
-            <div className="grid md:grid-cols-2 gap-6">
-              {permissoesGroups.map((group) => (
-                <div key={group.title} className="space-y-3">
-                  <h4 className="font-medium flex items-center gap-2">
-                    <group.icon className="w-4 h-4" />
-                    {group.title}
-                  </h4>
-                  <div className="space-y-2 pl-6">
-                    {group.permissions.map((perm) => (
-                      <div key={perm.key} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={perm.key}
-                          checked={formData.permissoes[perm.key]}
-                          onCheckedChange={(checked) => handlePermissaoChange(perm.key, checked)}
-                        />
-                        <Label htmlFor={perm.key} className="text-sm">{perm.label}</Label>
-                      </div>
-                    ))}
+            <div className="grid gap-3">
+              {PERFIS_INTERNOS.map((perfil) => (
+                <label
+                  key={perfil.papel}
+                  className={`flex gap-3 rounded-xl border p-4 cursor-pointer transition-colors ${
+                    formData.papel === perfil.papel
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="papel"
+                    className="mt-1"
+                    checked={formData.papel === perfil.papel}
+                    onChange={() => setFormData({ ...formData, papel: perfil.papel })}
+                  />
+                  <div>
+                    <p className="font-medium text-gray-800">{perfil.titulo}</p>
+                    <p className="text-sm text-gray-600">{perfil.descricao}</p>
                   </div>
-                </div>
+                </label>
               ))}
             </div>
           </div>
@@ -239,7 +202,7 @@ export default function UserFormAdmin({ onSubmit, onCancel, loading }) {
               Cancelar
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? 'Criando...' : 'Criar Administrador'}
+              {loading ? 'Criando...' : 'Criar Usuário'}
             </Button>
           </div>
         </form>

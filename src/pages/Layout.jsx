@@ -35,6 +35,16 @@ import AlertaBloqueio from '../components/AlertaBloqueio';
 import Avatar from '@/components/Avatar';
 import NotificacoesDropdown from '@/components/NotificacoesDropdown';
 import { LojaProvider, useLojaContext } from '@/contexts/LojaContext';
+import { RepresentacaoProvider, limparRepresentacao } from '@/contexts/RepresentacaoContext';
+import SeletorClienteAlvo, { FaixaRepresentacao } from '@/components/vendedor/SeletorClienteAlvo';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  isAdmin as ehAdmin,
+  isFornecedor as ehFornecedor,
+  isCliente as ehCliente,
+  isVendedor as ehVendedor,
+  isCadastro as ehCadastro,
+} from '@/utils/roles';
 import { Store, ChevronDown } from 'lucide-react';
 import {
   Select as SelectUI,
@@ -80,38 +90,23 @@ function SeletorLoja() {
 }
 
 export default function Layout({ children, currentPageName }) {
-  const [currentUser, setCurrentUser] = useState(null);
+  // Usuario e redirecionamento por falta de login agora vem do AuthProvider +
+  // ProtectedRoute (src/pages/index.jsx). O Layout so decide o que desenhar.
+  const { user: currentUser } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
-    const checkUser = async () => {
-      try {
-        const user = await User.me();
-        setCurrentUser(user);
-      } catch (_error) {
-        setCurrentUser(null);
-        // Redireciona para login se não autenticado e está tentando acessar página protegida
-        const portalPages = [
-          'PortalDashboard', 'UserManagement', 'Catalogo', 'MeusPedidos',
-          'PedidosAdmin', 'Admin', 'GestaoProdutos', 'GestaoFornecedores',
-          'CrmDashboard', 'GestaoClientes', 'GestaoCapsulas', 'EmissaoLote', 'GestaoEstoque',
-          'Carrinho', 'PedidosFornecedor', 'CarteiraFinanceira', 'HistoricoCompras',
-          'DashboardAdmin', 'GestaoMetas', 'Recursos', 'MeuPerfil'
-        ];
-        if (portalPages.includes(currentPageName)) {
-          navigate('/Login');
-        }
-      }
-    };
-    checkUser();
     setMobileMenuOpen(false); // Fechar menu ao mudar de página
-  }, [location.pathname, currentPageName, navigate]);
+  }, [location.pathname]);
 
   const handleLogout = async () => {
     if (confirm('Tem certeza que deseja sair do sistema?')) {
       try {
+        // Carrinhos e cliente alvo do vendedor nao podem sobrar para o proximo
+        // usuario do mesmo terminal.
+        limparRepresentacao();
         await User.logout();
         navigate('/Login');
       } catch (_error) {
@@ -120,22 +115,19 @@ export default function Layout({ children, currentPageName }) {
     }
   };
 
-  const portalPages = [
-    'PortalDashboard', 'UserManagement', 'Catalogo', 'MeusPedidos',
-    'PedidosAdmin', 'Admin', 'GestaoProdutos', 'GestaoFornecedores',
-    'CrmDashboard', 'GestaoClientes', 'GestaoCapsulas', 'EmissaoLote', 'GestaoEstoque',
-    'Carrinho', 'PedidosFornecedor', 'CarteiraFinanceira', 'HistoricoCompras',
-    'DashboardAdmin', 'GestaoMetas', 'Recursos', 'MeuPerfil' // Added 'MeuPerfil'
-  ];
-  const isPortalPage = portalPages.includes(currentPageName);
+  // Paginas publicas (Home, Login, CadastroCompra, reset) nao levam o chrome do portal.
+  const paginasPublicas = ['Home', 'Login', 'CadastroCompra'];
+  const isPortalPage = !paginasPublicas.includes(currentPageName);
 
   if (!isPortalPage || !currentUser) {
     return <main className="bg-slate-100">{children}</main>;
   }
 
-  const isAdmin = currentUser.role === 'admin';
-  const isFornecedor = currentUser.tipo_negocio === 'fornecedor';
-  const isCliente = currentUser.tipo_negocio === 'multimarca' || currentUser.tipo_negocio === 'franqueado';
+  const isAdmin = ehAdmin(currentUser);
+  const isFornecedor = ehFornecedor(currentUser);
+  const isCliente = ehCliente(currentUser);
+  const isVendedor = ehVendedor(currentUser);
+  const isCadastro = ehCadastro(currentUser);
 
   const isActiveLink = (pageName) => {
     const targetPath = createPageUrl(pageName);
@@ -230,6 +222,53 @@ export default function Layout({ children, currentPageName }) {
         </div>
       )}
 
+      {/* Vendedor: compra em nome do cliente e acompanha pedidos.
+          Sem carteira, sem produtos, sem faturamento. */}
+      {isVendedor && (
+        <div>
+          <p className={sectionTitleClasses}>Vendas</p>
+          <Link to={createPageUrl('Catalogo')} className={getNavLinkClasses('Catalogo')} onClick={() => setMobileMenuOpen(false)}>
+            <ShoppingCart className="w-5 h-5" />
+            <span>Catálogo</span>
+          </Link>
+          <Link to={createPageUrl('Carrinho')} className={getNavLinkClasses('Carrinho')} onClick={() => setMobileMenuOpen(false)}>
+            <ShoppingCart className="w-5 h-5" />
+            <span>Carrinho</span>
+          </Link>
+          <Link to={createPageUrl('PedidosAdmin')} className={getNavLinkClasses('PedidosAdmin')} onClick={() => setMobileMenuOpen(false)}>
+            <Package className="w-5 h-5" />
+            <span>Pedidos</span>
+          </Link>
+          <Link to={createPageUrl('Recursos')} className={getNavLinkClasses('Recursos')} onClick={() => setMobileMenuOpen(false)}>
+            <BookOpen className="w-5 h-5" />
+            <span>Conteúdos</span>
+          </Link>
+        </div>
+      )}
+
+      {/* Cadastro: produtos e cápsulas. Sem pedidos e sem faturamento. */}
+      {isCadastro && (
+        <div>
+          <p className={sectionTitleClasses}>Cadastro</p>
+          <Link to={createPageUrl('GestaoProdutos')} className={getNavLinkClasses('GestaoProdutos')} onClick={() => setMobileMenuOpen(false)}>
+            <ClipboardList className="w-5 h-5" />
+            <span>Produtos</span>
+          </Link>
+          <Link to={createPageUrl('GestaoCapsulas')} className={getNavLinkClasses('GestaoCapsulas')} onClick={() => setMobileMenuOpen(false)}>
+            <ImageIcon className="w-5 h-5" />
+            <span>Cápsulas</span>
+          </Link>
+          <Link to={createPageUrl('Catalogo')} className={getNavLinkClasses('Catalogo')} onClick={() => setMobileMenuOpen(false)}>
+            <ShoppingCart className="w-5 h-5" />
+            <span>Catálogo</span>
+          </Link>
+          <Link to={createPageUrl('Recursos')} className={getNavLinkClasses('Recursos')} onClick={() => setMobileMenuOpen(false)}>
+            <BookOpen className="w-5 h-5" />
+            <span>Conteúdos</span>
+          </Link>
+        </div>
+      )}
+
       {/* Links de Administração (apenas admin - menu único e limpo) */}
       {isAdmin && (
         <div>
@@ -308,8 +347,14 @@ export default function Layout({ children, currentPageName }) {
   );
 
   const hideSeletorLoja = ['Carrinho', 'Catalogo'].includes(currentPageName);
+  // O vendedor precisa trocar de loja DENTRO do Catalogo/Carrinho — e la que ele
+  // monta o pedido do cliente.
+  const mostrarSeletorLoja = (isCliente && !hideSeletorLoja) || isVendedor;
 
   return (
+    // RepresentacaoProvider por fora: o LojaProvider depende dele para saber de
+    // QUEM sao as lojas (do cliente alvo, quando quem compra e um vendedor).
+    <RepresentacaoProvider user={currentUser}>
     <LojaProvider user={currentUser}>
     <div className="min-h-screen bg-slate-100 flex flex-col lg:flex-row">
       <style>{`
@@ -322,7 +367,8 @@ export default function Layout({ children, currentPageName }) {
         <div className="flex items-center justify-between p-4">
           <img src="/logoPolo.png" alt="Polo Wear" className="h-8 w-auto object-contain" />
           <div className="flex items-center gap-2">
-            {isCliente && !hideSeletorLoja && <SeletorLoja />}
+            {isVendedor && <SeletorClienteAlvo />}
+            {mostrarSeletorLoja && <SeletorLoja />}
             {/* Notificações Mobile */}
             <NotificacoesDropdown
               userId={currentUser.id}
@@ -415,8 +461,11 @@ export default function Layout({ children, currentPageName }) {
               })()}
             </h1>
             <div className="flex items-center gap-2 lg:gap-4">
+              {/* Em nome de qual cliente o vendedor esta comprando */}
+              {isVendedor && <SeletorClienteAlvo />}
+
               {/* Seletor de Loja */}
-              {isCliente && !hideSeletorLoja && <SeletorLoja />}
+              {mostrarSeletorLoja && <SeletorLoja />}
 
               {/* Sino de Notificações */}
               <NotificacoesDropdown
@@ -443,11 +492,13 @@ export default function Layout({ children, currentPageName }) {
         {/* Main Content */}
         <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
           {isCliente && <AlertaBloqueio />}
+          <FaixaRepresentacao />
           {children}
         </main>
       </div>
     </div>
     </LojaProvider>
+    </RepresentacaoProvider>
   );
 }
 

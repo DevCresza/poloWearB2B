@@ -21,8 +21,8 @@ const userTypes = [
   },
   {
     type: 'admin',
-    title: 'Administrador',
-    description: 'Acesso completo ao sistema',
+    title: 'Usuário Interno',
+    description: 'Equipe Polo: Administrador, Vendedor ou Cadastro',
     icon: Shield,
     color: 'bg-purple-50 border-purple-200 hover:bg-purple-100',
     iconColor: 'text-purple-600'

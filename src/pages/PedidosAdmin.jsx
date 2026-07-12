@@ -24,6 +24,7 @@ import { exportToCSV, exportToPDF, formatCurrency, formatDateTime, formatDate, g
 import MultiSelectFilter from '@/components/MultiSelectFilter';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
+import { can, PERM } from '@/utils/permissoes';
 
 export default function PedidosAdmin() {
   const navigate = useNavigate();
@@ -58,13 +59,10 @@ export default function PedidosAdmin() {
     try {
       const me = await User.me();
 
-      // Proteção: só admin e fornecedor podem ver esta página (lista todos os pedidos).
-      // Clientes (multimarca/franqueado) são redirecionados para "Meus Pedidos".
-      const podeVerTodos = me?.role === 'admin' || me?.tipo_negocio === 'admin' || me?.tipo_negocio === 'fornecedor';
-      if (!podeVerTodos) {
-        navigate('/MeusPedidos', { replace: true });
-        return;
-      }
+      // O acesso a esta pagina agora e decidido por ProtectedRoute
+      // (PERM.VER_TODOS_PEDIDOS): admin e vendedor. Fornecedor foi movido para
+      // PedidosFornecedor — aqui ele via o total geral de TODOS os pedidos do
+      // sistema, nao so dos dele.
 
       const [pedidosList, usersList, fornecedoresList, lojasList, produtosList] = await Promise.all([
         Pedido.list({ sort: '-created_date' }),
@@ -614,6 +612,10 @@ export default function PedidosAdmin() {
     { key: 'cancelado', title: 'Cancelados', color: 'border-red-500' }
   ];
 
+  // Vendedor acompanha os pedidos, mas nao o dinheiro consolidado.
+  const podeVerFaturamento = can(currentUser, PERM.VER_TOTAIS_FATURAMENTO);
+  const podeExportar = can(currentUser, PERM.EXPORTAR_DADOS);
+
   const userMap = new Map(users.map(u => [u.id, u.empresa || u.razao_social || u.nome_marca || u.full_name]));
   const userTipoMap = new Map(users.map(u => [u.id, u.tipo_negocio]));
   const fornecedorMap = new Map(fornecedores.map(f => [f.id, f.razao_social || f.nome_fantasia || f.nome_marca]));
@@ -635,34 +637,37 @@ export default function PedidosAdmin() {
           <p className="text-gray-600">Acompanhe e gerencie todos os pedidos do sistema</p>
         </div>
         
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={handleExportRelatorioProducao} variant="outline" className="border-indigo-300 text-indigo-700 hover:bg-indigo-50">
-            <BarChart3 className="w-4 h-4 mr-2" />
-            Relatório Produção
-          </Button>
-          <Button onClick={handleExportExtratoItens} variant="outline" className="border-emerald-300 text-emerald-700 hover:bg-emerald-50">
-            <FileText className="w-4 h-4 mr-2" />
-            Extrato Detalhado
-          </Button>
-          <Button variant="outline" onClick={() => handleExport('pdf')}>
-            <Download className="w-4 h-4 mr-2" />
-            Exportar PDF
-          </Button>
-          <Button variant="outline" onClick={() => handleExport('csv')}>
-            <Download className="w-4 h-4 mr-2" />
-            Exportar CSV
-          </Button>
-        </div>
+        {podeExportar && (
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={handleExportRelatorioProducao} variant="outline" className="border-indigo-300 text-indigo-700 hover:bg-indigo-50">
+              <BarChart3 className="w-4 h-4 mr-2" />
+              Relatório Produção
+            </Button>
+            <Button onClick={handleExportExtratoItens} variant="outline" className="border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+              <FileText className="w-4 h-4 mr-2" />
+              Extrato Detalhado
+            </Button>
+            <Button variant="outline" onClick={() => handleExport('pdf')}>
+              <Download className="w-4 h-4 mr-2" />
+              Exportar PDF
+            </Button>
+            <Button variant="outline" onClick={() => handleExport('csv')}>
+              <Download className="w-4 h-4 mr-2" />
+              Exportar CSV
+            </Button>
+          </div>
+        )}
       </div>
 
-      {/* Cards de Resumo por Status */}
+      {/* Cards de Resumo por Status.
+          O vendedor ve a CONTAGEM e as PECAS, mas nao os valores em R$. */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
         {statusColumns.map((column) => {
           const total = totaisPorStatus[column.key];
           if (!total) return null; // Fallback for safety, though should not be needed with updated statusColumns
           const statusInfo = getStatusInfo(column.key);
           const StatusIcon = statusInfo.icon;
-          
+
           return (
             <Card key={column.key} className="bg-slate-100 rounded-xl shadow-md hover:shadow-lg transition-shadow">
               <CardContent className="p-4">
@@ -671,9 +676,15 @@ export default function PedidosAdmin() {
                   <Badge className={statusInfo.color}>{total.count}</Badge>
                 </div>
                 <p className="text-xs text-gray-600 mb-1">{statusInfo.label}</p>
-                <p className="text-lg font-bold text-gray-900">
-                  R$ {total.valor.toFixed(0)}
-                </p>
+                {podeVerFaturamento ? (
+                  <p className="text-lg font-bold text-gray-900">
+                    R$ {total.valor.toFixed(0)}
+                  </p>
+                ) : (
+                  <p className="text-lg font-bold text-gray-900">
+                    {total.count} pedido{total.count === 1 ? '' : 's'}
+                  </p>
+                )}
                 <p className="text-xs text-gray-500 mt-0.5">
                   {total.pecas.toLocaleString('pt-BR')} peça{total.pecas === 1 ? '' : 's'}
                 </p>
@@ -683,25 +694,27 @@ export default function PedidosAdmin() {
         })}
       </div>
 
-      {/* Total Geral */}
-      <Card className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-2xl shadow-lg">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm opacity-90 mb-1">Valor Total de Todos os Pedidos</p>
-              <p className="text-4xl font-bold">{formatCurrency(valorTotalGeral)}</p>
+      {/* Total Geral — faturamento consolidado. Escondido do vendedor. */}
+      {podeVerFaturamento && (
+        <Card className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-2xl shadow-lg">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm opacity-90 mb-1">Valor Total de Todos os Pedidos</p>
+                <p className="text-4xl font-bold">{formatCurrency(valorTotalGeral)}</p>
+              </div>
+              <DollarSign className="w-16 h-16 opacity-50" />
             </div>
-            <DollarSign className="w-16 h-16 opacity-50" />
-          </div>
-          <div className="mt-4 pt-4 border-t border-white/20">
-            <p className="text-sm opacity-90">
-              Total de {filteredPedidos.length} pedido(s) •{' '}
-              {Object.values(totaisPorStatus).reduce((s, t) => s + (t.pecas || 0), 0).toLocaleString('pt-BR')} peça(s) •{' '}
-              Finalizados: {totaisPorStatus.finalizado.count} ({formatCurrency(totaisPorStatus.finalizado.valor)})
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+            <div className="mt-4 pt-4 border-t border-white/20">
+              <p className="text-sm opacity-90">
+                Total de {filteredPedidos.length} pedido(s) •{' '}
+                {Object.values(totaisPorStatus).reduce((s, t) => s + (t.pecas || 0), 0).toLocaleString('pt-BR')} peça(s) •{' '}
+                Finalizados: {totaisPorStatus.finalizado.count} ({formatCurrency(totaisPorStatus.finalizado.valor)})
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters and Search */}
       <Card className="bg-slate-100 rounded-2xl shadow-neumorphic">

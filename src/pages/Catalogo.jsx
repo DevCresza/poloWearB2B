@@ -22,11 +22,14 @@ import {
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { formatCurrency } from '@/utils/exportUtils';
 import { useLojaContext } from '@/contexts/LojaContext';
+import { useRepresentacao } from '@/contexts/RepresentacaoContext';
+import { isVendedor as ehVendedor } from '@/utils/roles';
 import { getPrecoPeca, getPrecoGrade, isProdutoVisivelParaCliente, isCapsulaVisivelParaCliente } from '@/utils/precoCliente';
 import BannerCarousel from '@/components/BannerCarousel';
 
 export default function Catalogo() {
   const { carrinhoKey } = useLojaContext();
+  const { isVendedor, clienteAlvo } = useRepresentacao();
   const [user, setUser] = useState(null);
   const [produtos, setProdutos] = useState([]);
   const [todosProdutos, setTodosProdutos] = useState([]); // Lista completa sem filtros
@@ -72,9 +75,14 @@ export default function Catalogo() {
     return map;
   }, [fornecedores]);
 
+  // Sujeito de PRECO e VISIBILIDADE: o proprio cliente, ou o cliente alvo quando
+  // quem esta comprando e um vendedor. Nunca o vendedor — ver precoCliente.js.
+  const userPreco = isVendedor ? clienteAlvo : user;
+
   useEffect(() => {
     checkUserAndLoadData();
-  }, []);
+    // Trocar de cliente alvo refaz o catalogo com os precos e a visibilidade dele.
+  }, [clienteAlvo?.id]);
 
   useEffect(() => {
     loadCarrinho();
@@ -84,7 +92,12 @@ export default function Catalogo() {
     try {
       const currentUser = await User.me();
       setUser(currentUser);
-      
+
+      // Vendedor sem cliente escolhido => sujeito null => catalogo vazio
+      // (isProdutoVisivelParaCliente(p, null) === false). A FaixaRepresentacao
+      // no Layout explica o que fazer.
+      const sujeito = ehVendedor(currentUser) ? clienteAlvo : currentUser;
+
       const [produtosList, fornecedoresList, capsulasList, vendasResult] = await Promise.all([
         Produto.list(),
         Fornecedor.list(),
@@ -108,7 +121,7 @@ export default function Catalogo() {
       const produtosVisiveis = (produtosList || []).filter(p =>
         p.ativo !== false &&
         p.visivel_apenas_capsulas !== true &&
-        isProdutoVisivelParaCliente(p, currentUser)
+        isProdutoVisivelParaCliente(p, sujeito)
       );
       setProdutos(produtosVisiveis);
 
@@ -147,7 +160,7 @@ export default function Catalogo() {
         const produtosInternos = (capsula.produto_ids || [])
           .map(pid => (produtosList || []).find(p => p.id === pid))
           .filter(Boolean);
-        return isCapsulaVisivelParaCliente(capsula, produtosInternos, currentUser);
+        return isCapsulaVisivelParaCliente(capsula, produtosInternos, sujeito);
       });
       setCapsulas(capsulasVisiveis);
     } catch (error) {
@@ -331,16 +344,16 @@ export default function Catalogo() {
           qtdConfig.variantes.forEach(varianteConfig => {
             const quantidade = varianteConfig.quantidade || 0;
             const precoPorItem = produto.tipo_venda === 'grade'
-              ? getPrecoGrade(produto, user)
-              : getPrecoPeca(produto, user);
+              ? getPrecoGrade(produto, userPreco)
+              : getPrecoPeca(produto, userPreco);
             precoTotalCapsula += precoPorItem * quantidade;
           });
         } else if (qtdConfig && typeof qtdConfig === 'object' && Array.isArray(qtdConfig.tamanhos)) {
           // Produto por tamanho na capsula: quantidade eh em pecas
           const pecasGrade = parseInt(produto.total_pecas_grade) || 1;
           const precoPorPeca = produto.tipo_venda === 'grade'
-            ? (getPrecoGrade(produto, user) / pecasGrade)
-            : getPrecoPeca(produto, user);
+            ? (getPrecoGrade(produto, userPreco) / pecasGrade)
+            : getPrecoPeca(produto, userPreco);
           qtdConfig.tamanhos.forEach(t => {
             precoTotalCapsula += precoPorPeca * (t.quantidade || 0);
           });
@@ -348,8 +361,8 @@ export default function Catalogo() {
           // Produto sem variantes
           const quantidade = qtdConfig;
           const precoPorItem = produto.tipo_venda === 'grade'
-            ? getPrecoGrade(produto, user)
-            : getPrecoPeca(produto, user);
+            ? getPrecoGrade(produto, userPreco)
+            : getPrecoPeca(produto, userPreco);
           precoTotalCapsula += precoPorItem * quantidade;
         }
       });
@@ -544,9 +557,9 @@ export default function Catalogo() {
       case 'estoque_asc':
         return estoqueA - estoqueB;
       case 'preco_asc':
-        return getPrecoPeca(a, user) - getPrecoPeca(b, user);
+        return getPrecoPeca(a, userPreco) - getPrecoPeca(b, userPreco);
       case 'preco_desc':
-        return getPrecoPeca(b, user) - getPrecoPeca(a, user);
+        return getPrecoPeca(b, userPreco) - getPrecoPeca(a, userPreco);
       case 'nome_asc':
         return a.nome.localeCompare(b.nome);
       case 'data_desc':
@@ -582,7 +595,7 @@ export default function Catalogo() {
   }, [vendasPorProduto]);
 
   const getPricePerPiece = (produto) => {
-    return getPrecoPeca(produto, user);
+    return getPrecoPeca(produto, userPreco);
   };
   
   const handleSelectCapsula = (capsula) => {
@@ -941,7 +954,7 @@ export default function Catalogo() {
             </h3>
 
             <p className="text-base sm:text-lg font-bold text-gray-900">
-              {formatCurrency(getPrecoPeca(produto, user))}
+              {formatCurrency(getPrecoPeca(produto, userPreco))}
             </p>
 
             {produto.disponibilidade === 'pronta_entrega' && produto.controla_estoque && estoque <= 0 && (
@@ -1476,14 +1489,14 @@ export default function Catalogo() {
                 <div className="bg-blue-50 p-4 rounded-xl space-y-2 border border-blue-200">
                   <div className="text-sm text-gray-600 mb-1">Preço por Peça</div>
                   <div className="text-3xl font-bold text-blue-600">
-                    {formatCurrency(getPrecoPeca(selectedProduto, user))}
+                    {formatCurrency(getPrecoPeca(selectedProduto, userPreco))}
                   </div>
                   {selectedProduto.tipo_venda === 'grade' && (
                     <div className="pt-2 mt-2 border-t border-blue-200">
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-gray-700">Grade completa ({selectedProduto.total_pecas_grade} peças):</span>
                         <span className="text-xl font-bold text-blue-700">
-                          {formatCurrency(getPrecoGrade(selectedProduto, user))}
+                          {formatCurrency(getPrecoGrade(selectedProduto, userPreco))}
                         </span>
                       </div>
                     </div>
@@ -1497,10 +1510,10 @@ export default function Catalogo() {
                       {formatCurrency(selectedProduto.custo_por_peca)}
                       <span className="text-sm font-normal text-green-600 ml-1">por peça</span>
                     </div>
-                    {getPrecoPeca(selectedProduto, user) > 0 && (
+                    {getPrecoPeca(selectedProduto, userPreco) > 0 && (
                       <div className="pt-2 mt-2 border-t border-green-200 flex justify-between items-center text-sm">
-                        <span className="text-green-700">Markup: {(selectedProduto.custo_por_peca / getPrecoPeca(selectedProduto, user)).toFixed(2)}×</span>
-                        <span className="text-green-700">ROI: {(((selectedProduto.custo_por_peca - getPrecoPeca(selectedProduto, user)) / getPrecoPeca(selectedProduto, user)) * 100).toFixed(0)}%</span>
+                        <span className="text-green-700">Markup: {(selectedProduto.custo_por_peca / getPrecoPeca(selectedProduto, userPreco)).toFixed(2)}×</span>
+                        <span className="text-green-700">ROI: {(((selectedProduto.custo_por_peca - getPrecoPeca(selectedProduto, userPreco)) / getPrecoPeca(selectedProduto, userPreco)) * 100).toFixed(0)}%</span>
                       </div>
                     )}
                   </div>
@@ -1834,7 +1847,7 @@ export default function Catalogo() {
                   const alvoGrade = (selectedProduto.total_pecas_grade || 0);
                   const precoPorPeca = getPricePerPiece(selectedProduto);
                   const precoTotal = isGrade
-                    ? (getPrecoGrade(selectedProduto, user) * (alvoGrade > 0 ? Math.floor(totalSelecionado / alvoGrade) : 0))
+                    ? (getPrecoGrade(selectedProduto, userPreco) * (alvoGrade > 0 ? Math.floor(totalSelecionado / alvoGrade) : 0))
                     : (precoPorPeca * totalSelecionado);
 
                   return (
@@ -2303,8 +2316,8 @@ export default function Catalogo() {
                                valor por peça (cliente entende de onde vem o total). */}
                             {(() => {
                               const isGrade = produto.tipo_venda === 'grade';
-                              const precoGrade = isGrade ? getPrecoGrade(produto, user) : 0;
-                              let precoPeca = getPrecoPeca(produto, user);
+                              const precoGrade = isGrade ? getPrecoGrade(produto, userPreco) : 0;
+                              let precoPeca = getPrecoPeca(produto, userPreco);
                               // Fallback: se peça não cadastrada e é grade, deriva da grade
                               if (isGrade && (!precoPeca || precoPeca <= 0) && precoGrade > 0 && produto.total_pecas_grade > 0) {
                                 precoPeca = precoGrade / produto.total_pecas_grade;

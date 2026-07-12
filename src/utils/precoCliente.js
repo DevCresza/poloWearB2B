@@ -8,6 +8,8 @@
  * - Variantes de cor podem sobrescrever preços por perfil.
  */
 
+import { PAPEIS, getPapel } from './roles';
+
 export function getTipoCliente(user) {
   if (!user) return 'franqueado';
   if (user.tipo_negocio === 'multimarca') return 'multimarca';
@@ -16,6 +18,20 @@ export function getTipoCliente(user) {
 
 export function isMultimarca(user) {
   return getTipoCliente(user) === 'multimarca';
+}
+
+/**
+ * O usuario pode ser SUJEITO de preco/visibilidade?
+ *
+ * Só cliente (multimarca/franqueado) pode. O vendedor compra COM OS OLHOS do
+ * cliente alvo — ele nunca e o sujeito. Isto existe porque getTipoCliente() faz
+ * fallback silencioso para 'franqueado' em qualquer papel desconhecido: sem esta
+ * guarda, um vendedor sem cliente selecionado veria PRECO DE FRANQUEADO em tudo,
+ * sem erro nenhum, e venderia errado.
+ */
+export function isSujeitoDePreco(user) {
+  const papel = getPapel(user);
+  return papel === PAPEIS.MULTIMARCA || papel === PAPEIS.FRANQUEADO;
 }
 
 function num(v) {
@@ -72,8 +88,16 @@ export function getPrecoGrade(produto, user, variante = null) {
 export function isProdutoVisivelParaCliente(produto, user) {
   if (!produto) return false;
   if (!user) return false;
-  if (user.role === 'admin' || user.tipo_negocio === 'admin') return true;
-  if (user.tipo_negocio === 'fornecedor') return true;
+
+  const papel = getPapel(user);
+
+  // Vendedor nunca e o sujeito. Se chegou aqui com o vendedor, alguem esqueceu
+  // de trocar pelo cliente alvo — melhor sumir com o catalogo (erro visivel) do
+  // que mostrar preco de franqueado para um multimarca (erro invisivel).
+  if (papel === PAPEIS.VENDEDOR) return false;
+
+  if (papel === PAPEIS.ADMIN || papel === PAPEIS.CADASTRO) return true;
+  if (papel === PAPEIS.FORNECEDOR) return true;
 
   const tipo = getTipoCliente(user);
   if (tipo === 'multimarca') return produto.disponivel_multimarca === true;
@@ -86,8 +110,11 @@ export function isProdutoVisivelParaCliente(produto, user) {
 export function isCapsulaVisivelParaCliente(capsula, produtosInternos, user) {
   if (!capsula) return false;
   if (!user) return false;
-  if (user.role === 'admin' || user.tipo_negocio === 'admin') return true;
-  if (user.tipo_negocio === 'fornecedor') return true;
+
+  const papel = getPapel(user);
+  if (papel === PAPEIS.VENDEDOR) return false; // ver isProdutoVisivelParaCliente
+  if (papel === PAPEIS.ADMIN || papel === PAPEIS.CADASTRO) return true;
+  if (papel === PAPEIS.FORNECEDOR) return true;
 
   const tipo = getTipoCliente(user);
   const flagOk = tipo === 'multimarca'

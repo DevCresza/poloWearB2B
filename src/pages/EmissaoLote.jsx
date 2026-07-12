@@ -284,6 +284,10 @@ export default function EmissaoLote() {
           observacoes_comprador: observacoes || '',
           estoque_baixado: false, // admin emitindo em nome do cliente — nao dar baixa automatica
           emitido_por_admin_user_id: me?.id || null,
+          // Mesma autoria que o Carrinho grava, para o relatorio nao precisar
+          // saber de qual tela o pedido veio.
+          criado_por_user_id: me?.id || null,
+          criado_por_papel: 'admin',
         };
 
         const pedido = await Pedido.create(pedidoData);

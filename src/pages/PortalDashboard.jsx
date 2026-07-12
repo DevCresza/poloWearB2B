@@ -18,6 +18,27 @@ import AlertasVencimento from '../components/AlertasVencimento';
 import DashboardKpiCards from '../components/DashboardKpiCards';
 import { formatCurrency } from '@/utils/exportUtils';
 import { useLojaContext } from '@/contexts/LojaContext';
+import { can, PERM } from '@/utils/permissoes';
+import {
+  isAdmin as ehAdmin,
+  isFornecedor as ehFornecedor,
+  isCliente as ehCliente,
+  isVendedor as ehVendedor,
+  isCadastro as ehCadastro,
+} from '@/utils/roles';
+
+function AtalhoCard({ to, titulo, descricao }) {
+  return (
+    <Link to={createPageUrl(to)}>
+      <Card className="bg-slate-100 rounded-2xl shadow-neumorphic hover:shadow-xl transition-shadow h-full">
+        <CardContent className="p-6">
+          <h3 className="text-lg font-bold text-gray-800 mb-1">{titulo}</h3>
+          <p className="text-sm text-gray-600">{descricao}</p>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
 
 export default function PortalDashboard() {
   const { lojaSelecionada, loading: lojasLoading } = useLojaContext();
@@ -295,9 +316,14 @@ export default function PortalDashboard() {
     );
   }
 
-  const isCliente = user?.tipo_negocio === 'multimarca' || user?.tipo_negocio === 'franqueado';
-  const isFornecedor = user?.tipo_negocio === 'fornecedor';
-  const isAdmin = user?.role === 'admin';
+  const isCliente = ehCliente(user);
+  const isFornecedor = ehFornecedor(user);
+  const isAdmin = ehAdmin(user);
+  const isVendedor = ehVendedor(user);
+  const isCadastro = ehCadastro(user);
+  // Vendedor e Cadastro nao veem KPIs de dinheiro. Sem isso, o `role` do
+  // DashboardKpiCards cairia no fallback 'admin' e mostraria faturamento.
+  const podeVerFaturamento = can(user, PERM.VER_TOTAIS_FATURAMENTO);
 
   return (
     <div className="min-h-screen bg-slate-100 p-4 md:p-6 space-y-6">
@@ -319,6 +345,8 @@ export default function PortalDashboard() {
             {isCliente && 'Bem-vindo ao seu portal de compras'}
             {isFornecedor && 'Gerencie seus produtos e pedidos'}
             {isAdmin && 'Painel administrativo completo'}
+            {isVendedor && 'Monte pedidos para seus clientes e acompanhe o andamento'}
+            {isCadastro && 'Cadastre e mantenha os produtos e cápsulas'}
           </p>
         </CardContent>
       </Card>
@@ -346,20 +374,40 @@ export default function PortalDashboard() {
       )}
 
       {/* Cards de Estatísticas - 6 KPIs Padronizados */}
-      <DashboardKpiCards
-        role={isCliente ? 'cliente' : isFornecedor ? 'fornecedor' : 'admin'}
-        kpis={{
-          totalPedidos: stats.totalPedidos,
-          valorTotal: stats.valorTotalComprado,
-          valorFaturado: stats.valorFaturado,
-          qtdFaturada: stats.qtdFaturada,
-          pendenteFaturamento: stats.valorTotalComprado - stats.valorFaturado,
-          qtdPendenteFaturamento: stats.totalPedidos - stats.qtdFaturada,
-          valorAVencer: stats.valorAVencer,
-          valorVencido: stats.valorVencido,
-          valorQuebra: stats.valorQuebra,
-        }}
-      />
+      {podeVerFaturamento && (
+        <DashboardKpiCards
+          role={isCliente ? 'cliente' : isFornecedor ? 'fornecedor' : 'admin'}
+          kpis={{
+            totalPedidos: stats.totalPedidos,
+            valorTotal: stats.valorTotalComprado,
+            valorFaturado: stats.valorFaturado,
+            qtdFaturada: stats.qtdFaturada,
+            pendenteFaturamento: stats.valorTotalComprado - stats.valorFaturado,
+            qtdPendenteFaturamento: stats.totalPedidos - stats.qtdFaturada,
+            valorAVencer: stats.valorAVencer,
+            valorVencido: stats.valorVencido,
+            valorQuebra: stats.valorQuebra,
+          }}
+        />
+      )}
+
+      {/* Equipe interna sem acesso a faturamento: atalhos em vez de KPIs. */}
+      {(isVendedor || isCadastro) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+          {isVendedor && (
+            <>
+              <AtalhoCard to="Catalogo" titulo="Catálogo" descricao="Monte um pedido para um cliente" />
+              <AtalhoCard to="PedidosAdmin" titulo="Pedidos" descricao="Acompanhe o andamento dos pedidos" />
+            </>
+          )}
+          {isCadastro && (
+            <>
+              <AtalhoCard to="GestaoProdutos" titulo="Produtos" descricao="Cadastre, edite e ative produtos" />
+              <AtalhoCard to="GestaoCapsulas" titulo="Cápsulas" descricao="Monte e mantenha as cápsulas" />
+            </>
+          )}
+        </div>
+      )}
 
       {/* Cards extras para fornecedor: Produtos Ativos e Estoque Baixo */}
       {(isFornecedor || isAdmin) && (

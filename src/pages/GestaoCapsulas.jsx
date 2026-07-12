@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Plus, Edit, Trash2, Image, Sparkles } from 'lucide-react';
 import CapsulaForm from '../components/admin/CapsulaForm';
 import { toast } from 'sonner';
+import { can, PERM } from '@/utils/permissoes';
+import { isFornecedor } from '@/utils/roles';
 
 export default function GestaoCapsulas() {
   const [capsulas, setCapsulas] = useState([]);
@@ -38,14 +40,12 @@ export default function GestaoCapsulas() {
     try {
       let capsulasList;
 
-      // Se for fornecedor, filtrar apenas cápsulas do fornecedor
-      if (currentUser?.tipo_negocio === 'fornecedor' && currentUser?.fornecedor_id) {
+      // Fornecedor: só as cápsulas dele. Admin e Cadastro: todas.
+      if (isFornecedor(currentUser) && currentUser?.fornecedor_id) {
         capsulasList = await Capsula.filter({ fornecedor_id: currentUser.fornecedor_id }, '-created_at');
-      } else if (currentUser?.role === 'admin') {
-        // Admin vê todas as cápsulas
+      } else if (can(currentUser, PERM.GERENCIAR_CAPSULAS)) {
         capsulasList = await Capsula.list({ sort: '-created_at' });
       } else {
-        // Outros usuários não veem cápsulas (ou ajustar conforme necessário)
         capsulasList = [];
       }
 

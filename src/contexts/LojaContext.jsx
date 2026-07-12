@@ -1,15 +1,22 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Loja } from '@/api/entities';
+import { useRepresentacao } from './RepresentacaoContext';
 
 const LojaContext = createContext(null);
 
 export function LojaProvider({ children, user }) {
+  // As lojas sao SEMPRE do sujeito da compra: o proprio cliente, ou o cliente
+  // alvo quando quem esta comprando e um vendedor. Sem isto, o vendedor veria
+  // (e entregaria em) as lojas dele, nao as do cliente.
+  const { usuarioCompra, carrinhoKey, isVendedor } = useRepresentacao();
+  const sujeito = usuarioCompra || user;
+
   const [lojas, setLojas] = useState([]);
   const [lojaSelecionada, setLojaSelecionadaState] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const loadLojas = useCallback(async () => {
-    if (!user?.id) {
+    if (!sujeito?.id) {
       setLojas([]);
       setLojaSelecionadaState(null);
       setLoading(false);
@@ -17,11 +24,11 @@ export function LojaProvider({ children, user }) {
     }
 
     try {
-      const lojasList = await Loja.filter({ user_id: user.id, ativa: true });
+      const lojasList = await Loja.filter({ user_id: sujeito.id, ativa: true });
       setLojas(lojasList || []);
 
       // Restore selection from localStorage
-      const storageKey = `loja_selecionada_${user.id}`;
+      const storageKey = `loja_selecionada_${sujeito.id}`;
       const savedId = localStorage.getItem(storageKey);
 
       if (lojasList.length === 1) {
@@ -40,7 +47,7 @@ export function LojaProvider({ children, user }) {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [sujeito?.id]);
 
   useEffect(() => {
     loadLojas();
@@ -48,21 +55,18 @@ export function LojaProvider({ children, user }) {
 
   const setLojaSelecionada = useCallback((loja) => {
     setLojaSelecionadaState(loja);
-    if (user?.id) {
-      const storageKey = `loja_selecionada_${user.id}`;
+    if (sujeito?.id) {
+      const storageKey = `loja_selecionada_${sujeito.id}`;
       if (loja) {
         localStorage.setItem(storageKey, loja.id);
       } else {
         localStorage.removeItem(storageKey);
       }
     }
-  }, [user?.id]);
+  }, [sujeito?.id]);
 
   // Helper: returns loja_id filter value (or undefined if "todas")
   const lojaFilterId = lojaSelecionada?.id || null;
-
-  // Cart is always global (store selection happens at checkout time)
-  const carrinhoKey = 'carrinho';
 
   return (
     <LojaContext.Provider value={{
@@ -72,7 +76,12 @@ export function LojaProvider({ children, user }) {
       loadLojas,
       loading,
       lojaFilterId,
+      // Chave do carrinho vem da representacao: global para o cliente,
+      // isolada por (vendedor, cliente) para o vendedor.
       carrinhoKey,
+      // Vendedor precisa escolher a loja de entrega: sem isso o pedido cairia
+      // no endereco do proprio vendedor (Carrinho usa `loja || user`).
+      exigeLoja: isVendedor,
       hasMultipleLojas: lojas.length > 1,
       hasSingleLoja: lojas.length === 1,
       hasNoLojas: lojas.length === 0,
@@ -95,6 +104,7 @@ export function useLojaContext() {
       loading: false,
       lojaFilterId: null,
       carrinhoKey: 'carrinho',
+      exigeLoja: false,
       hasMultipleLojas: false,
       hasSingleLoja: false,
       hasNoLojas: true,
