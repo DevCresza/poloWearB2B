@@ -1,6 +1,5 @@
 // Helper para criação de usuários pelo admin
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { UserTable } from '@/api/supabaseEntities';
+import { supabase } from '@/lib/supabase';
 import { Fornecedor, Loja } from '@/api/entities';
 import { SendEmail } from '@/api/integrations';
 
@@ -44,41 +43,18 @@ export async function createUserWithAccess(userData) {
     // 1. Gerar senha segura
     const password = generateSecurePassword(12);
 
-    // 2. Criar usuário no Supabase Auth usando signUp
-    let authUserId = null;
-    if (isSupabaseConfigured()) {
-      try {
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email: userData.email,
-          password: password,
-          options: {
-            data: {
-              full_name: userData.full_name,
-              role: userData.role || 'user',
-              tipo_negocio: userData.tipo_negocio
-            },
-            emailRedirectTo: `${window.location.origin}/`
-          }
-        });
-
-        if (signUpError) {
-          throw new Error(`Erro ao criar autenticação: ${signUpError.message}`);
-        }
-
-        authUserId = signUpData.user?.id;
-      } catch (authError) {
-        throw authError;
-      }
-    }
-
-    // 3. Preparar dados do usuário para a tabela users
+    // 2. Criar via Edge Function `create-user` (service_role, e exige admin).
+    //    NAO usar supabase.auth.signUp aqui: ele troca a sessao do admin pela do
+    //    novo usuario (deslogando o admin em silencio). Alem disso, a tabela users
+    //    agora tem RLS + trigger que so deixa admin criar papel diferente de
+    //    multimarca — e no signUp quem insere e o proprio usuario recem-criado.
     const completeUserData = {
-      id: authUserId, // Usar o ID do Auth
       email: userData.email,
+      password,
       full_name: userData.full_name,
       telefone: userData.telefone || null,
       tipo_negocio: userData.tipo_negocio,
-      role: userData.role || userData.tipo_negocio, // role: usar o enviado ou tipo_negocio (admin, fornecedor, multimarca, franqueado)
+      role: userData.role || userData.tipo_negocio,
       categoria_cliente: userData.categoria_cliente || 'multimarca',
       empresa: userData.nome_empresa || null,
       cnpj: userData.cnpj || null,
@@ -89,34 +65,31 @@ export async function createUserWithAccess(userData) {
       ativo: true,
       permissoes: userData.permissoes || getDefaultPermissions(userData.tipo_negocio),
       observacoes: userData.observacoes || null,
-      // Adicionar fornecedor_id se for usuário do tipo fornecedor
       fornecedor_id: userData.tipo_negocio === 'fornecedor' ? userData.fornecedor_id : null
-      // created_at é gerado automaticamente pelo banco
     };
 
-    // 4. Remover campos null/undefined
     Object.keys(completeUserData).forEach(key => {
-      if (completeUserData[key] === undefined) {
-        delete completeUserData[key];
-      }
+      if (completeUserData[key] === undefined) delete completeUserData[key];
     });
 
-    // 5. Criar registro na tabela users
     let createdUser;
     try {
-      createdUser = await UserTable.create(completeUserData);
-    } catch (dbError) {
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: completeUserData
+      });
 
-      // Se criou no Auth mas falhou no DB, tentar deletar do Auth
-      if (isSupabaseConfigured() && authUserId) {
-        try {
-          // Como não temos admin API, fazer logout
-          await supabase.auth.signOut();
-        } catch (cleanupError) {
-        }
+      if (error) {
+        const msg = error.context && typeof error.context.json === 'function'
+          ? (await error.context.json().catch(() => ({})))?.error
+          : error.message;
+        throw new Error(msg || 'falha desconhecida');
       }
+      if (data?.error) throw new Error(data.error);
 
-      throw new Error(`Erro ao criar usuário no banco: ${dbError.message}`);
+      createdUser = data?.user;
+      if (!createdUser?.id) throw new Error('Usuário criado mas não retornado pelo servidor');
+    } catch (dbError) {
+      throw new Error(`Erro ao criar usuário: ${dbError.message}`);
     }
 
     // 6. Se for fornecedor, atualizar o fornecedor com responsavel_user_id
