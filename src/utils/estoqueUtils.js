@@ -1,6 +1,7 @@
 // Baixa e devolução automática de estoque a partir dos itens de um pedido.
 // A baixa é aplicada no checkout; a devolução, quando o pedido é cancelado/recusado.
 import { Produto } from '@/api/entities';
+import { supabase } from '@/lib/supabase';
 
 // variantes_cor pode vir como array (jsonb) ou string — normaliza para array.
 const parseVariantes = (valor) => {
@@ -113,12 +114,35 @@ async function ajustarEstoque(itens, sinal) {
   }
 }
 
-// Dá baixa no estoque (chamado ao finalizar o pedido no checkout).
+/**
+ * Dá baixa no estoque (checkout).
+ *
+ * Vai por RPC, não por Produto.update: quem finaliza a compra é o CLIENTE, e
+ * com RLS ele não pode (nem deve) escrever em `produtos` — `variantes_cor`
+ * carrega os preços de cada variante, então permitir essa escrita seria
+ * permitir que o cliente reescrevesse a própria tabela de preços.
+ *
+ * A função no servidor mexe só no estoque e ignora o que não for pronta entrega.
+ */
 export async function darBaixaEstoque(itens) {
-  return ajustarEstoque(itens, -1);
+  const grupos = agruparItensPorProduto(itens);
+  const payload = Object.entries(grupos).flatMap(([produtoId, itensDoProduto]) =>
+    itensDoProduto.map((item) => ({
+      produto_id: produtoId,
+      quantidade: Number(item.quantidade) || 0,
+      tamanho_selecionado: item.tamanho_selecionado || null,
+      cor_selecionada: item.cor_selecionada || null,
+    }))
+  );
+
+  if (payload.length === 0) return;
+
+  const { error } = await supabase.rpc('aplicar_baixa_estoque', { itens: payload });
+  if (error) throw error;
 }
 
-// Devolve o estoque (chamado ao cancelar/recusar um pedido).
+// Devolve o estoque (cancelamento/recusa). Só quem tem acesso de staff faz isso,
+// e o staff pode escrever em `produtos` — segue pelo caminho normal.
 export async function devolverEstoque(itens) {
   return ajustarEstoque(itens, 1);
 }

@@ -4,7 +4,43 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is a Vite + React application built on the Base44 platform. It's a multi-brand e-commerce management system (Polo Wear Multimarcas) with role-based access for administrators, suppliers (fornecedores), and multi-brand clients (multimarcas). The system handles products, orders, inventory, CRM, financial management, and WhatsApp integration.
+Vite + React. Sistema de gestão B2B multimarcas (Polo Wear): produtos, pedidos, estoque, CRM, financeiro e WhatsApp.
+
+> **O backend é Supabase, não Base44.** As seções abaixo que citam o "Base44 SDK" estão
+> desatualizadas: `src/api/entities.js` reexporta de `src/api/supabaseEntities.js`
+> (`createSupabaseEntity('tabela')`) e `src/api/supabaseAuth.js`. Migrations em
+> `supabase/migrations/`, Edge Functions em `supabase/functions/`.
+
+## Autorização (leia antes de mexer em acesso)
+
+**Fonte única de verdade — não reimplemente checagem de papel na página:**
+
+- `src/utils/roles.js` — papéis: `admin`, `vendedor`, `cadastro`, `fornecedor`, `multimarca`, `franqueado`.
+  `role` é a fonte de verdade; `tipo_negocio` é redundante e mantido em sincronia.
+- `src/utils/permissoes.js` — `can(user, PERM.X)` e `PERMISSAO_POR_PAGINA`. A permissão é
+  **derivada do papel**. A coluna `users.permissoes` (jsonb) é legado e **não autoriza nada**.
+- `src/components/ProtectedRoute.jsx` — guarda de rota única, aplicada em `src/pages/index.jsx`.
+  Página nova: adicione a permissão em `PERMISSAO_POR_PAGINA` e envolva a rota.
+
+**Papéis internos:**
+- **Vendedor** — catálogo/cápsulas como as lojas veem; fecha pedido *em nome de um cliente*
+  (`src/contexts/RepresentacaoContext.jsx`); vê todos os pedidos, mas **não** os totais de
+  faturamento nem custo.
+- **Cadastro** — cria/edita/ativa produtos e cápsulas (com preço). Sem pedidos, sem financeiro.
+
+**Comprando em nome de outro (vendedor):** preço, pedido mínimo, direito a boleto,
+inadimplência, bloqueio, endereço e `comprador_user_id` são todos do **comprador**, nunca de
+quem opera a tela. No `Carrinho.jsx`, `user` é o *sujeito da compra* e `usuarioLogado` é quem
+está logado — não troque os dois.
+
+**Segurança real está no banco (RLS), não na UI:**
+- `public.app_role()` / `is_admin()` / `is_staff()` / `meu_fornecedor_id()` alimentam as policies.
+- Triggers guardam **colunas** (RLS guarda linhas): usuário não muda o próprio papel, cliente
+  não altera valor/itens do pedido nem se dá por pago na carteira.
+- Baixa de estoque do checkout vai por RPC `aplicar_baixa_estoque()` — o cliente **não** tem
+  UPDATE em `produtos` (o campo `variantes_cor` carrega os preços).
+- Edge Functions de usuário (`create-user`, `update-user-*`, `resetUserPassword`,
+  `deleteAuthUser`) exigem chamador **admin**. Ao criar uma nova, replique essa checagem.
 
 ## Development Commands
 
