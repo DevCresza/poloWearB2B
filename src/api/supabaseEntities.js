@@ -17,32 +17,46 @@ const createSupabaseEntity = (tableName) => {
       }
 
       try {
-        let query = supabase.from(tableName).select('*');
+        // Monta a query base (filtros + ordenacao). Reconstruida a cada pagina
+        // porque o query builder do supabase-js e de uso unico.
+        const montarQuery = () => {
+          let q = supabase.from(tableName).select('*');
+          if (options.filters) {
+            Object.entries(options.filters).forEach(([key, value]) => {
+              q = q.eq(key, value);
+            });
+          }
+          if (options.sort) {
+            const isDesc = options.sort.startsWith('-');
+            const field = isDesc ? options.sort.substring(1) : options.sort;
+            q = q.order(field, { ascending: !isDesc });
+          }
+          return q;
+        };
 
-        // Aplicar filtros
-        if (options.filters) {
-          Object.entries(options.filters).forEach(([key, value]) => {
-            query = query.eq(key, value);
-          });
-        }
-
-        // Aplicar ordenação
-        if (options.sort) {
-          const isDesc = options.sort.startsWith('-');
-          const field = isDesc ? options.sort.substring(1) : options.sort;
-          query = query.order(field, { ascending: !isDesc });
-        }
-
-        // Aplicar limite
+        // Com limite explicito: uma requisicao so (o chamador quer no maximo N).
         if (options.limit) {
-          query = query.limit(options.limit);
+          const { data, error } = await montarQuery().limit(options.limit);
+          if (error) throw error;
+          return data || [];
         }
 
-        const { data, error } = await query;
-
-        if (error) throw error;
-
-        return data || [];
+        // Sem limite: o Supabase corta em 1000 linhas POR requisicao ("Max rows").
+        // Sem paginar, telas com mais de 1000 registros (pedidos, carteira...)
+        // mostravam dados e totais incompletos. Aqui buscamos em blocos ate
+        // acabar, entao list() volta a significar "todos os registros".
+        const PAGINA = 1000;
+        let todos = [];
+        let inicio = 0;
+        for (;;) {
+          const { data, error } = await montarQuery().range(inicio, inicio + PAGINA - 1);
+          if (error) throw error;
+          const bloco = data || [];
+          todos = todos.concat(bloco);
+          if (bloco.length < PAGINA) break; // ultima pagina
+          inicio += PAGINA;
+        }
+        return todos;
       } catch (error) {
         throw new Error(`Erro ao listar ${tableName}: ${error.message}`);
       }
