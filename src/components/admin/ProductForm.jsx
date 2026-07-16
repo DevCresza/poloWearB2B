@@ -23,6 +23,7 @@ import { Package, DollarSign, Palette, Ruler, Video, Calendar, AlertTriangle, Sa
 export default function ProductForm({ produto, onSuccess, onCancel }) {
   const [submitting, setSubmitting] = useState(false); // Renamed from 'loading'
   const [fornecedores, setFornecedores] = useState([]);
+  const [acoesExistentes, setAcoesExistentes] = useState([]); // valores de "acao" ja usados (sugestao)
   const [currentUser, setCurrentUser] = useState(null);
   const [isUserFornecedor, setIsUserFornecedor] = useState(false);
   const [userFornecedorId, setUserFornecedorId] = useState(null);
@@ -38,6 +39,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
     categoria: '',
     genero: '',
     temporada: 'Atemporal',
+    acao: '',
     disponibilidade: 'pronta_entrega',
     data_inicio_venda: '',
     data_limite_venda: '', // New field
@@ -233,6 +235,15 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
       // Carregar usuário atual
       const user = await User.me();
       setCurrentUser(user);
+
+      // Valores de "acao" ja cadastrados, para sugerir no campo (evita
+      // "CAPS2" e "Caps 2" virarem coisas diferentes).
+      try {
+        const todos = await Produto.list();
+        const distintos = [...new Set((todos || []).map(p => p.acao).filter(Boolean))]
+          .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+        setAcoesExistentes(distintos);
+      } catch { /* sugestao e opcional */ }
 
       // Verificar se é usuário fornecedor
       if (user.tipo_negocio === 'fornecedor') {
@@ -495,7 +506,8 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
         data_inicio_venda: formData.data_inicio_venda || null,
         data_limite_venda: formData.data_limite_venda || null,
         data_prevista_entrega: formData.data_prevista_entrega || null,
-        data_lancamento: formData.data_lancamento || null
+        data_lancamento: formData.data_lancamento || null,
+        acao: (formData.acao || '').trim() || null
       };
 
       // Remover campos que não devem ser enviados na criação/atualização
@@ -697,6 +709,28 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                       <SelectItem value="Atemporal">Atemporal</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                {/* Acao: rotulo livre (Caps 1, Caps 2, Black Friday, Continuo...).
+                    Aparece no relatorio detalhado para filtrar/somar por capsula.
+                    Campo livre, mas sugere os valores ja usados. */}
+                <div className="space-y-2">
+                  <Label htmlFor="acao">Ação</Label>
+                  <Input
+                    id="acao"
+                    list="acoes-existentes"
+                    value={formData.acao || ''}
+                    onChange={(e) => setFormData({ ...formData, acao: e.target.value })}
+                    placeholder="Ex: Caps 1, Black Friday, Contínuo..."
+                  />
+                  <datalist id="acoes-existentes">
+                    {acoesExistentes.map((a) => (
+                      <option key={a} value={a} />
+                    ))}
+                  </datalist>
+                  <p className="text-xs text-gray-500">
+                    Usado para filtrar e somar por cápsula/ação no relatório detalhado.
+                  </p>
                 </div>
               </div>
 

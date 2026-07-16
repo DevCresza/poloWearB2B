@@ -586,6 +586,23 @@ export default function Catalogo() {
       return (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
     });
 
+  // As capsulas tambem respeitam os filtros de Pronta Entrega e de mes de
+  // entrega — derivados dos PRODUTOS de cada capsula (a capsula em si nao tem
+  // disponibilidade/data). Uma capsula aparece se tiver ao menos um produto
+  // que casa com o filtro. Os demais filtros (categoria/genero) nao se aplicam
+  // as capsulas para nao esconder capsulas que legitimamente misturam itens.
+  const capsulasFiltradas = activeCapsulas.filter(capsula => {
+    if (selectedDisponibilidade === 'all' && filtroMesEntrega === 'all') return true;
+    const ids = Array.isArray(capsula.produto_ids) ? capsula.produto_ids : [];
+    const prods = ids.map(id => todosProdutos.find(p => p.id === id)).filter(Boolean);
+    if (prods.length === 0) return false;
+    const matchDisp = selectedDisponibilidade === 'all'
+      || prods.some(p => p.disponibilidade === selectedDisponibilidade);
+    const matchMes = filtroMesEntrega === 'all'
+      || prods.some(p => p.data_prevista_entrega && p.data_prevista_entrega.slice(0, 7) === filtroMesEntrega);
+    return matchDisp && matchMes;
+  });
+
   // IDs dos produtos campeões de venda (top 8) — usado para o selo "Mais Vendido"
   const topVendidosIds = useMemo(() => {
     const ranking = Object.entries(vendasPorProduto)
@@ -1218,12 +1235,15 @@ export default function Catalogo() {
           })}
         </div>
 
-        {/* Faixa horizontal de Cápsulas */}
+        {/* Faixa horizontal de Cápsulas — respeita os filtros Pronta Entrega e mês */}
         {activeCapsulas.length > 0 && (
           <div className="space-y-3">
             <h2 className="text-base sm:text-lg font-bold text-gray-900 uppercase tracking-wider">Cápsulas</h2>
+            {capsulasFiltradas.length === 0 ? (
+              <p className="text-sm text-gray-500">Nenhuma cápsula para este filtro.</p>
+            ) : (
             <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
-              {activeCapsulas.map(capsula => (
+              {capsulasFiltradas.map(capsula => (
                 <div
                   key={capsula.id}
                   onClick={() => handleSelectCapsula(capsula)}
@@ -1243,6 +1263,7 @@ export default function Catalogo() {
                 </div>
               ))}
             </div>
+            )}
           </div>
         )}
 

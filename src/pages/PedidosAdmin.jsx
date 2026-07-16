@@ -35,6 +35,8 @@ export default function PedidosAdmin() {
   const [lojasDetMap, setLojasDetMap] = useState({});
   // produto_id -> data_prevista_entrega (define o mes de faturamento de cada item)
   const [produtoEntregaMap, setProdutoEntregaMap] = useState({});
+  // produto_id -> acao (Caps 1, Black Friday...) para a coluna AÇÃO do extrato
+  const [produtoAcaoMap, setProdutoAcaoMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('kanban'); // 'kanban' ou 'list'
   const [selectedPedido, setSelectedPedido] = useState(null);
@@ -77,10 +79,13 @@ export default function PedidosAdmin() {
       setFornecedores(fornecedoresList || []);
 
       const entregaMap = {};
+      const acaoMap = {};
       (produtosList || []).forEach(p => {
         if (p.data_prevista_entrega) entregaMap[p.id] = p.data_prevista_entrega;
+        if (p.acao) acaoMap[p.id] = p.acao;
       });
       setProdutoEntregaMap(entregaMap);
+      setProdutoAcaoMap(acaoMap);
 
       // Build lojas map
       const map = {};
@@ -278,6 +283,7 @@ export default function PedidosAdmin() {
             fornecedor: nomeFornecedor,
             forma_pagamento: formaPgComPrazo,
             mes_faturamento: getMesFaturamentoItem(pedido, it, produtoEntregaMap),
+            acao: (it.produto_id && produtoAcaoMap[it.produto_id]) || '',
             tipo_pedido: isGrade ? 'PGM' : 'PE',
             nome_item: it.nome || '',
             ref_fornecedor: it.referencia_fornecedor || it.referencia || '',
@@ -307,6 +313,7 @@ export default function PedidosAdmin() {
         { key: 'fornecedor', label: 'FORNECEDOR' },
         { key: 'forma_pagamento', label: 'FORMA DE PAGAMENTO' },
         { key: 'mes_faturamento', label: 'MÊS DE FATURAMENTO' },
+        { key: 'acao', label: 'AÇÃO' },
         { key: 'tipo_pedido', label: 'TIPO DE PEDIDO (PE/PGM)' },
         { key: 'nome_item', label: 'NOME DO ITEM' },
         { key: 'ref_fornecedor', label: 'REF FORNECEDOR' },
