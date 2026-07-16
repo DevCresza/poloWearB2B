@@ -1445,6 +1445,17 @@ export default function Carrinho() {
                                 <p className="text-lg font-bold text-green-600">
                                   {formatCurrency(preco * item.quantidade)}
                                 </p>
+                                {/* Quantidade total de pecas: grade = pecas por grade x nº de grades. */}
+                                {(() => {
+                                  const pecas = item.tipo_venda === 'grade'
+                                    ? (Number(item.total_pecas_grade) || 0) * (Number(item.quantidade) || 0)
+                                    : (Number(item.quantidade) || 0);
+                                  return (
+                                    <p className="text-xs text-gray-500 mt-0.5">
+                                      {pecas.toLocaleString('pt-BR')} {pecas === 1 ? 'peça' : 'peças'}
+                                    </p>
+                                  );
+                                })()}
                               </div>
                             </div>
                           </div>

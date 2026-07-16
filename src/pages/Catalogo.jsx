@@ -1,5 +1,6 @@
 
 import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { User } from '@/api/entities';
 import { Produto } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
@@ -65,6 +66,7 @@ export default function Catalogo() {
   const [fotoAtualIndex, setFotoAtualIndex] = useState(0);
   const [capsulaFotoIndex, setCapsulaFotoIndex] = useState(0); // Índice da foto atual na galeria da cápsula
   const [capsulaFotos, setCapsulaFotos] = useState([]); // Array de fotos para a galeria da cápsula
+  const [zoomImg, setZoomImg] = useState(null); // { url, nome } — foto ampliada em tela cheia
 
   // Mapa de fornecedor_id → nome do fornecedor para exibição
   const fornecedorMap = useMemo(() => {
@@ -2158,7 +2160,12 @@ export default function Catalogo() {
                       <img
                         src={capsulaFotos[capsulaFotoIndex]?.url}
                         alt={capsulaFotos[capsulaFotoIndex]?.produtoNome || selectedCapsula.nome}
-                        className="w-full h-full object-cover"
+                        onClick={() => capsulaFotos[capsulaFotoIndex]?.url && setZoomImg({
+                          url: capsulaFotos[capsulaFotoIndex].url,
+                          nome: capsulaFotos[capsulaFotoIndex]?.produtoNome || selectedCapsula.nome,
+                        })}
+                        className="w-full h-full object-cover cursor-zoom-in"
+                        title="Clique para ampliar"
                       />
                     </div>
 
@@ -2214,34 +2221,29 @@ export default function Catalogo() {
                     </div>
                   </div>
 
-                  {/* Miniaturas com bolinhas de cor */}
+                  {/* Miniaturas: sempre a FOTO (nao mais bolinhas de cor).
+                      Fica a foto grande em cima e as miniaturas embaixo, que
+                      viram a foto grande ao clicar / navegar pelas setas. */}
                   <div className="flex justify-center gap-2 flex-wrap max-w-md mx-auto">
                     {capsulaFotos.map((foto, idx) => (
                       <button
                         key={idx}
                         type="button"
                         onClick={() => setCapsulaFotoIndex(idx)}
-                        className={`relative transition-all ${
+                        title={foto.corNome ? `${foto.produtoNome} - ${foto.corNome}` : (foto.produtoNome || 'Capa')}
+                        className={`relative transition-all rounded-lg ${
                           capsulaFotoIndex === idx
                             ? 'ring-2 ring-purple-500 ring-offset-2'
                             : 'opacity-70 hover:opacity-100'
                         }`}
                       >
-                        {foto.tipo === 'capa' ? (
-                          <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100">
-                            <img src={foto.url} alt="Capa" className="w-full h-full object-cover" />
-                          </div>
-                        ) : foto.corHex ? (
-                          <div
-                            className="w-8 h-8 rounded-full border-2 border-gray-300 shadow-sm"
-                            style={{ backgroundColor: foto.corHex }}
-                            title={`${foto.produtoNome} - ${foto.corNome}`}
+                        <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100">
+                          <img
+                            src={foto.url}
+                            alt={foto.produtoNome || 'Foto'}
+                            className="w-full h-full object-cover"
                           />
-                        ) : (
-                          <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100">
-                            <img src={foto.url} alt={foto.produtoNome} className="w-full h-full object-cover" />
-                          </div>
-                        )}
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -2286,13 +2288,16 @@ export default function Catalogo() {
                     return (
                       <div key={produtoId} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                         <div className="flex gap-4">
-                          {/* Foto do produto */}
-                          <div className="w-20 h-20 rounded-md bg-gray-200 flex items-center justify-center flex-shrink-0">
+                          {/* Foto do produto — passa o mouse para ampliar um pouco,
+                              clica para ver em tela cheia. */}
+                          <div className="w-20 h-20 rounded-md bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
                             {primeiraFoto ? (
                               <img
                                 src={primeiraFoto}
                                 alt={produto.nome}
-                                className="w-full h-full rounded-md object-cover"
+                                onClick={() => setZoomImg({ url: primeiraFoto, nome: produto.nome })}
+                                className="w-full h-full rounded-md object-cover cursor-zoom-in transition-transform duration-200 hover:scale-125"
+                                title="Clique para ampliar"
                               />
                             ) : (
                               <Package className="w-8 h-8 text-gray-400" />
@@ -2578,6 +2583,37 @@ export default function Catalogo() {
             </div>
           </DialogContent>
         </Dialog>
+      )}
+
+      {/* Foto ampliada em tela cheia (zoom). Via portal no body para ficar acima
+          do modal da capsula (senao o overlay do dialog intercepta os cliques). */}
+      {zoomImg && createPortal(
+        <div
+          // pointer-events-auto: o modal Radix desliga pointer-events no body;
+          // sem isto o clique para fechar nao chega no overlay.
+          className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center p-4 cursor-zoom-out pointer-events-auto"
+          onClick={() => setZoomImg(null)}
+        >
+          <img
+            src={zoomImg.url}
+            alt={zoomImg.nome}
+            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+          />
+          <button
+            type="button"
+            onClick={() => setZoomImg(null)}
+            className="absolute top-4 right-4 bg-white/90 hover:bg-white rounded-full p-2 shadow-lg"
+            aria-label="Fechar"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          {zoomImg.nome && (
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/60 text-white text-sm px-4 py-2 rounded-full">
+              {zoomImg.nome}
+            </div>
+          )}
+        </div>,
+        document.body
       )}
     </div>
   );
