@@ -148,6 +148,28 @@ export default function Carrinho() {
     localStorage.setItem(carrinhoKey, JSON.stringify(novoCarrinho));
   };
 
+  // Total de pecas de um item de capsula: soma dos produtos configurados
+  // (grade -> qtd x pecas_por_grade; por tamanho -> qtd ja em pecas) x o
+  // multiplicador (quantas vezes a capsula).
+  const calcularPecasCapsula = (item) => {
+    const cfg = item.produtos_quantidades || {};
+    let pecasPorCapsula = 0;
+    Object.entries(cfg).forEach(([pid, config]) => {
+      const prod = produtos.find(p => p.id === pid);
+      const pecasGrade = (prod && prod.tipo_venda === 'grade')
+        ? (Number(prod.total_pecas_grade) || 1)
+        : 1;
+      if (config && typeof config === 'object' && Array.isArray(config.variantes)) {
+        config.variantes.forEach(v => { pecasPorCapsula += (Number(v.quantidade) || 0) * pecasGrade; });
+      } else if (config && typeof config === 'object' && Array.isArray(config.tamanhos)) {
+        config.tamanhos.forEach(t => { pecasPorCapsula += (Number(t.quantidade) || 0); });
+      } else if (typeof config === 'number') {
+        pecasPorCapsula += config * pecasGrade;
+      }
+    });
+    return pecasPorCapsula * (Number(item.quantidade) || 1);
+  };
+
   // Pedido minimo do fornecedor conforme o tipo do cliente logado.
   // Multimarca: pedido_minimo_multimarca; Franqueado: pedido_minimo_franqueado.
   // Fallback: pedido_minimo_valor (legado) se o campo especifico nao estiver setado.
@@ -1329,6 +1351,16 @@ export default function Carrinho() {
                                   <p className="text-base font-bold text-purple-900">
                                     {formatCurrency(item.preco_unitario * item.quantidade)}
                                   </p>
+                                  {/* Total de pecas da capsula = soma dos produtos x multiplicador. */}
+                                  {(() => {
+                                    const pecas = calcularPecasCapsula(item);
+                                    if (pecas <= 0) return null;
+                                    return (
+                                      <p className="text-xs text-gray-500 mt-0.5">
+                                        {pecas.toLocaleString('pt-BR')} {pecas === 1 ? 'peça' : 'peças'}
+                                      </p>
+                                    );
+                                  })()}
                                 </div>
                               </div>
                             </div>

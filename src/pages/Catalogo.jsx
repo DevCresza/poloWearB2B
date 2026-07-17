@@ -2162,7 +2162,13 @@ export default function Catalogo() {
       {/* Modal de Detalhes da Cápsula */}
       {showCapsulaModal && selectedCapsula && (
         <Dialog open={showCapsulaModal} onOpenChange={setShowCapsulaModal}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent
+            className="max-w-4xl max-h-[90vh] overflow-y-auto"
+            // Com o zoom aberto, o clique para fechar a foto NAO pode fechar o
+            // modal da capsula — senao o cliente perde a configuracao do pedido.
+            onPointerDownOutside={(e) => { if (zoomImg) e.preventDefault(); }}
+            onInteractOutside={(e) => { if (zoomImg) e.preventDefault(); }}
+          >
             <DialogHeader>
               <div className="flex items-center gap-3">
                 <Sparkles className="w-6 h-6 text-purple-600" />
@@ -2241,33 +2247,8 @@ export default function Catalogo() {
                       {capsulaFotoIndex + 1} / {capsulaFotos.length}
                     </div>
                   </div>
-
-                  {/* Miniaturas: sempre a FOTO (nao mais bolinhas de cor).
-                      Fica a foto grande em cima e as miniaturas embaixo, que
-                      viram a foto grande ao clicar / navegar pelas setas. */}
-                  <div className="flex justify-center gap-2 flex-wrap max-w-md mx-auto">
-                    {capsulaFotos.map((foto, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => setCapsulaFotoIndex(idx)}
-                        title={foto.corNome ? `${foto.produtoNome} - ${foto.corNome}` : (foto.produtoNome || 'Capa')}
-                        className={`relative transition-all rounded-lg ${
-                          capsulaFotoIndex === idx
-                            ? 'ring-2 ring-purple-500 ring-offset-2'
-                            : 'opacity-70 hover:opacity-100'
-                        }`}
-                      >
-                        <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100">
-                          <img
-                            src={foto.url}
-                            alt={foto.produtoNome || 'Foto'}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+                  {/* Sem faixa de miniaturas — visual mais limpo. A navegacao entre
+                      as fotos e feita pelas setas sobre a foto grande. */}
                 </div>
               )}
 
