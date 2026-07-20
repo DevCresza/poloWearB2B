@@ -91,7 +91,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
 
   // Grades por tipo de categoria
   const tamanhosRoupa = ['PP', 'P', 'M', 'G', 'GG', 'G1', 'G2', 'G3', 'G4', 'G5'];
-  const tamanhosCalcaBermuda = ['36', '38', '40', '42', '44', '46', '48', '50', '52', '54', 'P', 'M', 'G', 'GG'];
+  const tamanhosCalcaBermuda = ['36', '38', '40', '42', '44', '46', '48', '50', '52', '54', 'P', 'M', 'G', 'GG', 'G1'];
   const tamanhosCalcados = ['34', '35', '36', '37', '38', '39', '40', '41', '42', '43'];
 
   const categoriasCalcaBermuda = ['Calças', 'Bermudas'];
