@@ -28,6 +28,7 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
     disponivel_franqueado: true,
     disponivel_multimarca: false,
     ordem_exibicao: 0,
+    meses_disponiveis: [], // ['YYYY-MM'] — meses que o cliente pode escolher no checkout
   });
   const [allProdutos, setAllProdutos] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
@@ -176,6 +177,7 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
       fornecedor_id: capsula.fornecedor_id || null,
       disponivel_franqueado: capsula.disponivel_franqueado !== false,
       disponivel_multimarca: capsula.disponivel_multimarca === true,
+      meses_disponiveis: Array.isArray(capsula.meses_disponiveis) ? capsula.meses_disponiveis : [],
     });
   // Reagimos ao id da capsula editada e a chegada dos produtos.
   // NAO depender de `capsula` inteiro (referencia nova a cada render pai
@@ -183,6 +185,30 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
   // 'sempre' — usamos so quando muda de 0 para >0.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [capsula?.id, allProdutos.length > 0]);
+
+  // Opcoes de mes: janela do mes atual -1 ate +13 (rotulo pt-BR, valor 'YYYY-MM').
+  const mesesOpcoes = (() => {
+    const base = new Date();
+    base.setDate(1);
+    const opcoes = [];
+    for (let i = -1; i <= 13; i++) {
+      const d = new Date(base.getFullYear(), base.getMonth() + i, 1);
+      const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      opcoes.push({ value, label });
+    }
+    return opcoes;
+  })();
+
+  const toggleMes = (mesValue) => {
+    setFormData(prev => {
+      const atuais = Array.isArray(prev.meses_disponiveis) ? prev.meses_disponiveis : [];
+      const novos = atuais.includes(mesValue)
+        ? atuais.filter(m => m !== mesValue)
+        : [...atuais, mesValue].sort();
+      return { ...prev, meses_disponiveis: novos };
+    });
+  };
 
   // Detectar fornecedor travado baseado nos produtos selecionados
   const fornecedorTravado = (() => {
@@ -493,6 +519,36 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
                     </Alert>
                   );
                 })()}
+              </div>
+
+              {/* Meses de entrega disponiveis: o cliente escolhe UM deles no
+                  checkout (se so houver um, vai fixo). O mes escolhido vira o
+                  mes de entrega/faturamento do pedido. */}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+                <Label className="font-medium text-sm text-amber-900">Meses de entrega disponíveis</Label>
+                <p className="text-xs text-amber-800">
+                  Marque os meses em que esta cápsula pode ser entregue. No checkout,
+                  o cliente escolhe um deles. Se marcar só um, já fica fixo.
+                </p>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 max-h-56 overflow-y-auto pr-1">
+                  {mesesOpcoes.map(m => (
+                    <div key={m.value} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`cap_mes_${m.value}`}
+                        checked={(formData.meses_disponiveis || []).includes(m.value)}
+                        onCheckedChange={() => toggleMes(m.value)}
+                      />
+                      <Label htmlFor={`cap_mes_${m.value}`} className="cursor-pointer text-sm capitalize">
+                        {m.label}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+                {(formData.meses_disponiveis || []).length === 0 && (
+                  <p className="text-xs text-gray-500">
+                    Sem meses marcados: o cliente não precisa escolher mês para esta cápsula.
+                  </p>
+                )}
               </div>
             </div>
 

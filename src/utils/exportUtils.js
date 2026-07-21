@@ -236,10 +236,16 @@ export const formatMesAno = (date) => {
  * itens de cápsulas com entregas diferentes (ex: CAPS3 setembro + CAPS4 outubro).
  * Por isso a previsão cadastrada no PRODUTO manda na previsão do pedido.
  *
- * Prioridade: entrega do produto > entrega do pedido > data do pedido (último
- * recurso, só quando nada foi cadastrado).
+ * Prioridade: mês escolhido no checkout (cápsula) > entrega do produto >
+ * entrega do pedido > data do pedido (último recurso, só quando nada foi
+ * cadastrado).
+ *
+ * `item.mes_entrega` é o mês de calendário ('YYYY-MM') que o cliente escolheu
+ * para a cápsula no carrinho; é a fonte mais forte porque foi uma decisão
+ * explícita da compra.
  */
 export const getMesEntregaItem = (pedido, item, produtoEntregaMap = {}) => {
+  if (item?.mes_entrega) return formatMesAno(`${item.mes_entrega}-01`);
   const entregaProduto = item?.produto_id ? produtoEntregaMap[item.produto_id] : null;
   return formatMesAno(
     entregaProduto

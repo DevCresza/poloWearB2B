@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import {
   ShoppingCart, Trash2, Plus, Minus, Package, AlertTriangle,
   CheckCircle, CreditCard, ArrowRight, Building, ArrowLeft,
-  XCircle, DollarSign, ChevronDown, ChevronUp, Eye
+  XCircle, DollarSign, ChevronDown, ChevronUp, Eye, Calendar
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -107,6 +107,21 @@ export default function Carrinho() {
   const salvarCarrinho = (novoCarrinho) => {
     setCarrinho(novoCarrinho);
     localStorage.setItem(carrinhoKey, JSON.stringify(novoCarrinho));
+  };
+
+  // Rotulo pt-BR de um mes 'YYYY-MM' (ex: "setembro de 2026").
+  const rotuloMes = (mes) => {
+    if (!mes) return '';
+    const [ano, m] = mes.split('-').map(Number);
+    return new Date(ano, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  };
+
+  // Define o mes de entrega escolhido para um item de capsula no carrinho.
+  const setMesCapsula = (itemId, mes) => {
+    const novo = carrinho.map(it =>
+      (it.id === itemId && it.tipo === 'capsula') ? { ...it, mes_selecionado: mes } : it
+    );
+    salvarCarrinho(novo);
   };
 
   // Total de pecas de um item de capsula: soma dos produtos configurados
@@ -534,7 +549,10 @@ export default function Carrinho() {
                       cor_nome: variante.cor_nome,
                       cor_codigo_hex: variante.cor_codigo_hex || variante.cor_hex || '#000000'
                     },
-                    origem_capsula: item.capsula_id
+                    origem_capsula: item.capsula_id,
+                    // Mes de entrega escolhido pelo cliente para esta capsula.
+                    // Vira o mes de entrega/faturamento no relatorio.
+                    mes_entrega: item.mes_selecionado || null
                   };
                 })
                 .filter(Boolean);
@@ -566,7 +584,10 @@ export default function Carrinho() {
                     grade_selecionada: null,
                     cor_selecionada: null,
                     tamanho_selecionado: tamConfig.tamanho,
-                    origem_capsula: item.capsula_id
+                    origem_capsula: item.capsula_id,
+                    // Mes de entrega escolhido pelo cliente para esta capsula.
+                    // Vira o mes de entrega/faturamento no relatorio.
+                    mes_entrega: item.mes_selecionado || null
                   };
                 })
                 .filter(Boolean);
@@ -591,7 +612,8 @@ export default function Carrinho() {
               foto: fotoUrl,
               grade_selecionada: null,
               cor_selecionada: null,
-              origem_capsula: item.capsula_id
+              origem_capsula: item.capsula_id,
+              mes_entrega: item.mes_selecionado || null
             }];
           });
         }
@@ -843,6 +865,18 @@ export default function Carrinho() {
       const grupo = agruparPorFornecedor().find(g => g.fornecedor_id === fornecedorId);
       if (!grupo) {
         throw new Error('Grupo de fornecedor não encontrado');
+      }
+
+      // Cápsula com vários meses disponíveis exige que o cliente escolha o mês.
+      const capsulaSemMes = grupo.itens.find(it =>
+        it.tipo === 'capsula' &&
+        Array.isArray(it.meses_disponiveis) && it.meses_disponiveis.length > 1 &&
+        !it.mes_selecionado
+      );
+      if (capsulaSemMes) {
+        toast.error(`Escolha o mês de entrega da cápsula "${capsulaSemMes.nome}" para finalizar.`);
+        setFinalizando(prev => ({ ...prev, [fornecedorId]: false }));
+        return;
       }
 
       const fornecedor = fornecedores.find(f => f.id === fornecedorId);
@@ -1242,6 +1276,36 @@ export default function Carrinho() {
                                   <p className="text-lg font-semibold text-purple-700 mt-2">
                                     {formatCurrency(item.preco_unitario)} por cápsula
                                   </p>
+
+                                  {/* Mes de entrega escolhido pelo cliente (dentre os
+                                      liberados no cadastro da capsula). Se so houver um,
+                                      fica fixo; se houver varios, e obrigatorio escolher. */}
+                                  {Array.isArray(item.meses_disponiveis) && item.meses_disponiveis.length > 0 && (
+                                    <div className="mt-3">
+                                      <Label className="text-xs font-medium text-gray-700 flex items-center gap-1 mb-1">
+                                        <Calendar className="w-3.5 h-3.5" /> Mês de entrega *
+                                      </Label>
+                                      {item.meses_disponiveis.length === 1 ? (
+                                        <span className="inline-block text-sm font-semibold text-purple-900 capitalize bg-purple-100 rounded px-2 py-1">
+                                          {rotuloMes(item.meses_disponiveis[0])}
+                                        </span>
+                                      ) : (
+                                        <Select value={item.mes_selecionado || ''} onValueChange={(v) => setMesCapsula(item.id, v)}>
+                                          <SelectTrigger className="h-9 max-w-[220px] bg-white">
+                                            <SelectValue placeholder="Escolha o mês" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {item.meses_disponiveis.map(m => (
+                                              <SelectItem key={m} value={m} className="capitalize">{rotuloMes(m)}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      )}
+                                      {item.meses_disponiveis.length > 1 && !item.mes_selecionado && (
+                                        <p className="text-xs text-amber-600 mt-1">Escolha o mês para finalizar.</p>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
 
                                 <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between gap-4">

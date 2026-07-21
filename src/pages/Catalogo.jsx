@@ -396,6 +396,12 @@ export default function Catalogo() {
           preco_total: precoTotalCapsula,
           preco_unitario: precoTotalCapsula, // Preço por cápsula
           produto_ids: produtoIds,
+          // Meses de entrega disponiveis (definidos no cadastro da capsula).
+          // Se so houver um, ja deixa escolhido; senao o cliente escolhe no carrinho.
+          meses_disponiveis: Array.isArray(selectedCapsula.meses_disponiveis) ? selectedCapsula.meses_disponiveis : [],
+          mes_selecionado: (Array.isArray(selectedCapsula.meses_disponiveis) && selectedCapsula.meses_disponiveis.length === 1)
+            ? selectedCapsula.meses_disponiveis[0]
+            : null,
           // Salva os ajustes do cliente, nao a config original do admin
           produtos_quantidades: ajustesQtdCapsula,
           // Minimos para travar o decremento dentro do carrinho
