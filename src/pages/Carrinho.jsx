@@ -25,7 +25,6 @@ import { createPageUrl } from '@/utils';
 import { formatCurrency } from '@/utils/exportUtils';
 import { useLojaContext } from '@/contexts/LojaContext';
 import { useRepresentacao } from '@/contexts/RepresentacaoContext';
-import { isVendedor as ehVendedor } from '@/utils/roles';
 import { getPrecoPeca, getPrecoGrade } from '@/utils/precoCliente';
 import { Store } from 'lucide-react';
 import { Loja } from '@/api/entities';
@@ -85,49 +84,11 @@ export default function Carrinho() {
       setFornecedores(fornecedoresList || []);
       setProdutos(produtosList || []);
 
-      // Inadimplencia e do COMPRADOR (o cliente alvo, quando for vendedor).
-      const vendedorOperando = ehVendedor(currentUser);
-      const comprador = vendedorOperando ? clienteAlvo : currentUser;
-
-      if (comprador && comprador.tipo_negocio === 'multimarca') {
-        try {
-          const titulosCliente = await Carteira.filter({ cliente_user_id: comprador.id });
-          const hoje = new Date();
-          hoje.setHours(0, 0, 0, 0);
-
-          const titulosVencidos = (titulosCliente || []).filter(t => {
-            if (t.status !== 'pendente') return false;
-            if (!t.data_vencimento) return false;
-            if (!t.parcela_numero) return false; // ignora placeholders sem parcela real
-            const dv = new Date(t.data_vencimento + 'T00:00:00');
-            return dv < hoje;
-          });
-
-          const totalVencido = titulosVencidos.reduce((sum, t) => sum + (t.valor || 0), 0);
-
-          if (titulosVencidos.length > 0 && totalVencido > 0) {
-            // O vendedor NAO bloqueia a conta do cliente: ele so abriu o carrinho
-            // dele. O auto-bloqueio continua sendo consequencia do proprio cliente
-            // acessar a conta. O checkout barra os dois casos de qualquer forma.
-            if (!comprador.bloqueado && !vendedorOperando) {
-              await User.update(comprador.id, {
-                bloqueado: true,
-                motivo_bloqueio: `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`,
-                data_bloqueio: new Date().toISOString(),
-                total_vencido: totalVencido
-              });
-              comprador.bloqueado = true;
-              comprador.motivo_bloqueio = `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`;
-              setUsuarioLogado({ ...comprador });
-            }
-
-            setDadosInadimplencia({ titulosVencidos, totalVencido });
-            setShowBloqueioModal(true);
-          }
-        } catch (e) {
-          console.warn('Erro ao verificar inadimplência:', e);
-        }
-      }
+      // Bloqueio automático por atraso DESLIGADO (decisão manual do admin).
+      // O carrinho não bloqueia mais o cliente ao abrir por causa de boleto
+      // vencido — o boleto não é conciliado sozinho, e isso barrava quem já
+      // tinha pago. Um cliente bloqueado MANUALMENTE pelo admin continua sem
+      // conseguir finalizar (checado no botão de finalizar / user.bloqueado).
     } catch (_error) {
     } finally {
       setLoading(false);
@@ -854,7 +815,9 @@ export default function Carrinho() {
       }
     }
 
-    // Verificação em tempo real de inadimplência antes de finalizar
+    // Checagem em tempo real do bloqueio MANUAL antes de finalizar (pega um
+    // bloqueio que o admin tenha aplicado agora). O bloqueio AUTOMÁTICO por
+    // boleto vencido foi removido — quem controla é o admin, na Carteira.
     if (user.tipo_negocio === 'multimarca' || user.tipo_negocio === 'franqueado') {
       try {
         // Sempre o COMPRADOR. Com um vendedor operando, User.me() traria o
@@ -869,45 +832,8 @@ export default function Carrinho() {
           );
           return;
         }
-
-        const filtroCarteira = { cliente_user_id: freshUser.id };
-        if (targetLoja) {
-          filtroCarteira.loja_id = targetLoja.id;
-        }
-        const titulosCliente = await Carteira.filter(filtroCarteira);
-        const hoje = new Date();
-        hoje.setHours(0, 0, 0, 0);
-
-        const titulosVencidos = (titulosCliente || []).filter(t => {
-          if (t.status !== 'pendente') return false;
-          if (!t.data_vencimento) return false;
-          if (!t.parcela_numero) return false; // ignora placeholders sem parcela real
-          const dv = new Date(t.data_vencimento + 'T00:00:00');
-          return dv < hoje;
-        });
-
-        const totalVencido = titulosVencidos.reduce((sum, t) => sum + (t.valor || 0), 0);
-
-        if (titulosVencidos.length > 0 && totalVencido > 0) {
-          // Em todos os caminhos o checkout e barrado. A diferenca e so se a
-          // conta tambem passa a ficar bloqueada — e isso o vendedor nao faz.
-          if (!targetLoja && !isVendedor) {
-            await User.update(freshUser.id, {
-              bloqueado: true,
-              motivo_bloqueio: `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`,
-              data_bloqueio: new Date().toISOString(),
-              total_vencido: totalVencido
-            });
-            freshUser.bloqueado = true;
-            freshUser.motivo_bloqueio = `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`;
-            setUsuarioLogado({ ...freshUser });
-          }
-          setDadosInadimplencia({ titulosVencidos, totalVencido });
-          setShowBloqueioModal(true);
-          return;
-        }
       } catch (e) {
-        console.warn('Erro na verificação em tempo real de inadimplência:', e);
+        console.warn('Erro na verificação de bloqueio:', e);
       }
     }
 

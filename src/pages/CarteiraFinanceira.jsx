@@ -1104,6 +1104,24 @@ export default function CarteiraFinanceira() {
                           </Button>
                         </>
                       )}
+
+                      {/* Registrar como pago (admin/fornecedor): marca a parcela
+                          paga direto, sem depender de comprovante do cliente.
+                          Usado para conciliar boleto pago no banco. So aparece
+                          quando NAO ha um comprovante aguardando analise (nesse
+                          caso usa-se Aprovar). */}
+                      {(user?.role === 'admin' || user?.tipo_negocio === 'fornecedor') &&
+                        (titulo.status === 'pendente' || titulo.status === 'em_analise') &&
+                        !(titulo.comprovante_url && !titulo.comprovante_analisado) && (
+                        <Button
+                          onClick={() => handleIniciarAprovacao(titulo)}
+                          size="sm"
+                          className="bg-green-600"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-1" />
+                          Registrar como pago
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1201,7 +1219,7 @@ export default function CarteiraFinanceira() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-green-600">
               <CheckCircle className="w-5 h-5" />
-              Aprovar Comprovante
+              {tituloParaAprovar?.comprovante_url ? 'Aprovar Comprovante' : 'Registrar Pagamento'}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">

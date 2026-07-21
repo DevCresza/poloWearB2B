@@ -32,57 +32,30 @@ export default function AlertaBloqueio() {
     try {
       const currentUser = await User.me();
 
-      // Verificar inadimplência automaticamente para clientes multimarca
-      if (currentUser.tipo_negocio === 'multimarca') {
+      // Bloqueio automático por atraso DESLIGADO: passou a ser decisão manual
+      // do admin (na Carteira, com "Registrar como pago" para conciliar boleto).
+      // O boleto não é conciliado sozinho no sistema, então o vencimento por si
+      // só bloqueava indevidamente quem já tinha pago. Aqui apenas LIMPAMOS
+      // bloqueios automáticos antigos — bloqueio MANUAL do admin (motivo
+      // diferente de "Bloqueio automático") permanece.
+      if (
+        currentUser.tipo_negocio === 'multimarca' &&
+        currentUser.bloqueado &&
+        currentUser.motivo_bloqueio?.startsWith('Bloqueio automático')
+      ) {
         try {
-          const titulosCliente = await Carteira.filter({ cliente_user_id: currentUser.id });
-          const hoje = new Date();
-          hoje.setHours(0, 0, 0, 0);
-
-          const titulosVencidos = (titulosCliente || []).filter(t => {
-            if (t.status !== 'pendente') return false;
-            if (!t.data_vencimento) return false;
-            // Ignora placeholders (sem parcela_numero) — sao criados no checkout
-            // com vencimento generico e viram lixo apos o fornecedor emitir NF
-            // com as parcelas reais. Sem esse filtro geram bloqueio fantasma.
-            if (!t.parcela_numero) return false;
-            const dv = new Date(t.data_vencimento + 'T00:00:00');
-            return dv < hoje;
+          await User.update(currentUser.id, {
+            bloqueado: false,
+            motivo_bloqueio: null,
+            data_bloqueio: null,
+            total_vencido: 0
           });
-
-          const totalVencido = titulosVencidos.reduce((sum, t) => sum + (t.valor || 0), 0);
-
-          if (!currentUser.bloqueado && titulosVencidos.length > 0 && totalVencido > 0) {
-            // Auto-bloqueio: tem títulos vencidos
-            await User.update(currentUser.id, {
-              bloqueado: true,
-              motivo_bloqueio: `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`,
-              data_bloqueio: new Date().toISOString(),
-              total_vencido: totalVencido
-            });
-            currentUser.bloqueado = true;
-            currentUser.motivo_bloqueio = `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`;
-            currentUser.total_vencido = totalVencido;
-          } else if (currentUser.bloqueado && (titulosVencidos.length === 0 || totalVencido <= 0)) {
-            // Auto-desbloqueio: estava bloqueado mas não tem mais títulos vencidos
-            // Só desbloqueia automaticamente se foi bloqueio automático (não manual pelo admin)
-            const isAutoBlock = currentUser.motivo_bloqueio?.startsWith('Bloqueio automático');
-            if (isAutoBlock) {
-              await User.update(currentUser.id, {
-                bloqueado: false,
-                motivo_bloqueio: null,
-                data_bloqueio: null,
-                total_vencido: 0
-              });
-              currentUser.bloqueado = false;
-              currentUser.motivo_bloqueio = null;
-              currentUser.total_vencido = 0;
-              // Limpar flag de sessão para não mostrar modal de bloqueio
-              sessionStorage.removeItem('bloqueio_visto');
-            }
-          }
+          currentUser.bloqueado = false;
+          currentUser.motivo_bloqueio = null;
+          currentUser.total_vencido = 0;
+          sessionStorage.removeItem('bloqueio_visto');
         } catch (e) {
-          console.warn('Erro ao verificar inadimplência:', e);
+          console.warn('Erro ao limpar bloqueio automático:', e);
         }
       }
 
