@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { User } from '@/api/entities';
-import { Carteira } from '@/api/entities';
 import { Loja } from '@/api/entities';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -76,46 +75,22 @@ export default function AlertaBloqueio() {
     if (user?.tipo_negocio !== 'multimarca') return;
 
     try {
-      const titulosLoja = await Carteira.filter({
-        cliente_user_id: user.id,
-        loja_id: lojaSelecionada.id
-      });
-      const hoje = new Date();
-      hoje.setHours(0, 0, 0, 0);
-
-      const titulosVencidos = (titulosLoja || []).filter(t => {
-        if (t.status !== 'pendente') return false;
-        if (!t.data_vencimento) return false;
-        // Idem checkUser: ignora placeholders sem parcela_numero
-        if (!t.parcela_numero) return false;
-        const dv = new Date(t.data_vencimento + 'T00:00:00');
-        return dv < hoje;
-      });
-
-      const totalVencido = titulosVencidos.reduce((sum, t) => sum + (t.valor || 0), 0);
-
-      if (!lojaSelecionada.bloqueada && titulosVencidos.length > 0 && totalVencido > 0) {
-        // Auto-bloqueio da loja
+      // Bloqueio automático por atraso DESLIGADO também no nível da loja
+      // (igual ao checkUser): só limpamos bloqueios automáticos antigos.
+      // Bloqueio MANUAL do admin permanece. Ver AlertaBloqueio.checkUser.
+      if (
+        lojaSelecionada.bloqueada &&
+        lojaSelecionada.motivo_bloqueio?.startsWith('Bloqueio automático')
+      ) {
         await Loja.update(lojaSelecionada.id, {
-          bloqueada: true,
-          motivo_bloqueio: `Bloqueio automático: ${titulosVencidos.length} título(s) vencido(s) totalizando R$ ${totalVencido.toFixed(2)}`,
-          data_bloqueio: new Date().toISOString()
+          bloqueada: false,
+          motivo_bloqueio: null,
+          data_bloqueio: null
         });
         loadLojas(); // Recarregar lojas no contexto
-      } else if (lojaSelecionada.bloqueada && (titulosVencidos.length === 0 || totalVencido <= 0)) {
-        // Auto-desbloqueio da loja: não tem mais títulos vencidos
-        const isAutoBlock = lojaSelecionada.motivo_bloqueio?.startsWith('Bloqueio automático');
-        if (isAutoBlock) {
-          await Loja.update(lojaSelecionada.id, {
-            bloqueada: false,
-            motivo_bloqueio: null,
-            data_bloqueio: null
-          });
-          loadLojas(); // Recarregar lojas no contexto
-        }
       }
     } catch (e) {
-      console.warn('Erro ao verificar inadimplência por loja:', e);
+      console.warn('Erro ao limpar bloqueio automático da loja:', e);
     }
   };
 
