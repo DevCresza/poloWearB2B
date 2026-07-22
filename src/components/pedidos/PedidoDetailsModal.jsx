@@ -22,12 +22,12 @@ import { User as UserEntity } from '@/api/entities';
 import { Loja, Fornecedor } from '@/api/entities';
 import { Faturamento } from '@/api/entities';
 import { UploadFile } from '@/api/integrations';
-import { formatDateTime, formatCurrency } from '@/utils/exportUtils';
+import { formatDateTime, formatCurrency, getMesesEntregaPedido } from '@/utils/exportUtils';
 import { Store } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentUser, userMap, fornecedorMap, defaultTab = 'itens' }) {
+export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentUser, userMap, fornecedorMap, produtoEntregaMap = {}, defaultTab = 'itens' }) {
   const [lojaInfo, setLojaInfo] = useState(null);
   const [fornecedorInfo, setFornecedorInfo] = useState(null);
   const [confirmando, setConfirmando] = useState(false);
@@ -1283,6 +1283,14 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
               <Calendar className="w-5 h-5 mr-2" />
               {new Date(pedido.created_date).toLocaleDateString('pt-BR')}
             </Badge>
+            {/* Mes de entrega: o fornecedor aprova e manda separar por esta tela,
+                sem passar pela extracao. Mesma regra do relatorio. */}
+            {getMesesEntregaPedido(pedido, produtoEntregaMap).length > 0 && (
+              <Badge className="bg-purple-100 text-purple-800 border border-purple-300 text-lg px-4 py-2 capitalize">
+                <Truck className="w-5 h-5 mr-2" />
+                Entrega: {getMesesEntregaPedido(pedido, produtoEntregaMap).join(' + ')}
+              </Badge>
+            )}
             {pedido.impresso && (
               <Badge className="bg-green-100 text-green-800 text-sm px-3 py-1">
                 <Printer className="w-4 h-4 mr-1" />

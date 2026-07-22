@@ -264,3 +264,18 @@ export const getMesFaturamentoItem = (pedido, item, produtoEntregaMap = {}) => {
   if (pedido?.nf_data_upload) return formatMesAno(pedido.nf_data_upload);
   return getMesEntregaItem(pedido, item, produtoEntregaMap);
 };
+
+/**
+ * Meses de entrega distintos de um pedido, já formatados ("outubro de 2026").
+ *
+ * O mês é do ITEM, então um mesmo pedido pode ter mais de um (ex: cápsula de
+ * setembro + cápsula de outubro). Usa a mesma regra da extração — a tela do
+ * pedido e o relatório não podem divergir.
+ */
+export const getMesesEntregaPedido = (pedido, produtoEntregaMap = {}) => {
+  const itens = Array.isArray(pedido?.itens) ? pedido.itens : [];
+  const meses = itens
+    .map(it => getMesEntregaItem(pedido, it, produtoEntregaMap))
+    .filter(Boolean);
+  return [...new Set(meses)];
+};

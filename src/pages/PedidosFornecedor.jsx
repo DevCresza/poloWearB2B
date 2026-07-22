@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
 import PedidoItensEditModal from '@/components/pedidos/PedidoItensEditModal';
-import { formatCurrency, exportToPDF, exportToCSV, formatDate, getMesFaturamentoItem, getMesEntregaItem } from '@/utils/exportUtils';
+import { formatCurrency, exportToPDF, exportToCSV, formatDate, getMesFaturamentoItem, getMesEntregaItem, getMesesEntregaPedido } from '@/utils/exportUtils';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
 
@@ -1644,6 +1644,9 @@ export default function PedidosFornecedor() {
             const clienteInadimplente = cliente?.bloqueado || (cliente?.total_vencido || 0) > 0;
             const clienteBloqueado = cliente?.bloqueado;
 
+            // Mesma regra da extração — tela e relatório não podem divergir.
+            const mesesEntrega = getMesesEntregaPedido(pedido, produtoEntregaMap);
+
             // Tentar extrair nome do cliente do pedido se não encontrado na lista
             const nomeCliente = cliente?.empresa || cliente?.razao_social || cliente?.nome_marca || cliente?.full_name || pedido.comprador_nome || 'Cliente não encontrado';
 
@@ -1680,6 +1683,18 @@ export default function PedidosFornecedor() {
                       <p className="text-sm text-gray-600 mt-1">
                         Pedido #{pedido.id.slice(-8).toUpperCase()} • {new Date(pedido.created_date).toLocaleDateString('pt-BR')}
                       </p>
+                      {/* Mes de entrega no proprio pedido: o fornecedor aprova e manda
+                          para separacao olhando aqui, nao a extracao. */}
+                      {mesesEntrega.length > 0 && (
+                        <p className="text-sm font-semibold text-purple-700 flex items-center gap-1 mt-0.5">
+                          <Calendar className="w-3 h-3" />
+                          <span className="capitalize">
+                            {mesesEntrega.length === 1
+                              ? `Entrega: ${mesesEntrega[0]}`
+                              : `Entrega: ${mesesEntrega.join(' + ')}`}
+                          </span>
+                        </p>
+                      )}
                       {pedido.loja_id && lojasMap[pedido.loja_id] && (
                         <p className="text-sm text-blue-600 flex items-center gap-1 mt-0.5">
                           <Store className="w-3 h-3" />
@@ -2635,6 +2650,7 @@ export default function PedidosFornecedor() {
             setDetailsDefaultTab('itens');
           }}
           onUpdate={loadPedidos}
+          produtoEntregaMap={produtoEntregaMap}
           currentUser={user}
           userMap={new Map(clientes.map(c => [c.id, c.full_name || c.empresa || c.razao_social || c.nome_marca]))}
           fornecedorMap={new Map(fornecedores.map(f => [f.id, f.razao_social || f.nome_fantasia]))}

@@ -20,7 +20,7 @@ import PedidoCard from '../components/pedidos/PedidoCard';
 import PedidoDetailsModal from '../components/pedidos/PedidoDetailsModal';
 import PedidoEditModal from '../components/pedidos/PedidoEditModal';
 import PedidoItensEditModal from '../components/pedidos/PedidoItensEditModal';
-import { exportToCSV, exportToPDF, formatCurrency, formatDateTime, formatDate, getMesFaturamentoItem, getMesEntregaItem } from '@/utils/exportUtils';
+import { exportToCSV, exportToPDF, formatCurrency, formatDateTime, formatDate, getMesFaturamentoItem, getMesEntregaItem, getMesesEntregaPedido } from '@/utils/exportUtils';
 import MultiSelectFilter from '@/components/MultiSelectFilter';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
@@ -924,6 +924,16 @@ export default function PedidosAdmin() {
                             <div>
                               <div className="font-medium">#{pedido.id.slice(-8).toUpperCase()}</div>
                               <div className="text-sm text-gray-500">{formatDate(pedido.created_date)}</div>
+                              {/* Mes de entrega direto no pedido (mesma regra da extracao) */}
+                              {(() => {
+                                const meses = getMesesEntregaPedido(pedido, produtoEntregaMap);
+                                if (meses.length === 0) return null;
+                                return (
+                                  <div className="text-xs font-semibold text-purple-700 capitalize mt-0.5">
+                                    Entrega: {meses.join(' + ')}
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </td>
                           <td className="p-4">
@@ -999,6 +1009,7 @@ export default function PedidosAdmin() {
           currentUser={currentUser}
           userMap={userMap}
           fornecedorMap={fornecedorMap}
+          produtoEntregaMap={produtoEntregaMap}
           onClose={() => {
             setShowDetailsModal(false);
             setSelectedPedido(null);
