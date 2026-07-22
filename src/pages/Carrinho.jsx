@@ -459,27 +459,10 @@ export default function Carrinho() {
         return { success: false, error: msg };
       }
 
-      // Verificar inadimplência por loja
-      if (user.tipo_negocio === 'multimarca' || user.tipo_negocio === 'franqueado') {
-        const filtroCarteira = { cliente_user_id: user.id };
-        if (loja) filtroCarteira.loja_id = loja.id;
-        const titulosCliente = await Carteira.filter(filtroCarteira);
-        const hoje = new Date();
-        hoje.setHours(0, 0, 0, 0);
-
-        const titulosVencidos = (titulosCliente || []).filter(t => {
-          if (t.status !== 'pendente') return false;
-          if (!t.data_vencimento) return false;
-          if (!t.parcela_numero) return false; // ignora placeholders sem parcela real
-          const dv = new Date(t.data_vencimento + 'T00:00:00');
-          return dv < hoje;
-        });
-
-        const totalVencido = titulosVencidos.reduce((sum, t) => sum + (t.valor || 0), 0);
-        if (titulosVencidos.length > 0 && totalVencido > 0) {
-          return { success: false, error: `Loja "${loja?.nome_fantasia || loja?.nome || 'Conta'}" possui títulos vencidos (${formatCurrency(totalVencido)}).` };
-        }
-      }
+      // Bloqueio por atraso de boleto é MANUAL (decisão do admin), não
+      // automático: um título vencido não impede o pedido por si só. O
+      // bloqueio manual continua valendo (loja.bloqueada / user.bloqueado
+      // são checados no seletor de lojas e no botão de finalizar).
 
       // Verificar pedido mínimo
       const fornecedor = fornecedores.find(f => f.id === grupoData.fornecedor_id);
