@@ -23,12 +23,19 @@ import { Loja, Fornecedor } from '@/api/entities';
 import { Faturamento } from '@/api/entities';
 import { UploadFile } from '@/api/integrations';
 import { formatDateTime, formatCurrency, getMesesEntregaPedido } from '@/utils/exportUtils';
+import { validarVencimentos } from '@/utils/vencimentoUtils';
 import { Store } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentUser, userMap, fornecedorMap, produtoEntregaMap = {}, defaultTab = 'itens' }) {
+export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentUser, userMap, fornecedorMap, produtoEntregaMap = null, defaultTab = 'itens' }) {
   const [lojaInfo, setLojaInfo] = useState(null);
+  // Entrega cadastrada nos produtos do pedido. As telas de admin/fornecedor ja
+  // carregam todos os produtos e passam o mapa pronto; a tela do cliente nao —
+  // e sem ele o mes caia no fallback (data do pedido), fazendo cliente e admin
+  // verem entregas diferentes para o MESMO pedido. Aqui o modal se vira sozinho
+  // buscando so os produtos deste pedido.
+  const [entregaMapLocal, setEntregaMapLocal] = useState({});
   const [fornecedorInfo, setFornecedorInfo] = useState(null);
   const [confirmando, setConfirmando] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -118,6 +125,26 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   }, [pedido?.fornecedor_id]);
 
   useEffect(() => {
+    if (produtoEntregaMap) return; // chamador ja forneceu o mapa
+    const ids = [...new Set((pedido?.itens || []).map(i => i?.produto_id).filter(Boolean))];
+    if (ids.length === 0) return;
+    let cancelado = false;
+    Produto.listByIds(ids)
+      .then(list => {
+        if (cancelado) return;
+        const map = {};
+        (list || []).forEach(p => {
+          if (p.data_prevista_entrega) map[p.id] = p.data_prevista_entrega;
+        });
+        setEntregaMapLocal(map);
+      })
+      .catch(() => { /* sem o mapa, cai no fallback do pedido */ });
+    return () => { cancelado = true; };
+  }, [pedido?.id, produtoEntregaMap]);
+
+  const entregaMap = produtoEntregaMap || entregaMapLocal;
+
+  useEffect(() => {
     const loadParcelas = async () => {
       if (!pedido?.id) return;
       setLoadingParcelas(true);
@@ -195,6 +222,9 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       toast.info('Preencha todas as datas de vencimento');
       return;
     }
+    const checagem = validarVencimentos(boletoFatParcelas.map(p => p.dataVencimento));
+    if (!checagem.ok) { toast.error(checagem.erro, { duration: 8000 }); return; }
+    if (checagem.aviso && !window.confirm(checagem.aviso)) return;
     setUploadingBoletoFat(true);
     try {
       const result = await UploadFile({ file: boletoFatFile });
@@ -207,9 +237,23 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
 
       // Create parcelas in carteira linked to this faturamento
       if (temParcelasConfiguradas) {
+        // Reenviar o boleto da MESMA NF substitui as parcelas anteriores. Sem
+        // isso, cada reenvio (tipico quando o fornecedor corrige uma data)
+        // criava um novo jogo de titulos e o cliente aparecia devendo o dobro
+        // ou o triplo — virando "inadimplente" sem dever nada.
+        const jaExistentes = await Carteira.filter({ faturamento_id: fat.id });
+        const numerosPagos = new Set();
+        for (const antiga of (jaExistentes || [])) {
+          if (!antiga.parcela_numero) continue;
+          if (antiga.status === 'pago') numerosPagos.add(antiga.parcela_numero);
+          else await Carteira.delete(antiga.id);
+        }
+
         const valorBase = fat.valor_total || 0;
         const valorParcela = valorBase / boletoFatQtdParcelas;
         for (let i = 0; i < boletoFatQtdParcelas; i++) {
+          // Parcela ja quitada nao volta a ser cobrada.
+          if (numerosPagos.has(i + 1)) continue;
           await Carteira.create({
             pedido_id: pedido.id,
             faturamento_id: fat.id,
@@ -417,6 +461,9 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       toast.info('Preencha todas as datas de vencimento das parcelas');
       return;
     }
+    const checagem = validarVencimentos(parcelasBoletoConfig.map(p => p.dataVencimento));
+    if (!checagem.ok) { toast.error(checagem.erro, { duration: 8000 }); return; }
+    if (checagem.aviso && !window.confirm(checagem.aviso)) return;
     setUploading(true);
     try {
       const result = await UploadFile({ file: boletoFile });
@@ -477,6 +524,9 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       toast.info('Preencha todas as datas de vencimento das parcelas pendentes');
       return;
     }
+    // Valida a serie inteira (pagas + pendentes) pra pegar mes/ano fora de ordem.
+    const checagemEdit = validarVencimentos(parcelasBoletoConfig.map(p => p.dataVencimento));
+    if (!checagemEdit.ok) { toast.error(checagemEdit.erro, { duration: 8000 }); return; }
 
     const valorTotal = pedido.valor_final || pedido.valor_total || 0;
     const valorJaPago = parcelasBoletoConfig
@@ -1285,10 +1335,10 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
             </Badge>
             {/* Mes de entrega: o fornecedor aprova e manda separar por esta tela,
                 sem passar pela extracao. Mesma regra do relatorio. */}
-            {getMesesEntregaPedido(pedido, produtoEntregaMap).length > 0 && (
+            {getMesesEntregaPedido(pedido, entregaMap).length > 0 && (
               <Badge className="bg-purple-100 text-purple-800 border border-purple-300 text-lg px-4 py-2 capitalize">
                 <Truck className="w-5 h-5 mr-2" />
-                Entrega: {getMesesEntregaPedido(pedido, produtoEntregaMap).join(' + ')}
+                Entrega: {getMesesEntregaPedido(pedido, entregaMap).join(' + ')}
               </Badge>
             )}
             {pedido.impresso && (
@@ -2774,10 +2824,10 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                         <Label className="text-xs">Arquivo da NF *</Label>
                         <Input
                           type="file"
-                          accept=".pdf,.jpg,.jpeg,.png,.crm"
+                          accept=".xml,.pdf,.jpg,.jpeg,.png,.crm"
                           onChange={(e) => setNfFile(e.target.files[0])}
                         />
-                        <p className="text-xs text-gray-500 mt-1"><strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM</p>
+                        <p className="text-xs text-gray-500 mt-1"><strong>Formatos aceitos:</strong> XML, PDF, JPG, PNG, CRM</p>
                       </div>
                       <Button
                         onClick={handleUploadNF}
@@ -2827,10 +2877,10 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                         <Label className="text-xs">Arquivo da NF *</Label>
                         <Input
                           type="file"
-                          accept=".pdf,.jpg,.jpeg,.png,.crm"
+                          accept=".xml,.pdf,.jpg,.jpeg,.png,.crm"
                           onChange={(e) => setNfFile(e.target.files[0])}
                         />
-                        <p className="text-xs text-gray-500 mt-1"><strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM</p>
+                        <p className="text-xs text-gray-500 mt-1"><strong>Formatos aceitos:</strong> XML, PDF, JPG, PNG, CRM</p>
                       </div>
                       <Button
                         onClick={handleUploadNF}

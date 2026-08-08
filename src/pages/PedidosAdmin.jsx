@@ -38,6 +38,7 @@ export default function PedidosAdmin() {
   // produto_id -> acao (Caps 1, Black Friday...) para a coluna AÇÃO do extrato
   const [produtoAcaoMap, setProdutoAcaoMap] = useState({});
   const [loading, setLoading] = useState(true);
+  const [erroCarregamento, setErroCarregamento] = useState(null);
   const [viewMode, setViewMode] = useState('kanban'); // 'kanban' ou 'list'
   const [selectedPedido, setSelectedPedido] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -100,7 +101,13 @@ export default function PedidosAdmin() {
       });
       setLojasMap(map);
       setLojasDetMap(detMap);
-    } catch (_error) {
+      setErroCarregamento(null);
+    } catch (error) {
+      // Sem isto, qualquer falha (sessao expirada, rede, RLS) deixava a tela
+      // com "0 pedidos" em todos os status — indistinguivel de nao ter pedido.
+      console.error('Erro ao carregar pedidos:', error);
+      setErroCarregamento(error?.message || 'Falha ao carregar os pedidos.');
+      toast.error('Não foi possível carregar os pedidos. Veja o aviso na tela.');
     } finally {
       setLoading(false);
     }
@@ -665,6 +672,24 @@ export default function PedidosAdmin() {
           </div>
         )}
       </div>
+
+      {erroCarregamento && (
+        <div className="rounded-lg border border-red-300 bg-red-50 p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-start gap-2 text-red-800">
+            <X className="w-5 h-5 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-semibold">Os pedidos não foram carregados.</p>
+              <p className="text-sm">
+                A lista abaixo está vazia por causa de uma falha, não porque não existem pedidos.
+              </p>
+              <p className="text-xs mt-1 font-mono break-all">{erroCarregamento}</p>
+            </div>
+          </div>
+          <Button variant="outline" onClick={loadData} className="border-red-300 text-red-700 hover:bg-red-100">
+            Tentar novamente
+          </Button>
+        </div>
+      )}
 
       {/* Cards de Resumo por Status.
           O vendedor ve a CONTAGEM e as PECAS, mas nao os valores em R$. */}

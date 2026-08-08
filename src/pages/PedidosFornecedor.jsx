@@ -30,6 +30,7 @@ import {
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
 import PedidoItensEditModal from '@/components/pedidos/PedidoItensEditModal';
 import { formatCurrency, exportToPDF, exportToCSV, formatDate, getMesFaturamentoItem, getMesEntregaItem, getMesesEntregaPedido } from '@/utils/exportUtils';
+import { validarVencimentos } from '@/utils/vencimentoUtils';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
 
@@ -662,6 +663,9 @@ export default function PedidosFornecedor() {
       toast.info('Informe a data de vencimento de todas as parcelas');
       return;
     }
+    const checagem = validarVencimentos(parcelas.map(p => p.dataVencimento));
+    if (!checagem.ok) { toast.error(checagem.erro, { duration: 8000 }); return; }
+    if (checagem.aviso && !window.confirm(checagem.aviso)) return;
 
     setUploading(true);
     try {
@@ -1265,6 +1269,9 @@ export default function PedidosFornecedor() {
       toast.info('Preencha todas as datas de vencimento');
       return;
     }
+    const checagem = validarVencimentos(boletoNFParcelas.map(p => p.dataVencimento));
+    if (!checagem.ok) { toast.error(checagem.erro, { duration: 8000 }); return; }
+    if (checagem.aviso && !window.confirm(checagem.aviso)) return;
     setBoletoNFUploading(true);
     try {
       const result = await UploadFile({ file: boletoNFFile });
@@ -1275,9 +1282,23 @@ export default function PedidosFornecedor() {
       });
       // Criar parcelas na carteira
       if (temDatas) {
+        // Reenviar o boleto da MESMA NF substitui as parcelas anteriores. Sem
+        // isso, cada reenvio (tipico quando se corrige uma data de vencimento)
+        // criava um novo jogo de titulos e o cliente aparecia devendo o dobro
+        // ou o triplo — virando "inadimplente" sem dever nada.
+        const jaExistentes = await Carteira.filter({ faturamento_id: boletoNFSelected.id });
+        const numerosPagos = new Set();
+        for (const antiga of (jaExistentes || [])) {
+          if (!antiga.parcela_numero) continue;
+          if (antiga.status === 'pago') numerosPagos.add(antiga.parcela_numero);
+          else await Carteira.delete(antiga.id);
+        }
+
         const valorBase = boletoNFSelected.valor_total || 0;
         const valorParcela = valorBase / boletoNFQtdParcelas;
         for (let i = 0; i < boletoNFQtdParcelas; i++) {
+          // Parcela ja quitada nao volta a ser cobrada.
+          if (numerosPagos.has(i + 1)) continue;
           await Carteira.create({
             pedido_id: selectedPedido.id,
             faturamento_id: boletoNFSelected.id,
@@ -2270,9 +2291,12 @@ export default function PedidosFornecedor() {
                     <Input
                       id="nfFile"
                       type="file"
-                      accept=".pdf,.jpg,.jpeg,.png,.crm"
+                      accept=".xml,.pdf,.jpg,.jpeg,.png,.crm"
                       onChange={(e) => setNfFile(e.target.files[0])}
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      <strong>Formatos aceitos:</strong> XML, PDF, JPG, PNG, CRM
+                    </p>
                   </div>
                 </>
               );
@@ -2841,11 +2865,11 @@ export default function PedidosFornecedor() {
               <Input
                 id="nfFileAtualizar"
                 type="file"
-                accept=".pdf,.jpg,.jpeg,.png,.crm"
+                accept=".xml,.pdf,.jpg,.jpeg,.png,.crm"
                 onChange={(e) => setNfFile(e.target.files[0])}
               />
               <p className="text-xs text-gray-500 mt-1">
-                <strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM
+                <strong>Formatos aceitos:</strong> XML, PDF, JPG, PNG, CRM
               </p>
             </div>
 
