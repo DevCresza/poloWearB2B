@@ -27,6 +27,7 @@ import { useRepresentacao } from '@/contexts/RepresentacaoContext';
 import { isVendedor as ehVendedor } from '@/utils/roles';
 import { getPrecoPeca, getPrecoGrade, isProdutoVisivelParaCliente, isCapsulaVisivelParaCliente } from '@/utils/precoCliente';
 import BannerCarousel from '@/components/BannerCarousel';
+import CampoQuantidade from '@/components/CampoQuantidade';
 
 export default function Catalogo() {
   const { carrinhoKey } = useLojaContext();
@@ -793,7 +794,10 @@ export default function Catalogo() {
     return 0;
   };
 
-  const ajustarQtdCapsula = (produtoId, corId, delta) => {
+  // Define a quantidade final (nao o delta). E por aqui que passa tanto o
+  // digitado no campo quanto o +/-, entao o minimo do produto e respeitado num
+  // lugar so.
+  const definirQtdCapsula = (produtoId, corId, valor) => {
     setAjustesQtdCapsula(prev => {
       const updated = { ...prev };
       const c = updated[produtoId];
@@ -803,7 +807,7 @@ export default function Catalogo() {
         const min = typeof minimosQtdCapsula[produtoId] === 'number'
           ? minimosQtdCapsula[produtoId]
           : 0;
-        updated[produtoId] = Math.max(min, c + delta);
+        updated[produtoId] = Math.max(min, valor);
       } else if (Array.isArray(c.variantes)) {
         const variantesMin = Array.isArray(minimosQtdCapsula[produtoId]?.variantes)
           ? minimosQtdCapsula[produtoId].variantes
@@ -811,12 +815,16 @@ export default function Catalogo() {
         const variantes = c.variantes.map(v => {
           if (v.cor_id !== corId) return v;
           const min = (variantesMin.find(x => x.cor_id === corId)?.quantidade) || 0;
-          return { ...v, quantidade: Math.max(min, (v.quantidade || 0) + delta) };
+          return { ...v, quantidade: Math.max(min, valor) };
         });
         updated[produtoId] = { ...c, variantes };
       }
       return updated;
     });
+  };
+
+  const ajustarQtdCapsula = (produtoId, corId, delta) => {
+    definirQtdCapsula(produtoId, corId, getQtdAjustada(produtoId, corId) + delta);
   };
 
   // Helpers de tamanho na capsula (paralelo aos de cor)
@@ -830,7 +838,7 @@ export default function Catalogo() {
     if (!c || typeof c !== 'object' || !Array.isArray(c.tamanhos)) return 0;
     return c.tamanhos.find(t => t.tamanho === tamanho)?.quantidade || 0;
   };
-  const ajustarQtdTamanhoCapsula = (produtoId, tamanho, delta) => {
+  const definirQtdTamanhoCapsula = (produtoId, tamanho, valor) => {
     setAjustesQtdCapsula(prev => {
       const updated = { ...prev };
       const c = updated[produtoId];
@@ -840,11 +848,15 @@ export default function Catalogo() {
         : [];
       const min = (tamsMin.find(t => t.tamanho === tamanho)?.quantidade) || 0;
       const tamanhos = c.tamanhos.map(t => t.tamanho === tamanho
-        ? { ...t, quantidade: Math.max(min, (t.quantidade || 0) + delta) }
+        ? { ...t, quantidade: Math.max(min, valor) }
         : t);
       updated[produtoId] = { ...c, tamanhos };
       return updated;
     });
+  };
+
+  const ajustarQtdTamanhoCapsula = (produtoId, tamanho, delta) => {
+    definirQtdTamanhoCapsula(produtoId, tamanho, getQtdAjustadaTamanho(produtoId, tamanho) + delta);
   };
 
   const openProductDetails = (produto) => {
@@ -1758,9 +1770,19 @@ export default function Catalogo() {
                                 >
                                   <Minus className="w-4 h-4" />
                                 </Button>
-                                <span className="w-12 text-center font-semibold">
-                                  {qtdSelecionada}
-                                </span>
+                                <Input
+                                  type="number"
+                                  inputMode="numeric"
+                                  min="0"
+                                  value={qtdSelecionada}
+                                  disabled={semEstoque}
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => {
+                                    const novaQtd = Math.max(0, parseInt(e.target.value, 10) || 0);
+                                    setQuantidadesPorCor(prev => ({ ...prev, [v.id]: novaQtd }));
+                                  }}
+                                  className="w-16 h-8 px-1 text-center text-sm font-semibold"
+                                />
                                 <Button
                                   type="button"
                                   variant="outline"
@@ -2382,7 +2404,12 @@ export default function Catalogo() {
                                         >
                                           <Minus className="w-3.5 h-3.5" />
                                         </button>
-                                        <span className="w-10 text-center font-semibold tabular-nums">{qtdAtual}</span>
+                                        <CampoQuantidade
+                                          valor={qtdAtual}
+                                          minimo={qtdMin}
+                                          titulo={qtdMin > 0 ? `Mínimo: ${qtdMin}` : undefined}
+                                          onCommit={(v) => definirQtdTamanhoCapsula(produtoId, tamConfig.tamanho, v)}
+                                        />
                                         <button
                                           type="button"
                                           onClick={() => ajustarQtdTamanhoCapsula(produtoId, tamConfig.tamanho, +1)}
@@ -2423,7 +2450,12 @@ export default function Catalogo() {
                                         >
                                           <Minus className="w-3.5 h-3.5" />
                                         </button>
-                                        <span className="w-10 text-center font-semibold tabular-nums">{qtdAtual}</span>
+                                        <CampoQuantidade
+                                          valor={qtdAtual}
+                                          minimo={qtdMin}
+                                          titulo={qtdMin > 0 ? `Mínimo: ${qtdMin}` : undefined}
+                                          onCommit={(v) => definirQtdCapsula(produtoId, varianteConfig.cor_id, v)}
+                                        />
                                         <button
                                           type="button"
                                           onClick={() => ajustarQtdCapsula(produtoId, varianteConfig.cor_id, +1)}
@@ -2458,7 +2490,12 @@ export default function Catalogo() {
                                   >
                                     <Minus className="w-3.5 h-3.5" />
                                   </button>
-                                  <span className="w-10 text-center font-semibold tabular-nums">{qtdAtual}</span>
+                                  <CampoQuantidade
+                                    valor={qtdAtual}
+                                    minimo={qtdMin}
+                                    titulo={qtdMin > 0 ? `Mínimo: ${qtdMin}` : undefined}
+                                    onCommit={(v) => definirQtdCapsula(produtoId, null, v)}
+                                  />
                                   <button
                                     type="button"
                                     onClick={() => ajustarQtdCapsula(produtoId, null, +1)}

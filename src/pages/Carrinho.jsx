@@ -23,6 +23,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { formatCurrency } from '@/utils/exportUtils';
+import CampoQuantidade from '@/components/CampoQuantidade';
 import { useLojaContext } from '@/contexts/LojaContext';
 import { useRepresentacao } from '@/contexts/RepresentacaoContext';
 import { getPrecoPeca, getPrecoGrade } from '@/utils/precoCliente';
@@ -237,9 +238,21 @@ export default function Carrinho() {
     return 0;
   };
 
-  // Ajusta a quantidade de uma cor/produto dentro de uma cápsula no carrinho,
-  // travando no mínimo configurado. Recalcula `preco_unitario` e `preco_total`.
-  const ajustarQtdCapsulaCart = (itemId, produtoId, corId, delta) => {
+  // Quantidade atual de uma cor/produto dentro de uma cápsula no carrinho.
+  const getQtdCapsulaCart = (item, produtoId, corId) => {
+    const c = (item.produtos_quantidades || {})[produtoId];
+    if (c === undefined || c === null) return 0;
+    if (typeof c === 'number') return c;
+    if (Array.isArray(c.variantes)) {
+      return c.variantes.find(v => v.cor_id === corId)?.quantidade || 0;
+    }
+    return 0;
+  };
+
+  // Define a quantidade final (nao o delta) de uma cor/produto dentro de uma
+  // capsula no carrinho, travando no minimo configurado. Recalcula
+  // `preco_unitario` e `preco_total`. Recebe tanto o +/- quanto o digitado.
+  const definirQtdCapsulaCart = (itemId, produtoId, corId, valor) => {
     const novoCarrinho = carrinho.map(item => {
       if (item.id !== itemId || item.tipo !== 'capsula') return item;
 
@@ -248,15 +261,15 @@ export default function Carrinho() {
       if (c === undefined || c === null) return item;
 
       const min = getCapsulaMin(item, produtoId, corId);
+      const novaQtd = Math.max(min, valor);
 
       if (typeof c === 'number') {
-        const novo = Math.max(min, c + delta);
-        pq[produtoId] = novo;
+        pq[produtoId] = novaQtd;
       } else if (Array.isArray(c.variantes)) {
         pq[produtoId] = {
           ...c,
           variantes: c.variantes.map(v => v.cor_id === corId
-            ? { ...v, quantidade: Math.max(min, (v.quantidade || 0) + delta) }
+            ? { ...v, quantidade: novaQtd }
             : v)
         };
       } else {
@@ -276,7 +289,7 @@ export default function Carrinho() {
             configuracao: {
               ...det.configuracao,
               variantes: det.configuracao.variantes.map(v => v.cor_id === corId
-                ? { ...v, quantidade: Math.max(min, (v.quantidade || 0) + delta) }
+                ? { ...v, quantidade: novaQtd }
                 : v)
             }
           };
@@ -309,6 +322,12 @@ export default function Carrinho() {
       };
     });
     salvarCarrinho(novoCarrinho);
+  };
+
+  const ajustarQtdCapsulaCart = (itemId, produtoId, corId, delta) => {
+    const item = carrinho.find(i => i.id === itemId && i.tipo === 'capsula');
+    if (!item) return;
+    definirQtdCapsulaCart(itemId, produtoId, corId, getQtdCapsulaCart(item, produtoId, corId) + delta);
   };
 
   // Verificar quais itens do carrinho estão indisponíveis (produto excluído ou desativado)
@@ -1175,7 +1194,13 @@ export default function Carrinho() {
                                                           >
                                                             <Minus className="w-3 h-3" />
                                                           </button>
-                                                          <span className="font-semibold tabular-nums px-0.5">{v.quantidade}</span>
+                                                          <CampoQuantidade
+                                                            valor={v.quantidade || 0}
+                                                            minimo={min}
+                                                            titulo={min > 0 ? `Mínimo: ${min}` : undefined}
+                                                            onCommit={(qtd) => definirQtdCapsulaCart(item.id, detalhe.id, v.cor_id, qtd)}
+                                                            className="w-12 h-5 px-0.5 text-xs text-center font-semibold tabular-nums"
+                                                          />
                                                           <button
                                                             type="button"
                                                             onClick={() => ajustarQtdCapsulaCart(item.id, detalhe.id, v.cor_id, +1)}
@@ -1204,7 +1229,13 @@ export default function Carrinho() {
                                                       >
                                                         <Minus className="w-3 h-3" />
                                                       </button>
-                                                      <span className="font-semibold tabular-nums px-1">{qtdSimples}</span>
+                                                      <CampoQuantidade
+                                                        valor={qtdSimples}
+                                                        minimo={min}
+                                                        titulo={min > 0 ? `Mínimo: ${min}` : undefined}
+                                                        onCommit={(qtd) => definirQtdCapsulaCart(item.id, detalhe.id, null, qtd)}
+                                                        className="w-12 h-5 px-0.5 text-xs text-center font-semibold tabular-nums"
+                                                      />
                                                       <button
                                                         type="button"
                                                         onClick={() => ajustarQtdCapsulaCart(item.id, detalhe.id, null, +1)}
@@ -1310,7 +1341,12 @@ export default function Carrinho() {
                                     >
                                       <Minus className="w-4 h-4" />
                                     </Button>
-                                    <span className="w-12 text-center font-semibold">{item.quantidade}</span>
+                                    <CampoQuantidade
+                                      valor={item.quantidade}
+                                      minimo={1}
+                                      onCommit={(qtd) => atualizarQuantidade(item.id, qtd, null, true)}
+                                      className="w-16 h-8 px-1 text-center font-semibold tabular-nums"
+                                    />
                                     <Button
                                       variant="outline"
                                       size="icon"
@@ -1433,9 +1469,12 @@ export default function Carrinho() {
                                 >
                                   <Minus className="w-3 h-3" />
                                 </Button>
-                                <span className="w-12 text-center font-semibold">
-                                  {item.quantidade}
-                                </span>
+                                <CampoQuantidade
+                                  valor={item.quantidade}
+                                  minimo={1}
+                                  onCommit={(qtd) => atualizarQuantidade(item.id, qtd, item.cor_selecionada, false, item.tamanho_selecionado)}
+                                  className="w-16 h-8 px-1 text-center font-semibold tabular-nums"
+                                />
                                 <Button
                                   variant="outline"
                                   size="icon"
