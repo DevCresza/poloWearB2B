@@ -19,7 +19,8 @@ import {
   Download, CreditCard, Calendar, MapPin, Receipt, Upload,
   AlertTriangle, ArrowUpCircle, DollarSign
 } from 'lucide-react';
-import { formatCurrency, exportToCSV, exportToPDF, formatDate, toBrasiliaDateString } from '@/utils/exportUtils';
+import { formatCurrency, exportToCSV, exportToPDF, formatDate, toBrasiliaDateString, getMesFaturamentoItem } from '@/utils/exportUtils';
+import { Produto } from '@/api/entities';
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
 import PedidoItensEditModal from '@/components/pedidos/PedidoItensEditModal';
 import { Edit, Ban } from 'lucide-react';
@@ -34,6 +35,11 @@ export default function MeusPedidos() {
   const [pedidos, setPedidos] = useState([]);
   const [carteira, setCarteira] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
+  // produto_id -> data_prevista_entrega / acao, dos produtos que aparecem nos
+  // pedidos deste cliente. Alimenta o Extrato Detalhado e o modal do pedido,
+  // pra o cliente ver o MESMO mes de entrega que o admin ve.
+  const [produtoEntregaMap, setProdutoEntregaMap] = useState(null);
+  const [produtoAcaoMap, setProdutoAcaoMap] = useState({});
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedPedido, setSelectedPedido] = useState(null);
@@ -102,7 +108,31 @@ export default function MeusPedidos() {
       setPedidos(pedidosFiltrados);
       setFornecedores(fornecedoresList || []);
       setCarteira(carteiraList || []);
-    } catch (_error) {
+
+      // Busca so os produtos citados nos pedidos do cliente (nao a tabela toda).
+      const produtoIds = [...new Set(
+        pedidosFiltrados.flatMap(p => (Array.isArray(p.itens) ? p.itens : []).map(i => i?.produto_id))
+      )].filter(Boolean);
+      if (produtoIds.length > 0) {
+        try {
+          const produtosList = await Produto.listByIds(produtoIds);
+          const entregaMap = {};
+          const acaoMap = {};
+          (produtosList || []).forEach(p => {
+            if (p.data_prevista_entrega) entregaMap[p.id] = p.data_prevista_entrega;
+            if (p.acao) acaoMap[p.id] = p.acao;
+          });
+          setProdutoEntregaMap(entregaMap);
+          setProdutoAcaoMap(acaoMap);
+        } catch (e) {
+          console.warn('Erro ao carregar produtos dos pedidos:', e);
+        }
+      }
+    } catch (error) {
+      // Falha silenciosa aqui deixava a tela com "nenhum pedido", que o cliente
+      // le como "meus pedidos sumiram".
+      console.error('Erro ao carregar pedidos:', error);
+      toast.error('Não foi possível carregar seus pedidos. Recarregue a página.');
     } finally {
       setLoading(false);
     }
@@ -377,6 +407,102 @@ export default function MeusPedidos() {
     );
   };
 
+  // Extrato Detalhado: uma linha por ITEM, com mes de faturamento e acao —
+  // mesma regra da extracao do admin, restrita aos pedidos deste cliente.
+  // O CSV de pedidos e por PEDIDO e nao mostra nem produto nem mes.
+  const handleExportExtratoItens = () => {
+    try {
+      const pgLabels = {
+        pix: 'PIX',
+        cartao_credito: 'Cartão de Crédito',
+        boleto_faturado: 'Boleto Faturado',
+        boleto: 'Boleto',
+        transferencia: 'Transferência Bancária'
+      };
+
+      const linhas = [];
+      for (const pedido of filteredPedidos) {
+        let itens = pedido.itens || [];
+        if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch { itens = []; } }
+        if (!Array.isArray(itens) || itens.length === 0) continue;
+
+        const numero = `#${pedido.id.slice(-8).toUpperCase()}`;
+        const formaPg = pgLabels[pedido.metodo_pagamento] || pedido.metodo_pagamento || '';
+        const prazos = pedido.boleto_prazos_dias;
+        const formaPgComPrazo = (pedido.metodo_pagamento === 'boleto_faturado' && Array.isArray(prazos) && prazos.length)
+          ? `${formaPg} (${prazos.join('/')} dias)`
+          : formaPg;
+        const dataPedido = pedido.created_date
+          ? new Date(pedido.created_date).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+          : '';
+
+        for (const it of itens) {
+          const isGrade = it.tipo_venda === 'grade' && (it.total_pecas_grade || 0) > 0;
+          const totalItens = (it.quantidade || 0) * (isGrade ? (it.total_pecas_grade || 1) : 1);
+          const precoBase = Number(it.preco) || 0;
+          const precoTotal = Number(it.total) || precoBase * (it.quantidade || 0);
+          // PRECO UNITARIO sempre por PECA (consistente com TOTAL DE ITENS).
+          const precoUnit = isGrade ? precoBase / (it.total_pecas_grade || 1) : precoBase;
+
+          linhas.push({
+            numero_pedido: numero,
+            data_pedido: dataPedido,
+            loja: (pedido.loja_id && lojasMap[pedido.loja_id]) || '',
+            fornecedor: getFornecedorNome(pedido.fornecedor_id),
+            forma_pagamento: formaPgComPrazo,
+            mes_faturamento: getMesFaturamentoItem(pedido, it, produtoEntregaMap || {}),
+            acao: (it.produto_id && produtoAcaoMap[it.produto_id]) || '',
+            tipo_pedido: isGrade ? 'PGM' : 'PE',
+            nome_item: it.nome || '',
+            ref_fornecedor: it.referencia_fornecedor || it.referencia || '',
+            ref_linx: it.referencia_linx || it.referencia_polo || it.referencia || '',
+            cor: it.cor_selecionada?.cor_nome || '',
+            tamanho: it.tamanho_selecionado || '',
+            preco_unitario: precoUnit,
+            total_itens: totalItens,
+            grades: isGrade ? (it.quantidade || 0) : '-',
+            preco_total: precoTotal,
+            nf_numero: pedido.nf_numero || '',
+            status_pedido: getStatusInfo(pedido.status).label
+          });
+        }
+      }
+
+      if (linhas.length === 0) {
+        toast.info('Não há itens para extrair nos pedidos filtrados');
+        return;
+      }
+
+      const columns = [
+        { key: 'numero_pedido', label: 'NÚMERO DO PEDIDO' },
+        { key: 'data_pedido', label: 'DATA DO PEDIDO' },
+        { key: 'loja', label: 'LOJA' },
+        { key: 'fornecedor', label: 'FORNECEDOR' },
+        { key: 'forma_pagamento', label: 'FORMA DE PAGAMENTO' },
+        { key: 'mes_faturamento', label: 'MÊS DE FATURAMENTO' },
+        { key: 'acao', label: 'AÇÃO' },
+        { key: 'tipo_pedido', label: 'TIPO DE PEDIDO (PE/PGM)' },
+        { key: 'nome_item', label: 'NOME DO ITEM' },
+        { key: 'ref_fornecedor', label: 'REF FORNECEDOR' },
+        { key: 'ref_linx', label: 'REF LINX' },
+        { key: 'cor', label: 'COR' },
+        { key: 'tamanho', label: 'TAMANHO' },
+        { key: 'preco_unitario', label: 'PREÇO UNITÁRIO' },
+        { key: 'total_itens', label: 'TOTAL DE ITENS' },
+        { key: 'grades', label: 'GRADES' },
+        { key: 'preco_total', label: 'PREÇO TOTAL' },
+        { key: 'nf_numero', label: 'Nº NF' },
+        { key: 'status_pedido', label: 'STATUS DO PEDIDO' }
+      ];
+
+      exportToCSV(linhas, columns, `extrato-itens-${new Date().toISOString().split('T')[0]}.csv`);
+      toast.success(`Extrato gerado com ${linhas.length} linha(s)`);
+    } catch (error) {
+      console.error('Erro ao gerar extrato:', error);
+      toast.error('Erro ao gerar o extrato detalhado');
+    }
+  };
+
   const handleExportPDF = () => {
     const exportData = filteredPedidos.map(pedido => {
       const statusInfo = getStatusInfo(pedido.status);
@@ -607,6 +733,15 @@ export default function MeusPedidos() {
             </Button>
 
             <div className="flex gap-2">
+              <Button
+                onClick={handleExportExtratoItens}
+                variant="outline"
+                className="rounded-xl border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                title="CSV com uma linha por item, incluindo mês de faturamento e ação"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Extrato Detalhado
+              </Button>
               <Button
                 onClick={handleExportPDF}
                 variant="outline"
@@ -937,6 +1072,7 @@ export default function MeusPedidos() {
             });
           }}
           currentUser={user}
+          produtoEntregaMap={produtoEntregaMap}
           userMap={user ? new Map([[user.id, user.empresa || user.full_name || user.email]]) : undefined}
           fornecedorMap={new Map(fornecedores.map(f => [f.id, f.razao_social || f.nome_fantasia || f.nome_marca]))}
         />

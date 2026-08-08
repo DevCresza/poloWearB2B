@@ -73,6 +73,37 @@ const createSupabaseEntity = (tableName) => {
     },
 
     /**
+     * Listar varios registros por id, em uma requisicao so.
+     * Existe para telas que precisam de poucos registros de uma tabela grande
+     * (ex: os produtos de UM pedido) sem baixar a tabela inteira.
+     */
+    async listByIds(ids = []) {
+      if (!isSupabaseConfigured()) {
+        throw new Error('❌ Supabase não configurado. Verifique as variáveis de ambiente.');
+      }
+
+      const unicos = [...new Set((ids || []).filter(Boolean))];
+      if (unicos.length === 0) return [];
+
+      try {
+        // Fatiado pra nao estourar o tamanho da URL com muitos uuids.
+        const LOTE = 100;
+        let todos = [];
+        for (let i = 0; i < unicos.length; i += LOTE) {
+          const { data, error } = await supabase
+            .from(tableName)
+            .select('*')
+            .in('id', unicos.slice(i, i + LOTE));
+          if (error) throw error;
+          todos = todos.concat(data || []);
+        }
+        return todos;
+      } catch (error) {
+        throw new Error(`Erro ao listar ${tableName}: ${error.message}`);
+      }
+    },
+
+    /**
      * Obter registro por ID
      */
     async get(id) {

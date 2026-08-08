@@ -1,13 +1,23 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Pedido, Carteira } from '@/api/entities';
+import { Pedido, Carteira, Capsula } from '@/api/entities';
 import { darBaixaEstoque, devolverEstoque } from '@/utils/estoqueUtils';
 import { formatCurrency } from '@/utils/exportUtils';
-import { Save, X, Trash2, AlertTriangle, Edit } from 'lucide-react';
+import { Save, X, Trash2, AlertTriangle, Edit, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
+
+// Rotulo pt-BR de um mes 'YYYY-MM' (ex: "setembro de 2026").
+const rotuloMes = (mes) => {
+  if (!mes) return '';
+  const [ano, m] = String(mes).split('-').map(Number);
+  if (!ano || !m) return '';
+  return new Date(ano, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+};
 
 // Modal compartilhado (admin + fornecedor) para revisar quantidades dos itens
 // de um pedido já criado. Faz a cascata: atualiza pedido.itens,
@@ -27,6 +37,59 @@ export default function PedidoItensEditModal({ pedido, onClose, onUpdate, curren
   const [salvando, setSalvando] = useState(false);
 
   const isAdmin = currentUser?.role === 'admin' || currentUser?.tipo_negocio === 'admin';
+
+  // --- Mes de entrega por capsula -------------------------------------------
+  // O cliente escolhe o mes de entrega da CAPSULA no carrinho; ele fica gravado
+  // em cada item (`mes_entrega`). Quando escolhe errado, so o admin conserta —
+  // por isso a correcao vive aqui e nao na tela do cliente.
+  const capsulaIds = useMemo(
+    () => [...new Set((pedido.itens || []).map(i => i?.origem_capsula).filter(Boolean))],
+    [pedido.itens]
+  );
+  // capsula_id -> { nome, meses: ['YYYY-MM'] }
+  const [capsulasInfo, setCapsulasInfo] = useState({});
+  // capsula_id -> mes escolhido na tela (estado editavel)
+  const [mesesPorCapsula, setMesesPorCapsula] = useState(() => {
+    const inicial = {};
+    (pedido.itens || []).forEach(i => {
+      if (i?.origem_capsula && !(i.origem_capsula in inicial)) {
+        inicial[i.origem_capsula] = i.mes_entrega || '';
+      }
+    });
+    return inicial;
+  });
+  const [mesesOriginais] = useState(() => {
+    const orig = {};
+    (pedido.itens || []).forEach(i => {
+      if (i?.origem_capsula && !(i.origem_capsula in orig)) {
+        orig[i.origem_capsula] = i.mes_entrega || '';
+      }
+    });
+    return orig;
+  });
+
+  useEffect(() => {
+    if (!isAdmin || capsulaIds.length === 0) return;
+    let cancelado = false;
+    Capsula.listByIds(capsulaIds)
+      .then(list => {
+        if (cancelado) return;
+        const info = {};
+        (list || []).forEach(c => {
+          info[c.id] = {
+            nome: c.nome || c.titulo || 'Cápsula',
+            meses: Array.isArray(c.meses_disponiveis) ? c.meses_disponiveis : []
+          };
+        });
+        setCapsulasInfo(info);
+      })
+      .catch(() => { /* sem a capsula, o admin ainda digita o mes na mao */ });
+    return () => { cancelado = true; };
+  }, [isAdmin, capsulaIds]);
+
+  const mesesAlterados = Object.keys(mesesPorCapsula).filter(
+    id => (mesesPorCapsula[id] || '') !== (mesesOriginais[id] || '')
+  );
   const isCliente = currentUser?.tipo_negocio === 'multimarca' || currentUser?.tipo_negocio === 'franqueado';
 
   // Para CLIENTE: só pode editar enquanto o pedido ainda nao foi
@@ -70,7 +133,9 @@ export default function PedidoItensEditModal({ pedido, onClose, onUpdate, curren
   const delta = novoValorTotal - valorAtual;
 
   // Detecta se houve alguma alteração para habilitar o botão Salvar
-  const houveAlteracao = itens.some(i => i._removido || i._novaQuantidade !== i._quantidadeOriginal);
+  const houveAlteracao =
+    itens.some(i => i._removido || i._novaQuantidade !== i._quantidadeOriginal)
+    || mesesAlterados.length > 0;
 
   const handleQuantidadeChange = (idx, valor) => {
     let num = Math.max(0, parseInt(valor, 10) || 0);
@@ -120,7 +185,12 @@ export default function PedidoItensEditModal({ pedido, onClose, onUpdate, curren
         const novoTotal = preco * novaQtd;
         // remove campos auxiliares internos do estado
         const { _idx, _quantidadeOriginal, _novaQuantidade, _removido, ...resto } = i;
-        return { ...resto, quantidade: novaQtd, total: novoTotal };
+        const item = { ...resto, quantidade: novaQtd, total: novoTotal };
+        // Mes de entrega corrigido pelo admin vale para todos os itens da capsula.
+        if (item.origem_capsula && item.origem_capsula in mesesPorCapsula) {
+          item.mes_entrega = mesesPorCapsula[item.origem_capsula] || null;
+        }
+        return item;
       });
 
       // 2) Monta listas auxiliares pra ajustar estoque pelo delta
@@ -173,6 +243,12 @@ export default function PedidoItensEditModal({ pedido, onClose, onUpdate, curren
         } else {
           linhasLog.push(`- ${i.nome}${i.cor_selecionada?.cor_nome ? ` (${i.cor_selecionada.cor_nome})` : ''}: ${qtdOriginal} → ${qtdNova}`);
         }
+      });
+      mesesAlterados.forEach(capsulaId => {
+        const nome = capsulasInfo[capsulaId]?.nome || 'Cápsula';
+        const de = rotuloMes(mesesOriginais[capsulaId]) || 'não definido';
+        const para = rotuloMes(mesesPorCapsula[capsulaId]) || 'não definido';
+        linhasLog.push(`- MÊS DE ENTREGA (${nome}): ${de} → ${para}`);
       });
       const logBlock = `[${dataStr} - ${quemFez}] Itens revisados:
 ${linhasLog.join('\n')}
@@ -253,6 +329,62 @@ Valor: ${formatCurrency(valorAtual)} → ${formatCurrency(novoValorTotal)}`;
               )}
             </AlertDescription>
           </Alert>
+        )}
+
+        {/* Mes de entrega da capsula — correcao restrita ao admin */}
+        {isAdmin && capsulaIds.length > 0 && (
+          <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 space-y-3">
+            <div className="flex items-center gap-2 text-purple-900">
+              <Calendar className="w-4 h-4" />
+              <span className="font-semibold text-sm">Mês de entrega</span>
+            </div>
+            <p className="text-xs text-purple-800">
+              O mês escolhido pelo cliente no carrinho. Alterar aqui vale para todos os itens da cápsula
+              e muda o mês de entrega/faturamento nos relatórios.
+            </p>
+            {capsulaIds.map(capsulaId => {
+              const info = capsulasInfo[capsulaId];
+              const meses = info?.meses || [];
+              const atual = mesesPorCapsula[capsulaId] || '';
+              return (
+                <div key={capsulaId} className="flex flex-wrap items-center gap-3">
+                  <Label className="text-xs text-gray-700 min-w-[140px]">
+                    {info?.nome || 'Cápsula'}
+                  </Label>
+                  {meses.length > 0 ? (
+                    <Select
+                      value={atual}
+                      disabled={bloqueado}
+                      onValueChange={(v) => setMesesPorCapsula(prev => ({ ...prev, [capsulaId]: v }))}
+                    >
+                      <SelectTrigger className="h-9 w-[220px] bg-white">
+                        <SelectValue placeholder="Escolha o mês" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {meses.map(m => (
+                          <SelectItem key={m} value={m} className="capitalize">{rotuloMes(m)}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    // Capsula sem meses cadastrados (ou removida): entrada livre.
+                    <Input
+                      type="month"
+                      value={atual}
+                      disabled={bloqueado}
+                      onChange={(e) => setMesesPorCapsula(prev => ({ ...prev, [capsulaId]: e.target.value }))}
+                      className="h-9 w-[220px] bg-white"
+                    />
+                  )}
+                  {(mesesPorCapsula[capsulaId] || '') !== (mesesOriginais[capsulaId] || '') && (
+                    <span className="text-xs text-blue-700 capitalize">
+                      {rotuloMes(mesesOriginais[capsulaId]) || 'não definido'} → {rotuloMes(mesesPorCapsula[capsulaId]) || 'não definido'}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
 
         <div className="space-y-3 py-2">
