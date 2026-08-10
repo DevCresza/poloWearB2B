@@ -99,6 +99,7 @@ export default function EmissaoLote() {
 
   const [capsulaId, setCapsulaId] = useState(null);
   const [qtdCapsula, setQtdCapsula] = useState(1);
+  const [mesEntrega, setMesEntrega] = useState(null); // 'YYYY-MM' escolhido para a capsula
   const [selectedLojaIds, setSelectedLojaIds] = useState(new Set());
   const [observacoes, setObservacoes] = useState('');
   const [metodoPagamento, setMetodoPagamento] = useState('boleto_faturado');
@@ -171,6 +172,23 @@ export default function EmissaoLote() {
     [capsulas, capsulaId]
   );
 
+  const mesesDaCapsula = useMemo(
+    () => (Array.isArray(capsulaSelecionada?.meses_disponiveis) ? capsulaSelecionada.meses_disponiveis : []),
+    [capsulaSelecionada]
+  );
+
+  // Ao trocar de capsula: se ela tem exatamente um mes, ja fixa; senao zera
+  // para o admin escolher (nao herdar o mes de outra capsula).
+  useEffect(() => {
+    setMesEntrega(mesesDaCapsula.length === 1 ? mesesDaCapsula[0] : null);
+  }, [capsulaId, mesesDaCapsula]);
+
+  const rotuloMes = (mes) => {
+    if (!mes) return '';
+    const [ano, m] = mes.split('-').map(Number);
+    return new Date(ano, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  };
+
   const usersById = useMemo(() => {
     const m = new Map();
     (users || []).forEach(u => m.set(u.id, u));
@@ -232,7 +250,15 @@ export default function EmissaoLote() {
       toast.info('Selecione pelo menos uma loja.');
       return;
     }
-    if (!confirm(`Emitir a cápsula "${capsulaSelecionada.nome}" (${qtdCapsula}x) para ${selectedLojaIds.size} loja(s)?`)) return;
+    // Capsula com varios meses exige a escolha do mes de entrega antes de emitir.
+    // Sem isto, o mes cai no fallback (data do produto) e todos os lotes saem
+    // no mesmo mes.
+    if (mesesDaCapsula.length > 1 && !mesEntrega) {
+      toast.error('Escolha o mês de entrega antes de emitir.');
+      return;
+    }
+    const mesTexto = mesEntrega ? ` — entrega ${rotuloMes(mesEntrega)}` : '';
+    if (!confirm(`Emitir a cápsula "${capsulaSelecionada.nome}" (${qtdCapsula}x)${mesTexto} para ${selectedLojaIds.size} loja(s)?`)) return;
 
     setEmitindo(true);
     const relatorio = { sucesso: [], falha: [] };
@@ -249,11 +275,16 @@ export default function EmissaoLote() {
           continue;
         }
 
-        const itens = expandirCapsulaEmItens(capsulaSelecionada, produtos, dono, qtdCapsula);
-        if (itens.length === 0) {
+        const itensBase = expandirCapsulaEmItens(capsulaSelecionada, produtos, dono, qtdCapsula);
+        if (itensBase.length === 0) {
           relatorio.falha.push({ loja, motivo: 'Cápsula não gerou itens (todas cores em 0)' });
           continue;
         }
+        // Carimba o mes escolhido em cada item — mesma chave que o Carrinho grava,
+        // e que o relatorio/badge de entrega leem (getMesEntregaItem).
+        const itens = mesEntrega
+          ? itensBase.map(it => ({ ...it, mes_entrega: mesEntrega }))
+          : itensBase;
         const total = itens.reduce((s, it) => s + (it.total || 0), 0);
         if (total <= 0) {
           relatorio.falha.push({ loja, motivo: 'Total zerado' });
@@ -377,9 +408,41 @@ export default function EmissaoLote() {
             </div>
           </div>
 
+          {/* Mes de entrega da capsula: fixo se so tiver um, senao dropdown.
+              O mes vira a entrega/faturamento de todos os pedidos deste lote. */}
+          {capsulaSelecionada && mesesDaCapsula.length > 0 && (
+            <div>
+              <Label>Mês de entrega {mesesDaCapsula.length > 1 ? '*' : ''}</Label>
+              {mesesDaCapsula.length === 1 ? (
+                <div className="mt-1">
+                  <Badge className="bg-purple-100 text-purple-800 border border-purple-300 capitalize text-sm px-3 py-1">
+                    {rotuloMes(mesesDaCapsula[0])}
+                  </Badge>
+                </div>
+              ) : (
+                <>
+                  <Select value={mesEntrega || ''} onValueChange={setMesEntrega}>
+                    <SelectTrigger><SelectValue placeholder="Escolha o mês de entrega" /></SelectTrigger>
+                    <SelectContent>
+                      {mesesDaCapsula.map(m => (
+                        <SelectItem key={m} value={m} className="capitalize">{rotuloMes(m)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!mesEntrega && (
+                    <p className="text-xs text-amber-600 mt-1">Escolha o mês para poder emitir.</p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {capsulaSelecionada && (
             <div className="bg-white p-3 rounded-lg border text-sm space-y-1">
               <div><span className="font-semibold">Cápsula:</span> {capsulaSelecionada.nome}</div>
+              {mesEntrega && (
+                <div><span className="font-semibold">Entrega:</span> <span className="capitalize">{rotuloMes(mesEntrega)}</span></div>
+              )}
               {fornecedorInfo && (
                 <div><span className="font-semibold">Fornecedor:</span> {fornecedorInfo.nome_marca || fornecedorInfo.razao_social}</div>
               )}
