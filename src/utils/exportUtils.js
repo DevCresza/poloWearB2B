@@ -281,6 +281,29 @@ export const getMesesEntregaPedido = (pedido, produtoEntregaMap = {}) => {
 };
 
 /**
+ * Meses de FATURAMENTO de um pedido, como chaves 'YYYY-MM', para filtro.
+ *
+ * Mesma regra da coluna "MÊS DE FATURAMENTO" dos relatórios: se a NF já foi
+ * emitida, o mês é o da nota; senão, o mês de entrega de cada item (mês da
+ * cápsula escolhido > entrega do produto > entrega/data do pedido). Usado nas
+ * telas que carregam o pedido COM itens (MeusPedidos, PedidosFornecedor).
+ */
+export const getMesesFaturamentoPedido = (pedido, produtoEntregaMap = {}) => {
+  if (pedido?.nf_data_upload) {
+    const k = String(pedido.nf_data_upload).slice(0, 7);
+    return k ? [k] : [];
+  }
+  const itens = Array.isArray(pedido?.itens) ? pedido.itens : [];
+  const keys = itens.map(it => {
+    if (it?.mes_entrega) return String(it.mes_entrega).slice(0, 7);
+    const ep = it?.produto_id ? produtoEntregaMap[it.produto_id] : null;
+    const base = ep || pedido?.data_prevista_entrega || pedido?.created_date;
+    return base ? String(base).slice(0, 7) : null;
+  }).filter(Boolean);
+  return [...new Set(keys)];
+};
+
+/**
  * Rótulos de mês a partir do array pré-calculado `pedido.meses_entrega`
  * (['2026-10', ...] gravado por trigger). Usado nas LISTAS, que carregam o
  * resumo do pedido sem o itens. Retorna ['outubro de 2026', ...].

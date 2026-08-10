@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
 import PedidoItensEditModal from '@/components/pedidos/PedidoItensEditModal';
-import { formatCurrency, exportToPDF, exportToCSV, formatDate, getMesFaturamentoItem, getMesEntregaItem, getMesesEntregaPedido } from '@/utils/exportUtils';
+import { formatCurrency, exportToPDF, exportToCSV, formatDate, getMesFaturamentoItem, getMesEntregaItem, getMesesEntregaPedido, getMesesFaturamentoPedido, formatMesAno } from '@/utils/exportUtils';
 import { validarVencimentos } from '@/utils/vencimentoUtils';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
@@ -48,6 +48,7 @@ export default function PedidosFornecedor() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [filtroMes, setFiltroMes] = useState('todos');
+  const [filtroMesFaturamento, setFiltroMesFaturamento] = useState('todos'); // 'YYYY-MM' (NF, senão cápsula)
   const [filtroEmissaoDe, setFiltroEmissaoDe] = useState('');
   const [filtroEmissaoAte, setFiltroEmissaoAte] = useState('');
   const [filtroFaturamentoDe, setFiltroFaturamentoDe] = useState('');
@@ -1459,8 +1460,19 @@ export default function PedidosFornecedor() {
       }
     }
 
-    return matchesSearch && matchesStatus && matchesMes && matchesEmissao && matchesFaturamento;
+    // Filtro por MÊS de faturamento (NF, senão mês da cápsula/entrega).
+    let matchesMesFat = true;
+    if (filtroMesFaturamento !== 'todos') {
+      matchesMesFat = getMesesFaturamentoPedido(pedido, produtoEntregaMap).includes(filtroMesFaturamento);
+    }
+
+    return matchesSearch && matchesStatus && matchesMes && matchesEmissao && matchesFaturamento && matchesMesFat;
   });
+
+  // Meses de faturamento disponíveis (de TODOS os pedidos), mais recente primeiro.
+  const mesesFaturamentoDisponiveis = [...new Set(
+    pedidos.flatMap(p => getMesesFaturamentoPedido(p, produtoEntregaMap))
+  )].sort().reverse();
 
   // Agrupar por mês de referência para faturamento - not used in rendering, only in the original outline comments.
   // const pedidosPorMesReferencia = {};
@@ -1565,10 +1577,10 @@ export default function PedidosFornecedor() {
 
             <Select value={filtroMes} onValueChange={setFiltroMes}>
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder="Mês do pedido" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">Todos os Meses</SelectItem>
+                <SelectItem value="todos">Mês do pedido: todos</SelectItem>
                 {Array.from({ length: 12 }, (_, i) => {
                   const now = new Date();
                   const data = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -1580,6 +1592,19 @@ export default function PedidosFornecedor() {
                     </SelectItem>
                   );
                 })}
+              </SelectContent>
+            </Select>
+
+            {/* Mês de faturamento (NF, senão mês da cápsula/entrega) */}
+            <Select value={filtroMesFaturamento} onValueChange={setFiltroMesFaturamento}>
+              <SelectTrigger>
+                <SelectValue placeholder="Mês de faturamento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Mês de faturamento: todos</SelectItem>
+                {mesesFaturamentoDisponiveis.map(m => (
+                  <SelectItem key={m} value={m} className="capitalize">{formatMesAno(`${m}-01`)}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

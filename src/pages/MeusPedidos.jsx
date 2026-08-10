@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -19,7 +20,7 @@ import {
   Download, CreditCard, Calendar, MapPin, Receipt, Upload,
   AlertTriangle, ArrowUpCircle, DollarSign
 } from 'lucide-react';
-import { formatCurrency, exportToCSV, exportToPDF, formatDate, toBrasiliaDateString, getMesFaturamentoItem } from '@/utils/exportUtils';
+import { formatCurrency, exportToCSV, exportToPDF, formatDate, toBrasiliaDateString, getMesFaturamentoItem, getMesesFaturamentoPedido, formatMesAno } from '@/utils/exportUtils';
 import { Produto } from '@/api/entities';
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
 import PedidoItensEditModal from '@/components/pedidos/PedidoItensEditModal';
@@ -55,6 +56,7 @@ export default function MeusPedidos() {
   const [filtroEmissaoAte, setFiltroEmissaoAte] = useState('');
   const [filtroFaturamentoDe, setFiltroFaturamentoDe] = useState('');
   const [filtroFaturamentoAte, setFiltroFaturamentoAte] = useState('');
+  const [filtroMesFaturamento, setFiltroMesFaturamento] = useState('todos'); // 'YYYY-MM'
   const [filtroVencimentoDe, setFiltroVencimentoDe] = useState('');
   const [filtroVencimentoAte, setFiltroVencimentoAte] = useState('');
   const [comprovanteFile, setComprovanteFile] = useState(null);
@@ -614,8 +616,19 @@ export default function MeusPedidos() {
       }
     }
 
-    return matchesSearch && matchesStatus && matchesEmissao && matchesFaturamento && matchesVencimento;
+    // Filtro por MÊS de faturamento (NF, senão mês da cápsula/entrega).
+    let matchesMesFat = true;
+    if (filtroMesFaturamento !== 'todos') {
+      matchesMesFat = getMesesFaturamentoPedido(pedido, produtoEntregaMap || {}).includes(filtroMesFaturamento);
+    }
+
+    return matchesSearch && matchesStatus && matchesEmissao && matchesFaturamento && matchesVencimento && matchesMesFat;
   });
+
+  // Meses de faturamento disponíveis (de TODOS os pedidos), mais recente primeiro.
+  const mesesFaturamentoDisponiveis = [...new Set(
+    pedidos.flatMap(p => getMesesFaturamentoPedido(p, produtoEntregaMap || {}))
+  )].sort().reverse();
 
   // Calcular totais financeiros
   const totalEmAberto = carteira
@@ -802,6 +815,29 @@ export default function MeusPedidos() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Filtro por MÊS de faturamento (NF, senão mês da cápsula/entrega) */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <Label className="text-xs text-gray-500 font-medium flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5" /> Mês de faturamento
+            </Label>
+            <Select value={filtroMesFaturamento} onValueChange={setFiltroMesFaturamento}>
+              <SelectTrigger className="w-56 rounded-xl shadow-neumorphic-inset">
+                <SelectValue placeholder="Todos os meses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os meses</SelectItem>
+                {mesesFaturamentoDisponiveis.map(m => (
+                  <SelectItem key={m} value={m} className="capitalize">{formatMesAno(`${m}-01`)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {filtroMesFaturamento !== 'todos' && (
+              <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setFiltroMesFaturamento('todos')}>
+                <X className="w-3 h-3 mr-1" /> limpar
+              </Button>
+            )}
           </div>
 
           {/* Filtros de Status com dropdown multi-select */}
