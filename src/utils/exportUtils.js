@@ -279,3 +279,13 @@ export const getMesesEntregaPedido = (pedido, produtoEntregaMap = {}) => {
     .filter(Boolean);
   return [...new Set(meses)];
 };
+
+/**
+ * Rótulos de mês a partir do array pré-calculado `pedido.meses_entrega`
+ * (['2026-10', ...] gravado por trigger). Usado nas LISTAS, que carregam o
+ * resumo do pedido sem o itens. Retorna ['outubro de 2026', ...].
+ */
+export const formatMesesEntrega = (meses) => {
+  if (!Array.isArray(meses)) return [];
+  return meses.filter(Boolean).map(m => formatMesAno(`${m}-01`));
+};

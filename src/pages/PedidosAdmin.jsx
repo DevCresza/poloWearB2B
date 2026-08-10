@@ -1,7 +1,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Pedido } from '@/api/entities';
+import { Pedido, PedidoResumo } from '@/api/entities';
 import { User } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { Produto } from '@/api/entities';
@@ -20,7 +20,7 @@ import PedidoCard from '../components/pedidos/PedidoCard';
 import PedidoDetailsModal from '../components/pedidos/PedidoDetailsModal';
 import PedidoEditModal from '../components/pedidos/PedidoEditModal';
 import PedidoItensEditModal from '../components/pedidos/PedidoItensEditModal';
-import { exportToCSV, exportToPDF, formatCurrency, formatDateTime, formatDate, getMesFaturamentoItem, getMesEntregaItem, getMesesEntregaPedido } from '@/utils/exportUtils';
+import { exportToCSV, exportToPDF, formatCurrency, formatDateTime, formatDate, getMesFaturamentoItem, getMesEntregaItem, formatMesesEntrega } from '@/utils/exportUtils';
 import MultiSelectFilter from '@/components/MultiSelectFilter';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
@@ -68,7 +68,9 @@ export default function PedidosAdmin() {
       // sistema, nao so dos dele.
 
       const [pedidosList, usersList, fornecedoresList, lojasList, produtosList] = await Promise.all([
-        Pedido.list({ sort: '-created_date' }),
+        // Resumo leve (sem o itens jsonb): a lista/kanban so precisam de escalares
+        // + qtd_pecas + meses_entrega. O itens completo e buscado ao abrir/exportar.
+        PedidoResumo.list({ sort: '-created_date' }),
         User.list(),
         Fornecedor.list(),
         Loja.list(),
@@ -147,13 +149,8 @@ export default function PedidosAdmin() {
           em_analise: 'Em Análise'
         };
 
-        // Soma quantidade total de pecas (considerando grades)
-        let itens = pedido.itens || [];
-        if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch { itens = []; } }
-        const qtdPecas = (itens || []).reduce((sum, it) => {
-          const isGrade = it.tipo_venda === 'grade' && (it.total_pecas_grade || 0) > 0;
-          return sum + (it.quantidade || 0) * (isGrade ? (it.total_pecas_grade || 1) : 1);
-        }, 0);
+        // Total de pecas: coluna pre-calculada (resumo nao traz o itens).
+        const qtdPecas = pedido.qtd_pecas || 0;
 
         const detUser = userDetalhesMap.get(pedido.comprador_user_id) || { cnpj: '', razao: 'N/A' };
         // Loja: razao social e CNPJ da LOJA (eh o que vai para a NF).
@@ -218,12 +215,18 @@ export default function PedidosAdmin() {
   // Modelo: NUMERO PEDIDO | CNPJ | RAZAO | LOJA | FORNECEDOR | FORMA DE PAGAMENTO |
   // MES FATURAMENTO | TIPO PEDIDO (PE/PGM) | NOME ITEM | REF FORNECEDOR | REF LINX |
   // COR | PRECO UNITARIO | TOTAL DE ITENS | PRECO TOTAL | STATUS PEDIDO
-  const handleExportExtratoItens = () => {
+  const handleExportExtratoItens = async () => {
     try {
       if (!filteredPedidos || filteredPedidos.length === 0) {
         toast.info('Não há pedidos para exportar');
         return;
       }
+
+      // A lista carrega o resumo (sem itens). Busca os itens completos dos
+      // pedidos filtrados só na hora de gerar o extrato detalhado.
+      toast.info('Preparando extrato de itens…');
+      const completosExtrato = await Pedido.listByIds(filteredPedidos.map(p => p.id));
+      const itensPorId = new Map(completosExtrato.map(p => [p.id, Array.isArray(p.itens) ? p.itens : []]));
 
       const statusLabels = {
         novo_pedido: 'Novo Pedido',
@@ -248,7 +251,7 @@ export default function PedidosAdmin() {
 
       const linhas = [];
       for (const pedido of filteredPedidos) {
-        let itens = pedido.itens || [];
+        let itens = itensPorId.get(pedido.id) || [];
         if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch { itens = []; } }
         if (!Array.isArray(itens) || itens.length === 0) continue;
 
@@ -343,7 +346,7 @@ export default function PedidosAdmin() {
   };
 
   // Relatório de Produção (admin)
-  const handleExportRelatorioProducao = () => {
+  const handleExportRelatorioProducao = async () => {
     const statusProducao = ['aprovado', 'em_producao', 'parcialmente_faturado'];
     const pedidosParaRelatorio = pedidos.filter(p => statusProducao.includes(p.status));
 
@@ -352,9 +355,14 @@ export default function PedidosAdmin() {
       return;
     }
 
+    // A lista carrega o resumo (sem itens). Busca os itens completos só aqui.
+    toast.info('Preparando relatório de produção…');
+    const completosProd = await Pedido.listByIds(pedidosParaRelatorio.map(p => p.id));
+    const itensProdPorId = new Map(completosProd.map(p => [p.id, Array.isArray(p.itens) ? p.itens : []]));
+
     const agregado = {};
     pedidosParaRelatorio.forEach(pedido => {
-      let itens = pedido.itens || [];
+      let itens = itensProdPorId.get(pedido.id) || [];
       if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch (e) { itens = []; } }
 
       itens.forEach(item => {
@@ -438,18 +446,30 @@ export default function PedidosAdmin() {
     }
   };
 
-  const handleEditPedido = (pedido) => {
-    setSelectedPedido(pedido);
+  // A lista carrega o resumo (sem o itens). Ao abrir qualquer modal, busca o
+  // pedido completo (com itens) para o modal ter o que exibir/editar.
+  const carregarPedidoCompleto = async (pedido) => {
+    try {
+      const completo = await Pedido.get(pedido.id);
+      return { ...pedido, ...completo };
+    } catch (e) {
+      console.warn('Falha ao carregar itens do pedido; abrindo com resumo.', e);
+      return pedido;
+    }
+  };
+
+  const handleEditPedido = async (pedido) => {
+    setSelectedPedido(await carregarPedidoCompleto(pedido));
     setShowEditModal(true);
   };
 
-  const handleEditItens = (pedido) => {
-    setSelectedPedido(pedido);
+  const handleEditItens = async (pedido) => {
+    setSelectedPedido(await carregarPedidoCompleto(pedido));
     setShowItensEditModal(true);
   };
 
-  const handleViewDetails = (pedido) => {
-    setSelectedPedido(pedido);
+  const handleViewDetails = async (pedido) => {
+    setSelectedPedido(await carregarPedidoCompleto(pedido));
     setShowDetailsModal(true);
   };
 
@@ -596,14 +616,8 @@ export default function PedidosAdmin() {
       if (totais.hasOwnProperty(pedido.status)) {
         totais[pedido.status].count++;
         totais[pedido.status].valor += pedido.valor_total || 0;
-        // Soma total de pecas dos itens (multiplica por total_pecas_grade quando for grade)
-        let itens = pedido.itens || [];
-        if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch { itens = []; } }
-        const qtdPecas = (itens || []).reduce((sum, it) => {
-          const isGrade = it.tipo_venda === 'grade' && (it.total_pecas_grade || 0) > 0;
-          return sum + (it.quantidade || 0) * (isGrade ? (it.total_pecas_grade || 1) : 1);
-        }, 0);
-        totais[pedido.status].pecas += qtdPecas;
+        // Total de pecas: coluna pre-calculada (resumo nao traz o itens).
+        totais[pedido.status].pecas += pedido.qtd_pecas || 0;
       }
     });
 
@@ -949,9 +963,9 @@ export default function PedidosAdmin() {
                             <div>
                               <div className="font-medium">#{pedido.id.slice(-8).toUpperCase()}</div>
                               <div className="text-sm text-gray-500">{formatDate(pedido.created_date)}</div>
-                              {/* Mes de entrega direto no pedido (mesma regra da extracao) */}
+                              {/* Mes de entrega: coluna pre-calculada (meses_entrega). */}
                               {(() => {
-                                const meses = getMesesEntregaPedido(pedido, produtoEntregaMap);
+                                const meses = formatMesesEntrega(pedido.meses_entrega);
                                 if (meses.length === 0) return null;
                                 return (
                                   <div className="text-xs font-semibold text-purple-700 capitalize mt-0.5">

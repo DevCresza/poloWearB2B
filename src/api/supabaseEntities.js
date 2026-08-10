@@ -229,6 +229,11 @@ export const Produto = createSupabaseEntity('produtos');
 export const Fornecedor = createSupabaseEntity('fornecedores');
 export const Franqueado = createSupabaseEntity('franqueados');
 export const Pedido = createSupabaseEntity('pedidos');
+// Versao leve para LISTAS: view sem o itens (jsonb pesado) + colunas
+// pre-calculadas qtd_pecas e meses_entrega. Ler o itens de milhares de pedidos
+// estourava o timeout. Use para listar; para abrir/editar UM pedido use Pedido
+// (que traz o itens completo). Só leitura — grava-se sempre em `pedidos`.
+export const PedidoResumo = createSupabaseEntity('pedidos_resumo');
 export const Contact = createSupabaseEntity('contacts');
 export const Capsula = createSupabaseEntity('capsulas');
 export const PendingUser = createSupabaseEntity('pending_users');

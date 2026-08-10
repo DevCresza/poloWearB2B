@@ -4,6 +4,7 @@ export { Contact } from './supabaseEntities';
 export { WhatsappTemplate } from './supabaseEntities';
 export { Produto } from './supabaseEntities';
 export { Pedido } from './supabaseEntities';
+export { PedidoResumo } from './supabaseEntities';
 export { Fornecedor } from './supabaseEntities';
 export { Franqueado } from './supabaseEntities';
 export { Recurso } from './supabaseEntities';
