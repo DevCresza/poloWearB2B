@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { Pedido, Produto } from '@/api/entities';
 import { Carteira } from '@/api/entities';
-import { User as UserEntity } from '@/api/entities';
 import { Loja, Fornecedor } from '@/api/entities';
 import { Faturamento } from '@/api/entities';
 import { UploadFile } from '@/api/integrations';
@@ -768,15 +767,9 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
         data_pagamento: dataPagamentoConfirmada
       });
 
-      // Atualizar totais do cliente
-      try {
-        const cliente = await UserEntity.get(parcelaParaAprovar.cliente_user_id);
-        const novoAberto = Math.max(0, (cliente.total_em_aberto || 0) - parcelaParaAprovar.valor);
-        const hoje = new Date(); hoje.setHours(0,0,0,0);
-        const vencido = new Date(parcelaParaAprovar.data_vencimento + 'T00:00:00') < hoje;
-        const novoVencido = vencido ? Math.max(0, (cliente.total_vencido || 0) - parcelaParaAprovar.valor) : (cliente.total_vencido || 0);
-        await UserEntity.update(parcelaParaAprovar.cliente_user_id, { total_em_aberto: novoAberto, total_vencido: novoVencido });
-      } catch (e) { console.warn('Erro totais:', e); }
+      // Os totais do cliente (total_em_aberto / total_vencido) sao derivados da
+      // carteira pelo trigger trg_carteira_sync_totais -- o update acima ja os
+      // recalculou. Subtrair na mao aqui so fazia o valor divergir.
 
       // Verificar se todas as parcelas do pedido estão pagas
       try {
@@ -861,17 +854,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
 
       await Carteira.update(parcela.id, updateData);
 
-      // Atualizar totais do cliente ao marcar como pago
-      if (novoStatus === 'pago') {
-        try {
-          const cliente = await UserEntity.get(parcela.cliente_user_id);
-          const novoAberto = Math.max(0, (cliente.total_em_aberto || 0) - parcela.valor);
-          const hoje = new Date(); hoje.setHours(0,0,0,0);
-          const vencido = new Date(parcela.data_vencimento + 'T00:00:00') < hoje;
-          const novoVencido = vencido ? Math.max(0, (cliente.total_vencido || 0) - parcela.valor) : (cliente.total_vencido || 0);
-          await UserEntity.update(parcela.cliente_user_id, { total_em_aberto: novoAberto, total_vencido: novoVencido });
-        } catch (e) { console.warn('Erro totais:', e); }
-      }
+      // Totais do cliente: derivados pelo trigger trg_carteira_sync_totais.
 
       // Verificar se todas as parcelas do pedido estão pagas
       try {

@@ -1686,9 +1686,12 @@ export default function PedidosFornecedor() {
               console.warn(`Fornecedor não encontrado para pedido ${pedido.id}. fornecedor_id: ${pedido.fornecedor_id}`);
             }
 
-            // Verificar se o cliente está inadimplente ou bloqueado
-            const clienteInadimplente = cliente?.bloqueado || (cliente?.total_vencido || 0) > 0;
+            // Bloqueio e inadimplencia sao coisas diferentes: o bloqueio e
+            // decisao manual do admin e o motivo pode nao ser financeiro
+            // (ex: "Acao de estoque"). Nao chame um de outro.
             const clienteBloqueado = cliente?.bloqueado;
+            const clienteVencido = (cliente?.total_vencido || 0) > 0;
+            const clienteInadimplente = clienteBloqueado || clienteVencido;
 
             // Mesma regra da extração — tela e relatório não podem divergir.
             const mesesEntrega = getMesesEntregaPedido(pedido, produtoEntregaMap);
@@ -1773,9 +1776,13 @@ export default function PedidosFornecedor() {
                       <AlertDescription className={clienteBloqueado ? 'text-red-800' : 'text-yellow-800'}>
                         {clienteBloqueado ? (
                           <>
-                            <strong>Cliente bloqueado por inadimplência.</strong>
+                            <strong>Cliente bloqueado.</strong>
                             <br />
                             Motivo: {cliente.motivo_bloqueio || 'Não especificado'}
+                            <br />
+                            {clienteVencido
+                              ? `Total vencido: ${formatCurrency(cliente.total_vencido || 0)}`
+                              : 'Sem valores vencidos — o bloqueio não é por inadimplência.'}
                             <br />
                             Total em aberto: {formatCurrency(cliente.total_em_aberto || 0)}
                           </>

@@ -43,15 +43,15 @@ export default function AlertaBloqueio() {
         currentUser.motivo_bloqueio?.startsWith('Bloqueio automático')
       ) {
         try {
+          // total_vencido nao entra aqui: e derivado da carteira pelo banco
+          // (trg_carteira_sync_totais). Zerar na mao mascarava atraso real.
           await User.update(currentUser.id, {
             bloqueado: false,
             motivo_bloqueio: null,
-            data_bloqueio: null,
-            total_vencido: 0
+            data_bloqueio: null
           });
           currentUser.bloqueado = false;
           currentUser.motivo_bloqueio = null;
-          currentUser.total_vencido = 0;
           sessionStorage.removeItem('bloqueio_visto');
         } catch (e) {
           console.warn('Erro ao limpar bloqueio automático:', e);

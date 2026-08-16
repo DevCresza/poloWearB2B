@@ -77,44 +77,10 @@ export default function CarteiraFinanceira() {
     loadData();
   }, [lojaSelecionada?.id, lojasLoading]);
 
-  // Função para sincronizar totais do cliente com base nos títulos reais da carteira
-  const sincronizarTotaisCliente = async (clienteId, titulosList) => {
-    try {
-      const hoje = new Date();
-      hoje.setHours(0, 0, 0, 0);
-
-      // Calcular total em aberto (pendente ou em_analise)
-      const totalEmAberto = titulosList
-        .filter(t => t.status === 'pendente' || t.status === 'em_analise')
-        .reduce((sum, t) => sum + (t.valor || 0), 0);
-
-      // Calcular total vencido (pendente E data vencimento < hoje)
-      const totalVencido = titulosList
-        .filter(t => {
-          if (t.status !== 'pendente') return false;
-          const dataVencimento = new Date(t.data_vencimento + 'T00:00:00');
-          return dataVencimento < hoje;
-        })
-        .reduce((sum, t) => sum + (t.valor || 0), 0);
-
-      // Buscar dados atuais do cliente
-      const cliente = await User.get(clienteId);
-
-      // Só atualizar se houver diferença (evita requisições desnecessárias)
-      const totalEmAbertoAtual = cliente.total_em_aberto || 0;
-      const totalVencidoAtual = cliente.total_vencido || 0;
-
-      if (Math.abs(totalEmAberto - totalEmAbertoAtual) > 0.01 ||
-          Math.abs(totalVencido - totalVencidoAtual) > 0.01) {
-        await User.update(clienteId, {
-          total_em_aberto: totalEmAberto,
-          total_vencido: totalVencido
-        });
-      }
-    } catch (error) {
-      console.error('Erro ao sincronizar totais:', error);
-    }
-  };
+  // users.total_em_aberto / total_vencido sao derivados da carteira pelo banco
+  // (trigger trg_carteira_sync_totais + cron diario). Nao escreva esses campos
+  // daqui: a tela ve so os titulos da loja selecionada e gravaria o total de
+  // uma loja no campo do usuario inteiro.
 
   const loadData = async () => {
     setLoading(true);
@@ -197,11 +163,6 @@ export default function CarteiraFinanceira() {
           });
           setClientesMap(map);
         }
-      }
-
-      // Recalcular e sincronizar totais do cliente (apenas títulos de pedidos finalizados)
-      if ((currentUser.tipo_negocio === 'multimarca' || currentUser.tipo_negocio === 'franqueado') && titulosList) {
-        await sincronizarTotaisCliente(currentUser.id, titulosList);
       }
 
       // Carregar pedidos relacionados para mostrar comprovantes
@@ -326,21 +287,18 @@ export default function CarteiraFinanceira() {
         data_pagamento: dataPagamentoConfirmada
       });
 
-      // 2. Atualizar totais do cliente e verificar auto-desbloqueio
+      // 2. Verificar auto-desbloqueio (os totais o banco ja recalculou no trigger)
       try {
         const cliente = await User.get(tituloParaAprovar.cliente_user_id);
 
-        // Recalcular totais com base em TODOS os títulos restantes do cliente
         const todosTitulos = await Carteira.filter({ cliente_user_id: tituloParaAprovar.cliente_user_id });
         const hoje = new Date();
         hoje.setHours(0, 0, 0, 0);
 
-        // Excluir o título atual (acabou de ser marcado como pago)
-        const titulosRestantes = (todosTitulos || []).filter(t => t.id !== tituloParaAprovar.id);
-
-        const novoTotalAberto = titulosRestantes
-          .filter(t => t.status === 'pendente' || t.status === 'em_analise')
-          .reduce((sum, t) => sum + (t.valor || 0), 0);
+        // Excluir o título atual (acabou de ser marcado como pago) e os
+        // placeholders sem boleto, que nao sao divida cobravel.
+        const titulosRestantes = (todosTitulos || [])
+          .filter(t => t.id !== tituloParaAprovar.id && t.parcela_numero);
 
         const novoTotalVencido = titulosRestantes
           .filter(t => {
@@ -351,22 +309,17 @@ export default function CarteiraFinanceira() {
           })
           .reduce((sum, t) => sum + (t.valor || 0), 0);
 
-        const updateData = {
-          total_em_aberto: Math.max(0, novoTotalAberto),
-          total_vencido: Math.max(0, novoTotalVencido)
-        };
-
         // Auto-desbloqueio: se não tem mais títulos vencidos e foi bloqueio automático
         if (cliente.bloqueado && novoTotalVencido <= 0) {
           const isAutoBlock = cliente.motivo_bloqueio?.startsWith('Bloqueio automático');
           if (isAutoBlock) {
-            updateData.bloqueado = false;
-            updateData.motivo_bloqueio = null;
-            updateData.data_bloqueio = null;
+            await User.update(tituloParaAprovar.cliente_user_id, {
+              bloqueado: false,
+              motivo_bloqueio: null,
+              data_bloqueio: null
+            });
           }
         }
-
-        await User.update(tituloParaAprovar.cliente_user_id, updateData);
 
         // Auto-desbloqueio por loja: verificar se a loja do título deve ser desbloqueada
         if (tituloParaAprovar.loja_id) {
