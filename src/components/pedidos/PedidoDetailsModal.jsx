@@ -21,11 +21,15 @@ import { Carteira } from '@/api/entities';
 import { Loja, Fornecedor } from '@/api/entities';
 import { Faturamento } from '@/api/entities';
 import { UploadFile } from '@/api/integrations';
-import { formatDateTime, formatCurrency, getMesesEntregaPedido } from '@/utils/exportUtils';
+import { formatDateTime, formatCurrency, getMesesEntregaPedido, getMesesFaturamentoPedido, formatMesAno } from '@/utils/exportUtils';
 import { validarVencimentos } from '@/utils/vencimentoUtils';
 import { Store } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+
+// formatMesAno devolve "outubro de 2026"; no PDF nao ha CSS capitalize.
+// Só a inicial — "Outubro De 2026" nao e portugues.
+const capitalizarMes = (m) => (m ? m.charAt(0).toUpperCase() + m.slice(1) : m);
 
 export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentUser, userMap, fornecedorMap, produtoEntregaMap = null, defaultTab = 'itens' }) {
   const [lojaInfo, setLojaInfo] = useState(null);
@@ -1180,6 +1184,34 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       if (pedido.metodo_pagamento) {
         const metodos = { boleto: 'Boleto', a_vista: 'À Vista', cartao: 'Cartão', pix: 'PIX' };
         doc.text(`Forma Pagto: ${metodos[pedido.metodo_pagamento] || pedido.metodo_pagamento}`, 14, yPos);
+        yPos += 5;
+      }
+
+      // Entrega e faturamento. O mes e propriedade do ITEM (a capsula escolhida
+      // no checkout), entao um mesmo pedido pode ter mais de um. Usa a mesma
+      // regra do badge da tela e do relatorio — o PDF nao pode divergir deles.
+      const mesesEntregaPdf = getMesesEntregaPedido(pedido, entregaMap);
+      if (mesesEntregaPdf.length > 0) {
+        doc.text(`Mês de Entrega: ${mesesEntregaPdf.map(capitalizarMes).join(' + ')}`, 14, yPos);
+        yPos += 5;
+      }
+
+      // Faturamento so aparece separado quando difere da entrega (NF ja emitida
+      // manda no mes real); senao seria a mesma linha repetida.
+      const mesesFatPdf = getMesesFaturamentoPedido(pedido, entregaMap)
+        .map(k => formatMesAno(`${k}-01`))
+        .filter(Boolean);
+      if (mesesFatPdf.length > 0 && mesesFatPdf.join('|') !== mesesEntregaPdf.join('|')) {
+        doc.text(`Mês de Faturamento: ${mesesFatPdf.map(capitalizarMes).join(' + ')}`, 14, yPos);
+        yPos += 5;
+      }
+
+      if (pedido.data_prevista_entrega) {
+        doc.text(
+          `Data Prevista de Entrega: ${new Date(pedido.data_prevista_entrega + 'T00:00:00').toLocaleDateString('pt-BR')}`,
+          14,
+          yPos
+        );
         yPos += 5;
       }
 
