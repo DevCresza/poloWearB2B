@@ -872,16 +872,9 @@ export default function PedidosFornecedor() {
   };
 
   const handleExportPDF = () => {
-    // Filtrar pedidos conforme permissão do usuário
-    let pedidosParaExportar = pedidos;
-    if (user?.role !== 'admin' && fornecedorAtual) {
-      pedidosParaExportar = pedidos.filter(p => p.fornecedor_id === fornecedorAtual.id);
-    }
-
-    // Aplicar filtros atuais
-    if (filtroStatus !== 'todos') {
-      pedidosParaExportar = pedidosParaExportar.filter(p => p.status === filtroStatus);
-    }
+    // Exporta exatamente o que está filtrado na tela (status, mês do pedido,
+    // MÊS DE FATURAMENTO, datas e busca) — o relatório baixado bate com a lista.
+    const pedidosParaExportar = filteredPedidos;
 
     // Colunas: CNPJ (da loja quando houver) + Razao + Loja para identificar
     // qual filial fez o pedido (cliente multilojas tem mesma razao); Qtd Pecas.
@@ -924,13 +917,8 @@ export default function PedidosFornecedor() {
   };
 
   const handleExportCSV = () => {
-    let pedidosParaExportar = pedidos;
-    if (user?.role !== 'admin' && fornecedorAtual) {
-      pedidosParaExportar = pedidos.filter(p => p.fornecedor_id === fornecedorAtual.id);
-    }
-    if (filtroStatus !== 'todos') {
-      pedidosParaExportar = pedidosParaExportar.filter(p => p.status === filtroStatus);
-    }
+    // Exporta o que está filtrado na tela (inclui o MÊS DE FATURAMENTO).
+    const pedidosParaExportar = filteredPedidos;
 
     const columns = [
       { key: 'id_formatado', label: 'Pedido' },
@@ -982,13 +970,8 @@ export default function PedidosFornecedor() {
   // filtros de status/cliente da tela.
   const handleExportExtratoItens = () => {
     try {
-      let pedidosParaExportar = pedidos;
-      if (user?.role !== 'admin' && fornecedorAtual) {
-        pedidosParaExportar = pedidos.filter(p => p.fornecedor_id === fornecedorAtual.id);
-      }
-      if (filtroStatus !== 'todos') {
-        pedidosParaExportar = pedidosParaExportar.filter(p => p.status === filtroStatus);
-      }
+      // Exporta o que está filtrado na tela (inclui o MÊS DE FATURAMENTO).
+      const pedidosParaExportar = filteredPedidos;
 
       if (!pedidosParaExportar || pedidosParaExportar.length === 0) {
         toast.info('Não há pedidos para exportar');
