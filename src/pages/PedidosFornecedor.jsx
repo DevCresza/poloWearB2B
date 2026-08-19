@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
 import PedidoItensEditModal from '@/components/pedidos/PedidoItensEditModal';
-import { formatCurrency, exportToPDF, exportToCSV, formatDate, getMesFaturamentoItem, getMesEntregaItem, getMesesEntregaPedido, getMesesFaturamentoPedido, formatMesAno } from '@/utils/exportUtils';
+import { formatCurrency, exportToPDF, exportToCSV, formatDate, getMesFaturamentoItem, getMesEntregaItem, getMesesEntregaPedido, getMesesFaturamentoPedido, formatMesesEntrega, formatMesAno } from '@/utils/exportUtils';
 import { validarVencimentos } from '@/utils/vencimentoUtils';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
@@ -886,6 +886,7 @@ export default function PedidosFornecedor() {
       { key: 'status', label: 'Status' },
       { key: 'valor_formatado', label: 'Valor' },
       { key: 'qtd_pecas', label: 'Qtd. Peças' },
+      { key: 'mes_faturamento', label: 'Mês de Faturamento' },
       { key: 'data_formatada', label: 'Data Pedido' },
       { key: 'data_faturamento', label: 'Data Faturamento' }
     ];
@@ -908,6 +909,7 @@ export default function PedidosFornecedor() {
         status: p.status?.charAt(0).toUpperCase() + p.status?.slice(1) || 'N/A',
         valor_formatado: formatCurrency(p.valor_total),
         qtd_pecas: qtdPecas,
+        mes_faturamento: formatMesesEntrega(getMesesFaturamentoPedido(p, produtoEntregaMap)).join(' / '),
         data_formatada: formatDate(p.created_date),
         data_faturamento: p.nf_data_upload ? formatDate(p.nf_data_upload) : '-'
       };
@@ -929,6 +931,7 @@ export default function PedidosFornecedor() {
       { key: 'qtd_pecas', label: 'Qtd. Peças' },
       { key: 'valor_formatado', label: 'Valor Total' },
       { key: 'valor_faturado', label: 'Valor Faturado' },
+      { key: 'mes_faturamento', label: 'Mês de Faturamento' },
       { key: 'data_formatada', label: 'Data Pedido' },
       { key: 'data_prevista', label: 'Previsão Entrega' },
       { key: 'nf_numero', label: 'NF' },
@@ -954,6 +957,7 @@ export default function PedidosFornecedor() {
         qtd_pecas: qtdPecas,
         valor_formatado: formatCurrency(p.valor_total),
         valor_faturado: formatCurrency(p.valor_faturado || 0),
+        mes_faturamento: formatMesesEntrega(getMesesFaturamentoPedido(p, produtoEntregaMap)).join(' / '),
         data_formatada: formatDate(p.created_date),
         data_prevista: p.data_prevista_entrega ? formatDate(p.data_prevista_entrega) : '-',
         nf_numero: p.nf_numero || '-',

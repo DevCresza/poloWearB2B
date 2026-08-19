@@ -20,7 +20,7 @@ import {
   Download, CreditCard, Calendar, MapPin, Receipt, Upload,
   AlertTriangle, ArrowUpCircle, DollarSign
 } from 'lucide-react';
-import { formatCurrency, exportToCSV, exportToPDF, formatDate, toBrasiliaDateString, getMesFaturamentoItem, getMesesFaturamentoPedido, formatMesAno } from '@/utils/exportUtils';
+import { formatCurrency, exportToCSV, exportToPDF, formatDate, toBrasiliaDateString, getMesFaturamentoItem, getMesesFaturamentoPedido, formatMesesEntrega, formatMesAno } from '@/utils/exportUtils';
 import { Produto } from '@/api/entities';
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
 import PedidoItensEditModal from '@/components/pedidos/PedidoItensEditModal';
@@ -374,6 +374,7 @@ export default function MeusPedidos() {
         fornecedor: getFornecedorNome(pedido.fornecedor_id),
         loja: lojaName,
         data_pedido: formatDate(pedido.created_date),
+        mes_faturamento: formatMesesEntrega(getMesesFaturamentoPedido(pedido, produtoEntregaMap || {})).join(' / '),
         data_faturamento: pedido.nf_data_upload ? formatDate(pedido.nf_data_upload) : '',
         nf_numero: pedido.nf_numero || '',
         status: statusInfo.label,
@@ -391,6 +392,7 @@ export default function MeusPedidos() {
       { key: 'fornecedor', label: 'Fornecedor' },
       { key: 'loja', label: 'Loja' },
       { key: 'data_pedido', label: 'Data Pedido' },
+      { key: 'mes_faturamento', label: 'Mês de Faturamento' },
       { key: 'data_faturamento', label: 'Data Faturamento' },
       { key: 'nf_numero', label: 'Nº NF' },
       { key: 'status', label: 'Status' },
@@ -518,6 +520,7 @@ export default function MeusPedidos() {
         fornecedor: getFornecedorNome(pedido.fornecedor_id),
         loja: lojaName,
         data_pedido: formatDate(pedido.created_date),
+        mes_faturamento: formatMesesEntrega(getMesesFaturamentoPedido(pedido, produtoEntregaMap || {})).join(' / '),
         data_faturamento: pedido.nf_data_upload ? formatDate(pedido.nf_data_upload) : '-',
         nf_numero: pedido.nf_numero || '-',
         status: statusInfo.label,
@@ -532,6 +535,7 @@ export default function MeusPedidos() {
       { key: 'fornecedor', label: 'Fornecedor' },
       { key: 'loja', label: 'Loja' },
       { key: 'data_pedido', label: 'Data Pedido' },
+      { key: 'mes_faturamento', label: 'Mês de Faturamento' },
       { key: 'data_faturamento', label: 'Faturamento' },
       { key: 'nf_numero', label: 'NF' },
       { key: 'status', label: 'Status' },
