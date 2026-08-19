@@ -304,6 +304,23 @@ export const getMesesFaturamentoPedido = (pedido, produtoEntregaMap = {}) => {
 };
 
 /**
+ * Igual a getMesesFaturamentoPedido, mas para telas que carregam o RESUMO do
+ * pedido (sem o itens jsonb) — usa a coluna pré-calculada `meses_entrega` no
+ * lugar dos itens. NF vence; senão os meses da cápsula; senão o mês do próprio
+ * pedido (para nada ficar fora do filtro). Usado no PedidosAdmin.
+ */
+export const getMesesFaturamentoResumo = (pedido) => {
+  if (pedido?.nf_data_upload) {
+    const k = String(pedido.nf_data_upload).slice(0, 7);
+    return k ? [k] : [];
+  }
+  const me = Array.isArray(pedido?.meses_entrega) ? pedido.meses_entrega.filter(Boolean) : [];
+  if (me.length) return [...new Set(me.map(m => String(m).slice(0, 7)))];
+  const base = pedido?.data_prevista_entrega || pedido?.created_date;
+  return base ? [String(base).slice(0, 7)] : [];
+};
+
+/**
  * Rótulos de mês a partir do array pré-calculado `pedido.meses_entrega`
  * (['2026-10', ...] gravado por trigger). Usado nas LISTAS, que carregam o
  * resumo do pedido sem o itens. Retorna ['outubro de 2026', ...].

@@ -20,7 +20,7 @@ import PedidoCard from '../components/pedidos/PedidoCard';
 import PedidoDetailsModal from '../components/pedidos/PedidoDetailsModal';
 import PedidoEditModal from '../components/pedidos/PedidoEditModal';
 import PedidoItensEditModal from '../components/pedidos/PedidoItensEditModal';
-import { exportToCSV, exportToPDF, formatCurrency, formatDateTime, formatDate, getMesFaturamentoItem, getMesEntregaItem, formatMesesEntrega } from '@/utils/exportUtils';
+import { exportToCSV, exportToPDF, formatCurrency, formatDateTime, formatDate, getMesFaturamentoItem, getMesEntregaItem, formatMesesEntrega, getMesesFaturamentoResumo, formatMesAno } from '@/utils/exportUtils';
 import MultiSelectFilter from '@/components/MultiSelectFilter';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
@@ -52,6 +52,7 @@ export default function PedidosAdmin() {
   const [filtrosFornecedor, setFiltrosFornecedor] = useState([]); // Array para múltipla seleção de fornecedor
   const [filtrosCliente, setFiltrosCliente] = useState([]); // Array para múltipla seleção de cliente
   const [filtroPeriodo, setFiltroPeriodo] = useState('all');
+  const [filtroMesFaturamento, setFiltroMesFaturamento] = useState('todos'); // 'YYYY-MM' (NF, senão cápsula)
 
   useEffect(() => {
     loadData();
@@ -536,10 +537,11 @@ export default function PedidosAdmin() {
     setFiltrosFornecedor([]);
     setFiltrosCliente([]);
     setFiltroPeriodo('all');
+    setFiltroMesFaturamento('todos');
     setSearchTerm('');
   };
 
-  const temFiltrosAtivos = filtrosStatus.length > 0 || filtrosPagamento.length > 0 || filtrosFornecedor.length > 0 || filtrosCliente.length > 0 || filtroPeriodo !== 'all' || searchTerm;
+  const temFiltrosAtivos = filtrosStatus.length > 0 || filtrosPagamento.length > 0 || filtrosFornecedor.length > 0 || filtrosCliente.length > 0 || filtroPeriodo !== 'all' || filtroMesFaturamento !== 'todos' || searchTerm;
 
   // Filtrar pedidos
   const filteredPedidos = useMemo(() => {
@@ -597,8 +599,19 @@ export default function PedidosAdmin() {
       }
     }
 
+    // Filtro por MÊS de faturamento (NF, senão mês da cápsula; usa a coluna
+    // pré-calculada meses_entrega porque a lista carrega o resumo sem itens).
+    if (filtroMesFaturamento !== 'todos') {
+      filtered = filtered.filter(pedido => getMesesFaturamentoResumo(pedido).includes(filtroMesFaturamento));
+    }
+
     return filtered;
-  }, [pedidos, searchTerm, filtrosStatus, filtrosPagamento, filtrosFornecedor, filtrosCliente, filtroPeriodo, users, fornecedores]);
+  }, [pedidos, searchTerm, filtrosStatus, filtrosPagamento, filtrosFornecedor, filtrosCliente, filtroPeriodo, filtroMesFaturamento, users, fornecedores]);
+
+  // Meses de faturamento disponíveis (de TODOS os pedidos), mais recente primeiro.
+  const mesesFaturamentoDisponiveis = useMemo(() => {
+    return [...new Set((pedidos || []).flatMap(p => getMesesFaturamentoResumo(p)))].sort().reverse();
+  }, [pedidos]);
 
   // Calcular totais por status
   const calcularTotaisPorStatus = () => {
@@ -788,6 +801,19 @@ export default function PedidosAdmin() {
                 <SelectItem value="7_dias">7 dias</SelectItem>
                 <SelectItem value="30_dias">30 dias</SelectItem>
                 <SelectItem value="90_dias">90 dias</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Mês de faturamento (NF, senão mês da cápsula/entrega) */}
+            <Select value={filtroMesFaturamento} onValueChange={setFiltroMesFaturamento}>
+              <SelectTrigger className="w-56">
+                <SelectValue placeholder="Mês de faturamento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Mês de faturamento: todos</SelectItem>
+                {mesesFaturamentoDisponiveis.map(m => (
+                  <SelectItem key={m} value={m} className="capitalize">{formatMesAno(`${m}-01`)}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
 
