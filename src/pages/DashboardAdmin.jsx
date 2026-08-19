@@ -21,7 +21,10 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { base44 } from '@/api/base44Client';
-import { exportToCSV, formatCurrency, formatDate } from '@/utils/exportUtils';
+import { exportToCSV, formatCurrency, formatDate, getMesesFaturamentoResumo } from '@/utils/exportUtils';
+
+// 'YYYY-MM' de uma data (para casar com o mês de faturamento dos pedidos).
+const chaveMes = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 import DashboardKpiCards from '../components/DashboardKpiCards';
 
 export default function DashboardAdmin() {
@@ -165,10 +168,7 @@ export default function DashboardAdmin() {
 
   const calculateStats = (pedidosList, produtosList, clientesList, carteiraList) => {
     const hoje = new Date();
-    const inicioMes = new Date(anoSelecionado, mesSelecionado - 1, 1);
-    const fimMes = new Date(anoSelecionado, mesSelecionado, 0);
     const mesAnterior = new Date(anoSelecionado, mesSelecionado - 2, 1);
-    const fimMesAnterior = new Date(anoSelecionado, mesSelecionado - 1, 0);
 
     // Faturamento - considerar pedidos faturados, em transporte, pendente de pagamento e finalizados
     const FATURAMENTO_STATUSES = ['faturado', 'parcialmente_faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'];
@@ -178,16 +178,19 @@ export default function DashboardAdmin() {
     // Use valor_faturado (real invoiced amount) instead of valor_final/valor_total
     const faturamentoTotal = pedidosParaFaturamento.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
 
-    const pedidosMes = pedidosParaFaturamento.filter(p => {
-      const data = new Date(p.created_date);
-      return data >= inicioMes && data <= fimMes;
-    });
+    // Escopo do mês por MÊS DE FATURAMENTO (NF, senão cápsula), não pela data
+    // do pedido — o seletor de mês/ano representa o mês em que se fatura.
+    const chaveMesSel = `${anoSelecionado}-${String(mesSelecionado).padStart(2, '0')}`;
+    const chaveMesAnt = chaveMes(mesAnterior);
+
+    const pedidosMes = pedidosParaFaturamento.filter(p =>
+      getMesesFaturamentoResumo(p).includes(chaveMesSel)
+    );
     const faturamentoMes = pedidosMes.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
 
-    const pedidosMesAnterior = pedidosParaFaturamento.filter(p => {
-      const data = new Date(p.created_date);
-      return data >= mesAnterior && data <= fimMesAnterior;
-    });
+    const pedidosMesAnterior = pedidosParaFaturamento.filter(p =>
+      getMesesFaturamentoResumo(p).includes(chaveMesAnt)
+    );
     const faturamentoMesAnterior = pedidosMesAnterior.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
 
     const crescimentoMensal = faturamentoMesAnterior > 0
@@ -286,19 +289,16 @@ export default function DashboardAdmin() {
     // Status considerados para faturamento
     const statusFaturamento = ['finalizado', 'faturado', 'em_transporte', 'pendente_pagamento'];
 
-    // Faturamento Mensal (últimos 12 meses)
+    // Faturamento Mensal (últimos 12 meses) — por MÊS DE FATURAMENTO.
     const faturamentoMensal = [];
     for (let i = 11; i >= 0; i--) {
       const mes = new Date();
       mes.setMonth(mes.getMonth() - i);
-      const inicioMes = new Date(mes.getFullYear(), mes.getMonth(), 1);
-      const fimMes = new Date(mes.getFullYear(), mes.getMonth() + 1, 0);
+      const chaveMesLoop = chaveMes(mes);
 
-      const pedidosMes = pedidosList.filter(p => {
-        if (!statusFaturamento.includes(p.status)) return false;
-        const data = new Date(p.created_date);
-        return data >= inicioMes && data <= fimMes;
-      });
+      const pedidosMes = pedidosList.filter(p =>
+        statusFaturamento.includes(p.status) && getMesesFaturamentoResumo(p).includes(chaveMesLoop)
+      );
 
       const valor = pedidosMes.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
 
