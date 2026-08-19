@@ -804,19 +804,6 @@ export default function PedidosAdmin() {
               </SelectContent>
             </Select>
 
-            {/* Mês de faturamento (NF, senão mês da cápsula/entrega) */}
-            <Select value={filtroMesFaturamento} onValueChange={setFiltroMesFaturamento}>
-              <SelectTrigger className="w-56">
-                <SelectValue placeholder="Mês de faturamento" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Mês de faturamento: todos</SelectItem>
-                {mesesFaturamentoDisponiveis.map(m => (
-                  <SelectItem key={m} value={m} className="capitalize">{formatMesAno(`${m}-01`)}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
             {temFiltrosAtivos && (
               <Button
                 variant="outline"
@@ -904,6 +891,21 @@ export default function PedidosAdmin() {
                 onClear={() => setFiltrosCliente([])}
               />
             )}
+
+            {/* Mês de faturamento (NF, senão mês da cápsula/entrega).
+                Fica nesta linha (flex-wrap, visível) e não na linha de busca,
+                que transborda para a direita por causa da largura do kanban. */}
+            <Select value={filtroMesFaturamento} onValueChange={setFiltroMesFaturamento}>
+              <SelectTrigger className="w-56 h-9 bg-white">
+                <SelectValue placeholder="Mês de faturamento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Mês de faturamento: todos</SelectItem>
+                {mesesFaturamentoDisponiveis.map(m => (
+                  <SelectItem key={m} value={m} className="capitalize">{formatMesAno(`${m}-01`)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Indicador de filtros ativos */}
