@@ -37,6 +37,24 @@ if (supabase) {
   });
 }
 
+// Chama uma Edge Function garantindo que o access_token nao esta vencido.
+//
+// supabase.functions.invoke manda o token que estiver em memoria. Se ele expirou
+// e o refresh automatico ainda nao rodou, a funcao recebe um JWT vencido e
+// devolve 401 -- foi assim que a troca de e-mail do fornecedor Mar Quente falhou
+// em 20/08 sem que o operador entendesse o motivo. getSession() renova o token
+// antes da chamada quando ele esta vencido.
+export const invokeAdminFunction = async (nome, options) => {
+  if (!supabase) return { data: null, error: new Error('Supabase nao configurado') };
+  try {
+    await supabase.auth.getSession();
+  } catch (_e) {
+    // Sem sessao recuperavel a propria funcao devolve 401; segue e deixa
+    // a mensagem de sessao expirada aparecer no lugar de um erro cru.
+  }
+  return supabase.functions.invoke(nome, options);
+};
+
 // Função para limpar tokens de autenticação do localStorage
 export const clearAuthStorage = () => {
   if (typeof window !== 'undefined') {

@@ -15,19 +15,25 @@ import { toast } from 'sonner';
 import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox import
 import { Fornecedor } from '@/api/entities';
 import { User } from '@/api/entities';
-import { supabase } from '@/lib/supabase';
+import { supabase, invokeAdminFunction } from '@/lib/supabase';
 import { Building, DollarSign, Mail, Phone, User as UserIcon, Shield, Truck, MapPin, Clock, CreditCard, AlertTriangle, CheckCircle } from 'lucide-react';
 
 // Extrai a mensagem real de erro de uma chamada supabase.functions.invoke.
 // Retorna string com o erro, ou null se sucesso.
 async function parseInvokeError(error, data) {
+  // 401 = o token do operador venceu. A mensagem crua ("non-2xx status code"
+  // ou "Token invalido ou expirado") nao diz o que fazer.
+  const sessaoExpirada = 'Sua sessao expirou. Saia e entre no portal de novo antes de repetir a alteracao.';
   if (data && data.error) return data.error;
   if (!error) return null;
+  if (error.context?.status === 401) return sessaoExpirada;
   // FunctionsHttpError traz o corpo da resposta em error.context
   try {
     if (error.context && typeof error.context.json === 'function') {
       const body = await error.context.json();
-      if (body?.error) return body.error;
+      if (body?.error) {
+        return /token/i.test(body.error) ? sessaoExpirada : body.error;
+      }
     }
   } catch (_) { /* ignore */ }
   return error.message || 'Erro desconhecido';
@@ -231,22 +237,32 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
       delete fornecedorData.senha_fornecedor; // Não salvar senha na tabela de fornecedores
 
       if (fornecedor) {
+        const emailNovo = (formData.email_fornecedor || '').trim();
+        const senhaNova = (formData.senha_fornecedor || '').trim();
+        const emailMudou = !!emailNovo && !!usuarioVinculado
+          && (usuarioVinculado.email || '').trim().toLowerCase() !== emailNovo.toLowerCase();
+
+        // Quando o login muda, quem grava email_fornecedor e a Edge Function
+        // update-user-email -- depois de trocar o e-mail em auth.users, e so se
+        // conseguir. Gravar aqui antes deixava a ficha exibindo um e-mail que nao
+        // loga: foi o que aconteceu com a Mar Quente em 20/08, quando a funcao
+        // devolveu 401, o auth ficou no e-mail antigo e a ficha ja mostrava o novo.
+        if (emailMudou) delete fornecedorData.email_fornecedor;
+
         // Atualização de fornecedor existente
         await Fornecedor.update(fornecedor.id, fornecedorData);
+
+        // Guarda se a conta de acesso falhou, para nao anunciar sucesso no fim.
+        let acessoFalhou = false;
 
         // Se informou email, gerenciar o usuário de acesso
         if (formData.email_fornecedor) {
           try {
-            const emailNovo = formData.email_fornecedor.trim();
-            const senhaNova = (formData.senha_fornecedor || '').trim();
-
             if (usuarioVinculado) {
-              // Existe usuario vinculado. Detectar troca de email.
-              const emailMudou = (usuarioVinculado.email || '').trim().toLowerCase() !== emailNovo.toLowerCase();
-
+              // Existe usuario vinculado. Troca de email detectada acima.
               if (emailMudou) {
                 // Sincroniza auth + public.users + fornecedores em uma so chamada
-                const { data: ueData, error: ueErr } = await supabase.functions.invoke('update-user-email', {
+                const { data: ueData, error: ueErr } = await invokeAdminFunction('update-user-email', {
                   body: {
                     user_id: usuarioVinculado.id,
                     new_email: emailNovo,
@@ -256,6 +272,7 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
                 });
                 const ueErrMsg = await parseInvokeError(ueErr, ueData);
                 if (ueErrMsg) {
+                  acessoFalhou = true;
                   toast.error('Erro ao atualizar e-mail de acesso: ' + ueErrMsg);
                 } else {
                   toast.success(senhaNova ? 'E-mail e senha atualizados com sucesso!' : 'E-mail de acesso atualizado!');
@@ -263,13 +280,15 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
               } else if (senhaNova) {
                 // So senha mudou
                 if (senhaNova.length < 6) {
+                  acessoFalhou = true;
                   toast.error('A senha deve ter no mínimo 6 caracteres.');
                 } else {
-                  const { data: pwData, error: pwError } = await supabase.functions.invoke('update-user-password', {
+                  const { data: pwData, error: pwError } = await invokeAdminFunction('update-user-password', {
                     body: { email: emailNovo, new_password: senhaNova }
                   });
                   const pwErrMsg = await parseInvokeError(pwError, pwData);
                   if (pwErrMsg) {
+                    acessoFalhou = true;
                     toast.error('Erro ao alterar a senha: ' + pwErrMsg);
                   } else {
                     toast.success('Senha alterada com sucesso!');
@@ -291,9 +310,10 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
             } else if (senhaNova) {
               // Nao existe usuario vinculado → criar agora
               if (senhaNova.length < 6) {
+                acessoFalhou = true;
                 toast.error('A senha deve ter no mínimo 6 caracteres.');
               } else {
-                const { data: cuData, error: cuError } = await supabase.functions.invoke('create-user', {
+                const { data: cuData, error: cuError } = await invokeAdminFunction('create-user', {
                   body: {
                     email: emailNovo,
                     password: senhaNova,
@@ -308,6 +328,7 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
                 });
                 const cuErrMsg = await parseInvokeError(cuError, cuData);
                 if (cuErrMsg) {
+                  acessoFalhou = true;
                   toast.error('Erro ao criar usuário de acesso: ' + cuErrMsg);
                 } else {
                   toast.success('Usuário de acesso criado com sucesso!');
@@ -315,12 +336,22 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
               }
             }
           } catch (userError) {
+            acessoFalhou = true;
             console.error('Erro ao gerenciar usuário:', userError);
             toast.warning('Fornecedor atualizado, mas houve um problema com o usuário de acesso: ' + (userError?.message || ''));
           }
         }
 
-        toast.success('Fornecedor atualizado com sucesso!');
+        // Sem isto o operador via "atualizado com sucesso" logo abaixo do erro e
+        // ia embora achando que o acesso tinha mudado.
+        if (acessoFalhou) {
+          toast.warning(
+            'Dados do fornecedor salvos, mas o ACESSO AO PORTAL nao mudou: '
+            + 'o login continua com o e-mail e a senha anteriores.'
+          );
+        } else {
+          toast.success('Fornecedor atualizado com sucesso!');
+        }
       } else {
         // Criação de novo fornecedor
         const novoFornecedor = await Fornecedor.create(fornecedorData);
@@ -332,7 +363,7 @@ export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
             toast.success('Fornecedor criado, mas usuário de acesso não foi criado.');
           } else {
             try {
-              const { data: cuData, error: cuError } = await supabase.functions.invoke('create-user', {
+              const { data: cuData, error: cuError } = await invokeAdminFunction('create-user', {
                 body: {
                   email: formData.email_fornecedor.trim(),
                   password: formData.senha_fornecedor.trim(),

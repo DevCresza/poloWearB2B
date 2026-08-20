@@ -8,7 +8,7 @@ import { User } from '@/api/entities';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Eye, EyeOff, Users, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
+import { invokeAdminFunction } from '@/lib/supabase';
 
 export default function ClientForm({ user, onSuccess, onCancel }) {
   const [formData, setFormData] = useState({
@@ -87,7 +87,7 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
         // User.signup direto porque `supabase.auth.signUp` troca a sessao
         // do admin pela do novo user (deslogando o admin silenciosamente
         // e quebrando chamadas seguintes de Edge Function por permissao).
-        const { data: cuData, error: cuError } = await supabase.functions.invoke('create-user', {
+        const { data: cuData, error: cuError } = await invokeAdminFunction('create-user', {
           body: {
             email: formData.email,
             password: formData.password,
@@ -154,7 +154,7 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
         const emailMudou = emailAntigo !== emailNovo.toLowerCase();
 
         if (emailMudou) {
-          const { data: ueData, error: ueErr } = await supabase.functions.invoke('update-user-email', {
+          const { data: ueData, error: ueErr } = await invokeAdminFunction('update-user-email', {
             body: {
               user_id: user.id,
               new_email: emailNovo,
@@ -184,7 +184,7 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
           }
 
           try {
-            const { data, error } = await supabase.functions.invoke('update-user-password', {
+            const { data, error } = await invokeAdminFunction('update-user-password', {
               body: {
                 user_id: user.id,
                 new_password: formData.password
