@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
 import PedidoItensEditModal from '@/components/pedidos/PedidoItensEditModal';
+import { parseNFeXml, casarItensNFe } from '@/utils/nfeXml';
 import { formatCurrency, exportToPDF, exportToCSV, formatDate, getMesFaturamentoItem, getMesEntregaItem, getMesesEntregaPedido, getMesesFaturamentoPedido, formatMesesEntrega, formatMesAno } from '@/utils/exportUtils';
 import { validarVencimentos } from '@/utils/vencimentoUtils';
 import { Loja } from '@/api/entities';
@@ -97,6 +98,9 @@ export default function PedidosFornecedor() {
 
   // Faturamento parcial
   const [itensFaturamento, setItensFaturamento] = useState([]);
+  // Leitura do XML da NF anexada (numero, data, itens e transportadora)
+  const [resumoXml, setResumoXml] = useState(null);
+  const [transportadoraXml, setTransportadoraXml] = useState('');
 
   // Estados para parcelas do boleto
   const [qtdParcelas, setQtdParcelas] = useState(1);
@@ -264,6 +268,40 @@ export default function PedidosFornecedor() {
     }
   };
 
+  // O fornecedor ja anexava o XML aqui; ate agora ele subia sem ser lido e os
+  // 30+ itens do pedido eram marcados um a um. Agora o arquivo preenche numero,
+  // data, transportadora e a selecao dos itens. Nada e obrigatorio: se a leitura
+  // falhar, a tela continua funcionando na mao.
+  const handleNfFileChange = async (file) => {
+    setNfFile(file || null);
+    setResumoXml(null);
+    setTransportadoraXml('');
+    if (!file || !/\.xml$/i.test(file.name)) return;
+
+    try {
+      const nfe = parseNFeXml(await file.text());
+      if (nfe.numero) setNfNumero(nfe.numero);
+      if (nfe.dataEmissao) setNfDataEmissao(nfe.dataEmissao);
+      if (nfe.transportadora) setTransportadoraXml(nfe.transportadora);
+
+      const { itens, resumo } = casarItensNFe(itensFaturamento, nfe.itens);
+      setItensFaturamento(itens);
+      setResumoXml({ ...resumo, numero: nfe.numero, transportadora: nfe.transportadora });
+
+      if (resumo.casados === 0) {
+        toast.warning('Li a NF, mas nenhum item casou com o pedido. Selecione na mao.');
+      } else if (resumo.semCasar.length > 0) {
+        toast.warning(`NF lida: ${resumo.casados} de ${resumo.totalNF} itens casados. Confira os que ficaram de fora.`);
+      } else {
+        toast.success(`NF ${nfe.numero} lida: ${resumo.casados} ite${resumo.casados > 1 ? 'ns' : 'm'} selecionado${resumo.casados > 1 ? 's' : ''}.`);
+      }
+    } catch (err) {
+      console.error('Erro ao ler XML da NF:', err);
+      setResumoXml({ erro: err?.message || 'Nao foi possivel ler o XML.' });
+      toast.error(`Não consegui ler o XML: ${err?.message || 'erro desconhecido'}`);
+    }
+  };
+
   const handleFaturar = async () => {
     // Prevent double-clicks
     if (uploading) return;
@@ -340,6 +378,7 @@ export default function PedidosFornecedor() {
           itens: itensFaturados,
           valor_total: valorFaturamento,
           status: 'faturado',
+          transportadora: transportadoraXml || null,
           metodo_pagamento: metodoPagamento || selectedPedido.metodo_pagamento || null
         });
       }
@@ -421,6 +460,11 @@ export default function PedidosFornecedor() {
       // Save método de pagamento if changed
       if (metodoPagamento) {
         pedidoUpdate.metodo_pagamento = metodoPagamento;
+      }
+      // Transportadora lida do XML. So preenche se o pedido ainda nao tem, para
+      // nao sobrescrever o que ja foi informado no "Informar Envio".
+      if (transportadoraXml && !selectedPedido.transportadora) {
+        pedidoUpdate.transportadora = transportadoraXml;
       }
       await Pedido.update(selectedPedido.id, pedidoUpdate);
 
@@ -1179,6 +1223,8 @@ export default function PedidosFornecedor() {
 
   const resetFaturarForm = () => {
     setNfFile(null);
+    setResumoXml(null);
+    setTransportadoraXml('');
     setBoletoFile(null);
     setNfNumero('');
     setMetodoPagamento('');
@@ -1873,6 +1919,8 @@ export default function PedidosFornecedor() {
                                   setNfNumero('');
                                   setNfDataEmissao(new Date().toISOString().split('T')[0]);
                                   setNfFile(null);
+                                  setResumoXml(null);
+                                  setTransportadoraXml('');
                                   setMetodoPagamento(pedido.metodo_pagamento || '');
                                   // Initialize items for partial invoicing
                                   let rawItens = pedido.itens || [];
@@ -1907,6 +1955,8 @@ export default function PedidosFornecedor() {
                             <Button
                               onClick={() => {
                                 setSelectedPedido(pedido);
+                                // Ja vem preenchida quando saiu do XML da NF
+                                setTransportadora(pedido.transportadora || '');
                                 setShowEnvioModal(true);
                               }}
                               className="bg-orange-600 hover:bg-orange-700"
@@ -2311,12 +2361,69 @@ export default function PedidosFornecedor() {
                       id="nfFile"
                       type="file"
                       accept=".xml,.pdf,.jpg,.jpeg,.png,.crm"
-                      onChange={(e) => setNfFile(e.target.files[0])}
+                      onChange={(e) => handleNfFileChange(e.target.files[0])}
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      <strong>Formatos aceitos:</strong> XML, PDF, JPG, PNG, CRM
+                      <strong>Formatos aceitos:</strong> XML, PDF, JPG, PNG, CRM.{' '}
+                      <span className="text-indigo-700 font-medium">
+                        Enviando o XML, o número, a data, a transportadora e os itens são preenchidos sozinhos.
+                      </span>
                     </p>
                   </div>
+
+                  {/* Resultado da leitura do XML */}
+                  {resumoXml && (
+                    resumoXml.erro ? (
+                      <Alert className="border-red-200 bg-red-50">
+                        <AlertTriangle className="h-4 w-4 text-red-600" />
+                        <AlertDescription className="text-red-800">
+                          <strong>Não consegui ler o XML.</strong> {resumoXml.erro}
+                          <br />
+                          O arquivo continua anexado — preencha os campos e marque os itens na mão.
+                        </AlertDescription>
+                      </Alert>
+                    ) : (
+                      <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4 space-y-2 text-sm">
+                        <p className="font-semibold text-indigo-900">
+                          NF {resumoXml.numero} lida — {resumoXml.casados} de {resumoXml.totalNF} iten(s) casados com o pedido
+                        </p>
+
+                        {resumoXml.transportadora && (
+                          <p className="text-indigo-800">
+                            <Truck className="w-4 h-4 inline mr-1" />
+                            Transportadora: <strong>{resumoXml.transportadora}</strong>
+                            <span className="text-indigo-600"> (usada no Informar Envio)</span>
+                          </p>
+                        )}
+
+                        {resumoXml.semCasar?.length > 0 && (
+                          <div className="text-amber-900">
+                            <p className="font-medium">Itens da NF que ficaram de fora — marque na mão se for o caso:</p>
+                            <ul className="list-disc ml-5">
+                              {resumoXml.semCasar.map((s, i) => (
+                                <li key={i}>{s.linha.xProd || s.linha.cProd} — {s.motivo}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {resumoXml.alertas?.length > 0 && (
+                          <div className="text-amber-900">
+                            <p className="font-medium">Confira antes de confirmar:</p>
+                            <ul className="list-disc ml-5">
+                              {resumoXml.alertas.map((a, i) => <li key={i}>{a}</li>)}
+                            </ul>
+                          </div>
+                        )}
+
+                        {resumoXml.naoCobertos?.length > 0 && (
+                          <p className="text-gray-700">
+                            Fora da NF (seguem em aberto): {resumoXml.naoCobertos.join(', ')}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  )}
                 </>
               );
             })()}
