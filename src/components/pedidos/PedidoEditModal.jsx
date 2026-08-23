@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Pedido } from '@/api/entities';
 import { UploadFile } from '@/api/integrations';
 import { Save, X, Upload, Calendar } from 'lucide-react';
+import { parseNFeXml } from '@/utils/nfeXml';
 import { toast } from 'sonner';
 
 export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
@@ -20,8 +21,10 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
     codigo_rastreio: pedido.codigo_rastreio || '',
     link_rastreio: pedido.link_rastreio || '',
     motivo_recusa: pedido.motivo_recusa || '',
-    observacoes_fornecedor: pedido.observacoes_fornecedor || ''
+    observacoes_fornecedor: pedido.observacoes_fornecedor || '',
+    nf_numero: pedido.nf_numero || ''
   });
+  const [nfeLida, setNfeLida] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [uploadingNF, setUploadingNF] = useState(false);
   const [uploadingBoleto, setUploadingBoleto] = useState(false);
@@ -33,13 +36,38 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
       setUploadingBoleto(true);
     }
 
+    // XML da NF-e: numero, data de emissao e transportadora saem do proprio
+    // arquivo em vez de serem digitados (ou nem registrados, como era aqui).
+    let nfe = null;
+    if (tipo === 'nf' && /\.xml$/i.test(file.name)) {
+      try {
+        nfe = parseNFeXml(await file.text());
+        setNfeLida(nfe);
+        setFormData(prev => ({
+          ...prev,
+          nf_numero: nfe.numero || prev.nf_numero,
+          // Nao sobrescreve transportadora ja informada pelo fornecedor
+          transportadora: prev.transportadora || nfe.transportadora || ''
+        }));
+      } catch (err) {
+        setNfeLida(null);
+        toast.warning(`Anexo enviado, mas não consegui ler o XML: ${err?.message || 'erro desconhecido'}`);
+      }
+    }
+
     try {
       const { file_url } = await UploadFile({ file });
-      
+
       const updateData = {};
       if (tipo === 'nf') {
         updateData.nf_url = file_url;
-        updateData.nf_data_upload = new Date().toISOString();
+        // nf_data_upload e o que define o MES DE FATURAMENTO no dashboard, nos
+        // relatorios e nos filtros. Carimbar a data do upload jogava a nota no
+        // mes errado toda vez que o anexo atrasava; a data da emissao manda.
+        updateData.nf_data_upload = nfe?.dataEmissao
+          ? nfe.dataEmissao + 'T00:00:00'
+          : new Date().toISOString();
+        if (nfe?.numero) updateData.nf_numero = nfe.numero;
       } else {
         updateData.boleto_url = file_url;
         updateData.boleto_data_upload = new Date().toISOString();
@@ -223,7 +251,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
           {formData.status === 'faturado' && (
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Nota Fiscal (PDF)</Label>
+                <Label>Nota Fiscal (XML, PDF ou imagem)</Label>
                 <div className="flex gap-2">
                   <Input
                     type="file"
@@ -231,7 +259,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
                       const file = e.target.files[0];
                       if (file) handleFileUpload(file, 'nf');
                     }}
-                    accept=".pdf,.jpg,.jpeg,.png,.crm"
+                    accept=".xml,.pdf,.jpg,.jpeg,.png,.crm"
                     disabled={uploadingNF}
                   />
                   {pedido.nf_url && (
@@ -244,7 +272,30 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
                     </Button>
                   )}
                 </div>
-                <p className="text-xs text-gray-500"><strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM</p>
+                <p className="text-xs text-gray-500">
+                  <strong>Formatos aceitos:</strong> XML, PDF, JPG, PNG, CRM.{' '}
+                  <span className="text-indigo-700 font-medium">
+                    Enviando o XML, o número da NF, a data de emissão e a transportadora vêm preenchidos.
+                  </span>
+                </p>
+
+                {nfeLida && (
+                  <p className="text-xs text-indigo-800 bg-indigo-50 border border-indigo-200 rounded p-2">
+                    XML lido: NF <strong>{nfeLida.numero}</strong>
+                    {nfeLida.dataEmissao && <> · emitida em <strong>{nfeLida.dataEmissao.split('-').reverse().join('/')}</strong></>}
+                    {nfeLida.transportadora && <> · transportadora <strong>{nfeLida.transportadora}</strong></>}
+                  </p>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="nf_numero">Número da NF</Label>
+                  <Input
+                    id="nf_numero"
+                    value={formData.nf_numero}
+                    onChange={(e) => setFormData({ ...formData, nf_numero: e.target.value })}
+                    placeholder="Preenchido pelo XML, ou digite"
+                  />
+                </div>
                 {uploadingNF && <p className="text-sm text-blue-600">Fazendo upload...</p>}
               </div>
 

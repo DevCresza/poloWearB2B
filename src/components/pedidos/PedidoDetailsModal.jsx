@@ -22,6 +22,7 @@ import { Loja, Fornecedor } from '@/api/entities';
 import { Faturamento } from '@/api/entities';
 import { UploadFile } from '@/api/integrations';
 import { formatDateTime, formatCurrency, getMesesEntregaPedido, getMesesFaturamentoPedido, formatMesAno } from '@/utils/exportUtils';
+import { parseNFeXml } from '@/utils/nfeXml';
 import { validarVencimentos } from '@/utils/vencimentoUtils';
 import { Store } from 'lucide-react';
 import { jsPDF } from 'jspdf';
@@ -46,6 +47,8 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   const [nfFile, setNfFile] = useState(null);
   const [nfNumero, setNfNumero] = useState(pedido.nf_numero || '');
   const [nfDataEmissao, setNfDataEmissao] = useState('');
+  // Dados lidos do XML da NF-e anexada (numero, emissao, transportadora)
+  const [nfeLida, setNfeLida] = useState(null);
 
   // Estados para configuração de parcelas do boleto (aba Documentos)
   const [qtdParcelasBoleto, setQtdParcelasBoleto] = useState(1);
@@ -626,6 +629,24 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   };
 
   // Upload de Nota Fiscal
+  // Anexar o XML passa a preencher numero, data de emissao e transportadora.
+  // Outros formatos seguem como antes, digitados na mao.
+  const handleNfFileChange = async (file) => {
+    setNfFile(file || null);
+    setNfeLida(null);
+    if (!file || !/\.xml$/i.test(file.name)) return;
+    try {
+      const nfe = parseNFeXml(await file.text());
+      if (nfe.numero) setNfNumero(nfe.numero);
+      if (nfe.dataEmissao) setNfDataEmissao(nfe.dataEmissao);
+      setNfeLida(nfe);
+      toast.success(`NF ${nfe.numero} lida do XML.`);
+    } catch (err) {
+      console.error('Erro ao ler XML da NF:', err);
+      toast.warning(`Anexo mantido, mas não consegui ler o XML: ${err?.message || 'erro desconhecido'}`);
+    }
+  };
+
   const handleUploadNF = async () => {
     if (!nfFile) {
       toast.info('Selecione o arquivo da nota fiscal');
@@ -638,15 +659,22 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     setUploading(true);
     try {
       const result = await UploadFile({ file: nfFile });
-      await Pedido.update(pedido.id, {
+      const dadosNF = {
         nf_url: result.file_url,
         nf_numero: nfNumero,
         nf_data_upload: nfDataEmissao ? nfDataEmissao + 'T00:00:00' : new Date().toISOString(),
         status: pedido.status === 'em_producao' ? 'faturado' : pedido.status
-      });
+      };
+      // So preenche a transportadora se o pedido ainda nao tem uma: quem
+      // informou o envio manualmente tem a palavra final.
+      if (nfeLida?.transportadora && !pedido.transportadora) {
+        dadosNF.transportadora = nfeLida.transportadora;
+      }
+      await Pedido.update(pedido.id, dadosNF);
       toast.success('Nota Fiscal enviada com sucesso!');
       setNfFile(null);
       setNfDataEmissao('');
+      setNfeLida(null);
       onUpdate();
     } catch (_error) {
       toast.error('Erro ao enviar nota fiscal');
@@ -2840,9 +2868,21 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                         <Input
                           type="file"
                           accept=".xml,.pdf,.jpg,.jpeg,.png,.crm"
-                          onChange={(e) => setNfFile(e.target.files[0])}
+                          onChange={(e) => handleNfFileChange(e.target.files[0])}
                         />
-                        <p className="text-xs text-gray-500 mt-1"><strong>Formatos aceitos:</strong> XML, PDF, JPG, PNG, CRM</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          <strong>Formatos aceitos:</strong> XML, PDF, JPG, PNG, CRM.{' '}
+                          <span className="text-indigo-700 font-medium">
+                            O XML preenche número, data e transportadora.
+                          </span>
+                        </p>
+                        {nfeLida && (
+                          <p className="text-xs text-indigo-800 bg-indigo-50 border border-indigo-200 rounded p-2 mt-1">
+                            XML lido: NF <strong>{nfeLida.numero}</strong>
+                            {nfeLida.dataEmissao && <> · emitida em <strong>{nfeLida.dataEmissao.split('-').reverse().join('/')}</strong></>}
+                            {nfeLida.transportadora && <> · transportadora <strong>{nfeLida.transportadora}</strong></>}
+                          </p>
+                        )}
                       </div>
                       <Button
                         onClick={handleUploadNF}
@@ -2893,9 +2933,21 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                         <Input
                           type="file"
                           accept=".xml,.pdf,.jpg,.jpeg,.png,.crm"
-                          onChange={(e) => setNfFile(e.target.files[0])}
+                          onChange={(e) => handleNfFileChange(e.target.files[0])}
                         />
-                        <p className="text-xs text-gray-500 mt-1"><strong>Formatos aceitos:</strong> XML, PDF, JPG, PNG, CRM</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          <strong>Formatos aceitos:</strong> XML, PDF, JPG, PNG, CRM.{' '}
+                          <span className="text-indigo-700 font-medium">
+                            O XML preenche número, data e transportadora.
+                          </span>
+                        </p>
+                        {nfeLida && (
+                          <p className="text-xs text-indigo-800 bg-indigo-50 border border-indigo-200 rounded p-2 mt-1">
+                            XML lido: NF <strong>{nfeLida.numero}</strong>
+                            {nfeLida.dataEmissao && <> · emitida em <strong>{nfeLida.dataEmissao.split('-').reverse().join('/')}</strong></>}
+                            {nfeLida.transportadora && <> · transportadora <strong>{nfeLida.transportadora}</strong></>}
+                          </p>
+                        )}
                       </div>
                       <Button
                         onClick={handleUploadNF}
