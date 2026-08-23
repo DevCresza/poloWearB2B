@@ -20,6 +20,7 @@ import PedidoCard from '../components/pedidos/PedidoCard';
 import PedidoDetailsModal from '../components/pedidos/PedidoDetailsModal';
 import PedidoEditModal from '../components/pedidos/PedidoEditModal';
 import PedidoItensEditModal from '../components/pedidos/PedidoItensEditModal';
+import FaturarPedidoModal from '../components/pedidos/FaturarPedidoModal';
 import { exportToCSV, exportToPDF, formatCurrency, formatDateTime, formatDate, getMesFaturamentoItem, getMesEntregaItem, formatMesesEntrega, getMesesFaturamentoResumo, formatMesAno } from '@/utils/exportUtils';
 import MultiSelectFilter from '@/components/MultiSelectFilter';
 import { Loja } from '@/api/entities';
@@ -44,6 +45,7 @@ export default function PedidosAdmin() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showItensEditModal, setShowItensEditModal] = useState(false);
+  const [showFaturarModal, setShowFaturarModal] = useState(false);
   const [updatingPedidoId, setUpdatingPedidoId] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -658,6 +660,10 @@ export default function PedidosAdmin() {
   // Vendedor acompanha os pedidos, mas nao o dinheiro consolidado.
   const podeVerFaturamento = can(currentUser, PERM.VER_TOTAIS_FATURAMENTO);
   const podeExportar = can(currentUser, PERM.EXPORTAR_DADOS);
+  // O vendedor tambem entra nesta tela (tem VER_TODOS_PEDIDOS), mas a policy
+  // faturamentos_write so aceita admin ou fornecedor. Sem esta guarda ele veria
+  // um botao que sobe a NF e morre no insert.
+  const podeFaturar = can(currentUser, PERM.GERENCIAR_PEDIDOS);
 
   const userMap = new Map(users.map(u => [u.id, u.empresa || u.razao_social || u.nome_marca || u.full_name]));
   const userTipoMap = new Map(users.map(u => [u.id, u.tipo_negocio]));
@@ -1050,6 +1056,20 @@ export default function PedidosAdmin() {
                               <Button variant="outline" size="sm" onClick={() => handleEditItens(pedido)} title="Revisar itens do pedido (quantidade)">
                                 <Package className="w-4 h-4" />
                               </Button>
+                              {podeFaturar && (pedido.status === 'em_producao' || pedido.status === 'parcialmente_faturado') && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                                  onClick={() => {
+                                    setSelectedPedido(pedido);
+                                    setShowFaturarModal(true);
+                                  }}
+                                  title="Faturar (total ou parcial), anexando a NF"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                </Button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1095,6 +1115,24 @@ export default function PedidosAdmin() {
             setSelectedPedido(null);
           }}
           onUpdate={loadData}
+        />
+      )}
+
+      {/* Mesmo modal do fornecedor: o admin fatura para corrigir lancamento
+          errado sem precisar entrar na conta de quem vendeu. */}
+      {showFaturarModal && selectedPedido && (
+        <FaturarPedidoModal
+          pedido={selectedPedido}
+          clientes={users}
+          onClose={() => {
+            setShowFaturarModal(false);
+            setSelectedPedido(null);
+          }}
+          onSuccess={() => {
+            setShowFaturarModal(false);
+            setSelectedPedido(null);
+            loadData();
+          }}
         />
       )}
 
