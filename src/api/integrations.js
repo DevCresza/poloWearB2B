@@ -1,5 +1,5 @@
 // Integrations - Usa Supabase quando configurado, senão usa mock
-import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import { isSupabaseConfigured, supabase, parseInvokeError } from '@/lib/supabase';
 import { Core as MockCore } from './mockIntegrations';
 import { supabaseIntegrations } from './supabaseIntegrations';
 
@@ -26,6 +26,14 @@ export const CreateFileSignedUrl = async (params) => {
 };
 
 // Envio de email via Edge Function do Supabase (Resend)
+// Envia e-mail de verdade quando o Supabase esta configurado.
+//
+// NAO cai no mock quando a Edge Function falha. O fallback anterior devolvia
+// { success: true, status: 'sent' } -- uma resposta de sucesso FALSA -- e por
+// isso ninguem percebeu que o Resend recusava 100% dos envios por dominio de
+// remetente nao verificado: e-mail de credencial de acesso e aviso de lead novo
+// simplesmente sumiam, e a tela dizia que tinha dado certo.
+// Agora a falha volta como { success: false, error } para quem chamou decidir.
 export const SendEmail = async (params) => {
   if (isSupabaseConfigured()) {
     try {
@@ -34,16 +42,20 @@ export const SendEmail = async (params) => {
       });
 
       if (error) {
-        console.error('Erro ao enviar email via Edge Function:', error);
-        // Fallback para mock em caso de erro
-        return MockCore.SendEmail(params);
+        const motivo = await parseInvokeError(error, data);
+        console.error('Erro ao enviar email via Edge Function:', motivo);
+        return { success: false, error: motivo };
+      }
+
+      if (data && data.success === false) {
+        console.error('Erro ao enviar email:', data.error);
+        return { success: false, error: data.error || 'Falha ao enviar e-mail' };
       }
 
       return data;
     } catch (err) {
       console.error('Erro ao chamar Edge Function sendEmail:', err);
-      // Fallback para mock em caso de erro
-      return MockCore.SendEmail(params);
+      return { success: false, error: err?.message || 'Falha ao enviar e-mail' };
     }
   }
   return MockCore.SendEmail(params);

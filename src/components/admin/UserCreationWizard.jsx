@@ -19,6 +19,7 @@ export default function UserCreationWizard({ onSuccess, onCancel }) {
   const [createdUser, setCreatedUser] = useState(null);
   const [generatedPassword, setGeneratedPassword] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [emailFalhou, setEmailFalhou] = useState(null);
 
   const handleTypeSelect = (type) => {
     setSelectedType(type);
@@ -37,7 +38,18 @@ export default function UserCreationWizard({ onSuccess, onCancel }) {
 
       setCreatedUser(result.user);
       setGeneratedPassword(result.password);
+      setEmailFalhou(result.emailEnviado === false ? (result.emailErro || 'motivo nao informado') : null);
       setStep('success');
+
+      // O usuario foi criado, mas sem esse e-mail a pessoa nao recebe a senha.
+      // Antes isso passava batido: o envio caia num mock que respondia sucesso.
+      if (result.emailEnviado === false) {
+        toast.warning(
+          'Usuário criado, mas o e-mail com as credenciais NÃO foi enviado. '
+          + 'Copie os dados de acesso e envie manualmente.',
+          { duration: 12000 }
+        );
+      }
 
     } catch (error) {
       const errorMessage = error.message || 'Ocorreu um erro desconhecido.';
@@ -110,9 +122,18 @@ Portal: ${window.location.origin}
                   <p className="font-semibold text-green-800">
                     🎉 O usuário foi criado e já pode fazer login no sistema!
                   </p>
-                  <p className="text-sm text-green-700">
-                    Um email com as credenciais de acesso foi enviado automaticamente para <strong>{createdUser?.email}</strong>
-                  </p>
+                  {emailFalhou ? (
+                    <p className="text-sm text-red-700">
+                      <strong>O e-mail com as credenciais NÃO foi enviado</strong> para {createdUser?.email}.
+                      Copie os dados de acesso abaixo e envie manualmente.
+                      <br />
+                      <span className="text-xs text-red-600">Motivo: {emailFalhou}</span>
+                    </p>
+                  ) : (
+                    <p className="text-sm text-green-700">
+                      Um email com as credenciais de acesso foi enviado automaticamente para <strong>{createdUser?.email}</strong>
+                    </p>
+                  )}
                 </div>
               </AlertDescription>
             </Alert>

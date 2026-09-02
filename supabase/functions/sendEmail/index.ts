@@ -6,6 +6,16 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+// Remetente: precisa ser um dominio VERIFICADO no Resend, senao a API responde
+// 403 validation_error e nenhum e-mail sai.
+//
+// Ficou em noreply@polomultimarca.com.br ate 02/09/2026, dominio que deixou de
+// ser verificado quando a operacao migrou para portalpolowear.com.br. O
+// notify-pedido acompanhou a migracao, este nao -- e como as 7 chamadas do app
+// engolem a falha, parou de sair e-mail de credencial de acesso e de lead novo
+// sem ninguem perceber. Mesmo dominio do notify-pedido.
+const FROM_EMAIL = 'nao-responda@info.portalpolowear.com.br';
+
 Deno.serve(async (req: Request) => {
   // Handle CORS
   if (req.method === 'OPTIONS') {
@@ -50,7 +60,7 @@ Deno.serve(async (req: Request) => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: `${from_name || 'POLO B2B'} <noreply@polomultimarca.com.br>`,
+        from: `${from_name || 'POLO B2B'} <${FROM_EMAIL}>`,
         to: Array.isArray(to) ? to : [to],
         subject: subject,
         html: emailContent

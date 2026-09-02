@@ -114,17 +114,28 @@ export async function createUserWithAccess(userData) {
       }
     }
 
-    // 8. Enviar email com credenciais
+    // 8. Enviar email com credenciais.
+    // A criacao do usuario NAO falha se o e-mail nao sair, mas quem chamou
+    // precisa saber: sem esse e-mail a pessoa nao recebe a senha de acesso.
+    let emailEnviado = true;
+    let emailErro = null;
     try {
-      await sendWelcomeEmail(createdUser, password);
+      const envio = await sendWelcomeEmail(createdUser, password);
+      if (envio && envio.success === false) {
+        emailEnviado = false;
+        emailErro = envio.error || 'Falha ao enviar o e-mail';
+      }
     } catch (emailError) {
-      // Não falhar se o email não enviar
+      emailEnviado = false;
+      emailErro = emailError?.message || 'Falha ao enviar o e-mail';
     }
 
     return {
       success: true,
       user: createdUser,
-      password: password // Retornar para exibir na tela também
+      password: password, // Retornar para exibir na tela também
+      emailEnviado,
+      emailErro
     };
 
   } catch (error) {
@@ -246,7 +257,7 @@ async function sendWelcomeEmail(user, password) {
 </html>
   `.trim();
 
-  await SendEmail({
+  return await SendEmail({
     to: user.email,
     subject: subject,
     body: body
