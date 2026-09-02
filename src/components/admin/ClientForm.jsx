@@ -8,7 +8,7 @@ import { User } from '@/api/entities';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Eye, EyeOff, Users, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { invokeAdminFunction } from '@/lib/supabase';
+import { invokeAdminFunction, parseInvokeError } from '@/lib/supabase';
 
 export default function ClientForm({ user, onSuccess, onCancel }) {
   const [formData, setFormData] = useState({
@@ -101,10 +101,8 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
         });
 
         if (cuError) {
-          const msg = cuError.context && typeof cuError.context.json === 'function'
-            ? (await cuError.context.json().catch(() => ({})))?.error
-            : cuError.message;
-          toast.error(`Erro ao criar usuário: ${msg || 'falha desconhecida'}`);
+          const msg = await parseInvokeError(cuError, cuData);
+          toast.error(`Erro ao criar usuário: ${msg}`);
           setLoading(false);
           return;
         }
@@ -161,7 +159,7 @@ export default function ClientForm({ user, onSuccess, onCancel }) {
               new_password: (formData.password && formData.password.length >= 6) ? formData.password : undefined,
             }
           });
-          const ueMsg = ueData?.error || ueErr?.message;
+          const ueMsg = await parseInvokeError(ueErr, ueData);
           if (ueMsg) {
             toast.error(`Erro ao atualizar e-mail de acesso: ${ueMsg}`);
             setLoading(false);

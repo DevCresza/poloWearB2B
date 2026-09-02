@@ -15,29 +15,8 @@ import { toast } from 'sonner';
 import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox import
 import { Fornecedor } from '@/api/entities';
 import { User } from '@/api/entities';
-import { supabase, invokeAdminFunction } from '@/lib/supabase';
+import { supabase, invokeAdminFunction, parseInvokeError } from '@/lib/supabase';
 import { Building, DollarSign, Mail, Phone, User as UserIcon, Shield, Truck, MapPin, Clock, CreditCard, AlertTriangle, CheckCircle } from 'lucide-react';
-
-// Extrai a mensagem real de erro de uma chamada supabase.functions.invoke.
-// Retorna string com o erro, ou null se sucesso.
-async function parseInvokeError(error, data) {
-  // 401 = o token do operador venceu. A mensagem crua ("non-2xx status code"
-  // ou "Token invalido ou expirado") nao diz o que fazer.
-  const sessaoExpirada = 'Sua sessao expirou. Saia e entre no portal de novo antes de repetir a alteracao.';
-  if (data && data.error) return data.error;
-  if (!error) return null;
-  if (error.context?.status === 401) return sessaoExpirada;
-  // FunctionsHttpError traz o corpo da resposta em error.context
-  try {
-    if (error.context && typeof error.context.json === 'function') {
-      const body = await error.context.json();
-      if (body?.error) {
-        return /token/i.test(body.error) ? sessaoExpirada : body.error;
-      }
-    }
-  } catch (_) { /* ignore */ }
-  return error.message || 'Erro desconhecido';
-}
 
 export default function FornecedorForm({ fornecedor, onSuccess, onCancel }) {
   const [formData, setFormData] = useState({

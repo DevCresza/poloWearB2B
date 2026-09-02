@@ -21,7 +21,14 @@ Deno.serve(async (req: Request) => {
   try {
     // Reseta a senha de qualquer email via service_role. Sem esta checagem,
     // qualquer cliente logado assumia a conta do admin. Padrao: deleteAuthUser.
-    const authHeader = req.headers.get('Authorization');
+        //
+    // verify_jwt ficou DESLIGADO na plataforma em 02/09/2026: o gateway passou a
+    // recusar tokens de sessao assinados no formato legado (HS256) com
+    // UNAUTHORIZED_LEGACY_JWT, derrubando as funcoes de admin mesmo com sessao
+    // valida. A autorizacao real sempre foi a checagem abaixo (auth.getUser +
+    // papel admin), que e estritamente mais forte. Se alguem reimplantar pela
+    // CLI, precisa manter verify_jwt = false.
+const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return json({ error: 'Token de autenticacao nao fornecido' }, 401);
     }

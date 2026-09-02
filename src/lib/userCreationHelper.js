@@ -1,5 +1,5 @@
 // Helper para criação de usuários pelo admin
-import { supabase } from '@/lib/supabase';
+import { invokeAdminFunction, parseInvokeError } from '@/lib/supabase';
 import { Fornecedor, Loja } from '@/api/entities';
 import { SendEmail } from '@/api/integrations';
 
@@ -74,15 +74,14 @@ export async function createUserWithAccess(userData) {
 
     let createdUser;
     try {
-      const { data, error } = await supabase.functions.invoke('create-user', {
+      // invokeAdminFunction e nao supabase.functions.invoke: renova o token antes
+      // de chamar, senao uma sessao vencida vira 401 sem explicacao.
+      const { data, error } = await invokeAdminFunction('create-user', {
         body: completeUserData
       });
 
       if (error) {
-        const msg = error.context && typeof error.context.json === 'function'
-          ? (await error.context.json().catch(() => ({})))?.error
-          : error.message;
-        throw new Error(msg || 'falha desconhecida');
+        throw new Error(await parseInvokeError(error, data));
       }
       if (data?.error) throw new Error(data.error);
 

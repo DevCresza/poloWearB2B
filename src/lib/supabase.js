@@ -55,6 +55,31 @@ export const invokeAdminFunction = async (nome, options) => {
   return supabase.functions.invoke(nome, options);
 };
 
+// Extrai a mensagem real de erro de uma chamada supabase.functions.invoke.
+// Retorna string com o erro, ou null se deu certo.
+//
+// Le `error` E `message` do corpo: as nossas Edge Functions respondem
+// { error }, mas o gateway da plataforma responde { message } -- foi assim que
+// um 401 UNAUTHORIZED_LEGACY_JWT virou "falha desconhecida" na tela em 02/09,
+// escondendo que as funcoes de admin estavam fora do ar.
+export const parseInvokeError = async (error, data) => {
+  // 401 = a sessao do operador nao foi aceita. A mensagem crua ("non-2xx
+  // status code", "Invalid JWT") nao diz o que fazer.
+  const sessaoExpirada = 'Sua sessao expirou. Saia e entre no portal de novo antes de repetir a operacao.';
+  if (data && data.error) return data.error;
+  if (!error) return null;
+  if (error.context?.status === 401) return sessaoExpirada;
+  // FunctionsHttpError traz o corpo da resposta em error.context
+  try {
+    if (error.context && typeof error.context.json === 'function') {
+      const body = await error.context.json();
+      const msg = body?.error || body?.message;
+      if (msg) return /token|jwt/i.test(msg) ? sessaoExpirada : msg;
+    }
+  } catch (_e) { /* corpo nao era JSON */ }
+  return error.message || 'Erro desconhecido';
+};
+
 // Função para limpar tokens de autenticação do localStorage
 export const clearAuthStorage = () => {
   if (typeof window !== 'undefined') {
