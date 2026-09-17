@@ -241,6 +241,10 @@ export const MovimentacaoEstoque = createSupabaseEntity('movimentacoes_estoque')
 export const Recurso = createSupabaseEntity('recursos');
 export const WhatsappTemplate = createSupabaseEntity('whatsapp_templates');
 export const Carteira = createSupabaseEntity('carteira');
+// View (security_invoker): totais da carteira quebrados por cliente E
+// fornecedor. users.total_vencido soma todos os fornecedores e nao serve
+// para a tela do fornecedor. Somente leitura.
+export const CarteiraTotaisPorFornecedor = createSupabaseEntity('carteira_totais_cliente_fornecedor');
 export const Meta = createSupabaseEntity('metas');
 export const UserTable = createSupabaseEntity('users'); // Tabela users (CRUD - diferente de User auth)
 export const Notificacao = createSupabaseEntity('notificacoes');

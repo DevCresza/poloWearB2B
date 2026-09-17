@@ -5,7 +5,7 @@ import { Pedido } from '@/api/entities';
 import { toast } from 'sonner';
 import { Produto } from '@/api/entities';
 import { User } from '@/api/entities';
-import { Carteira } from '@/api/entities';
+import { Carteira, CarteiraTotaisPorFornecedor } from '@/api/entities';
 import { Fornecedor } from '@/api/entities'; // Added import for Fornecedor
 import { Faturamento } from '@/api/entities';
 import { SendEmail, UploadFile } from '@/api/integrations';
@@ -45,6 +45,8 @@ export default function PedidosFornecedor() {
   const [lojasMap, setLojasMap] = useState({});
   // produto_id -> data_prevista_entrega (define o mes de faturamento de cada item)
   const [produtoEntregaMap, setProdutoEntregaMap] = useState({});
+  // '<cliente_id>|<fornecedor_id>' -> { total_em_aberto, total_vencido }
+  const [totaisPorCliente, setTotaisPorCliente] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('todos');
@@ -126,6 +128,9 @@ export default function PedidosFornecedor() {
 
       let pedidosList = [];
       let clientesList = [];
+      // Usado depois, na carga dos totais da carteira. Fica null para o admin,
+      // que ve os pedidos de todos os fornecedores.
+      let fornecedorAtualId = null;
 
       if (currentUser.role === 'admin') {
         pedidosList = await Pedido.list({ sort: '-created_date' });
@@ -150,6 +155,7 @@ export default function PedidosFornecedor() {
 
         if (fornecedor) {
           setFornecedorAtual(fornecedor);
+          fornecedorAtualId = fornecedorId;
           pedidosList = await Pedido.filter({ fornecedor_id: fornecedorId }, '-created_date');
 
           // Buscar todos os clientes para evitar problemas de "não encontrado"
@@ -191,6 +197,24 @@ export default function PedidosFornecedor() {
         if (p.data_prevista_entrega) entregaMap[p.id] = p.data_prevista_entrega;
       });
       setProdutoEntregaMap(entregaMap);
+
+      // Vencido/em aberto POR FORNECEDOR. users.total_vencido soma a carteira de
+      // todos os fornecedores; aqui o fornecedor precisa ver so a divida com
+      // ele. A view e security_invoker, entao a RLS da carteira ja recorta o
+      // que cada um enxerga -- o filtro abaixo e por clareza, nao por seguranca.
+      try {
+        const totais = await CarteiraTotaisPorFornecedor.filter(
+          fornecedorAtualId ? { fornecedor_id: fornecedorAtualId } : {}
+        );
+        const porPar = {};
+        (totais || []).forEach(t => {
+          porPar[`${t.cliente_user_id}|${t.fornecedor_id}`] = t;
+        });
+        setTotaisPorCliente(porPar);
+      } catch (e) {
+        // Sem os totais a tela funciona: os cards so nao mostram o aviso.
+        console.warn('Erro ao carregar totais da carteira por fornecedor:', e);
+      }
     } catch (error) {
     } finally {
       setLoading(false);
@@ -1460,10 +1484,19 @@ export default function PedidosFornecedor() {
             //    isso a tela nao o chama mais de "inadimplente" -- o proprio
             //    projeto ja considerou esse sinal fraco demais para bloquear
             //    sozinho.
-            // 3. Os totais sao a posicao GLOBAL do cliente (todos os
-            //    fornecedores), nao a divida com quem esta olhando a tela.
+            // 3. Os valores sao a divida do cliente COM ESTE FORNECEDOR. Antes
+            //    saiam de users.total_vencido, que soma a carteira de todos os
+            //    fornecedores -- o fornecedor via divida de terceiros como se
+            //    fosse com ele. Agora vem da view carteira_totais_cliente_-
+            //    fornecedor. O BLOQUEIO segue global: e decisao do admin sobre
+            //    o cliente, nao sobre a relacao com um fornecedor.
+            const totaisCliente = totaisPorCliente[`${pedido.comprador_user_id}|${pedido.fornecedor_id}`];
+            // A view devolve numeric, que chega como string no supabase-js.
+            const vencidoFornecedor = Number(totaisCliente?.total_vencido) || 0;
+            const abertoFornecedor = Number(totaisCliente?.total_em_aberto) || 0;
+
             const clienteBloqueado = cliente?.bloqueado;
-            const clienteVencido = (cliente?.total_vencido || 0) > 0;
+            const clienteVencido = vencidoFornecedor > 0;
             const clienteComPendencia = clienteBloqueado || clienteVencido;
 
             // Mesma regra da extração — tela e relatório não podem divergir.
@@ -1554,17 +1587,19 @@ export default function PedidosFornecedor() {
                             Motivo: {cliente.motivo_bloqueio || 'Não especificado'}
                             <br />
                             {clienteVencido
-                              ? `Total vencido: ${formatCurrency(cliente.total_vencido || 0)}`
-                              : 'Sem valores vencidos — o bloqueio não é por inadimplência.'}
+                              ? `Vencido nos seus pedidos: ${formatCurrency(vencidoFornecedor)}`
+                              : 'Sem valores vencidos nos seus pedidos — o bloqueio veio de outro motivo.'}
                             <br />
-                            Total em aberto: {formatCurrency(cliente.total_em_aberto || 0)}
+                            Em aberto nos seus pedidos: {formatCurrency(abertoFornecedor)}
                           </>
                         ) : (
                           <>
                             <strong>Parcela vencida em aberto no sistema.</strong>
                             <br />
-                            Total vencido: {formatCurrency(cliente.total_vencido || 0)}
-                            <span className="text-xs"> (todos os fornecedores, não só os seus pedidos)</span>
+                            Vencido nos seus pedidos: {formatCurrency(vencidoFornecedor)}
+                            {abertoFornecedor > 0 && (
+                              <span className="text-xs"> · em aberto: {formatCurrency(abertoFornecedor)}</span>
+                            )}
                             <br />
                             <span className="text-xs">
                               A baixa do boleto é manual: se o cliente já pagou, o valor só sai
