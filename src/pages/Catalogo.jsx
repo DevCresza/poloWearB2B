@@ -599,6 +599,12 @@ export default function Catalogo() {
   // que casa com o filtro. Os demais filtros (categoria/genero) nao se aplicam
   // as capsulas para nao esconder capsulas que legitimamente misturam itens.
   const capsulasFiltradas = activeCapsulas.filter(capsula => {
+    // Fornecedor vem da propria capsula (coluna fornecedor_id), nao dos
+    // produtos: filtrar por fornecedor escondia so os produtos e deixava as
+    // capsulas dos outros na tela. Capsula sem fornecedor_id sai da lista
+    // quando ha filtro — melhor omitir do que atribuir ao fornecedor errado.
+    if (selectedFornecedor !== 'all' && capsula.fornecedor_id !== selectedFornecedor) return false;
+
     if (selectedDisponibilidade === 'all' && filtroMesEntrega === 'all') return true;
     const ids = Array.isArray(capsula.produto_ids) ? capsula.produto_ids : [];
     const prods = ids.map(id => todosProdutos.find(p => p.id === id)).filter(Boolean);

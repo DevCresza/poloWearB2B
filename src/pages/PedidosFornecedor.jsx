@@ -30,7 +30,7 @@ import {
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
 import PedidoItensEditModal from '@/components/pedidos/PedidoItensEditModal';
 import FaturarPedidoModal from '../components/pedidos/FaturarPedidoModal';
-import { formatCurrency, exportToPDF, exportToCSV, formatDate, getMesFaturamentoItem, getMesEntregaItem, getMesesEntregaPedido, getMesesFaturamentoPedido, formatMesesEntrega, formatMesAno } from '@/utils/exportUtils';
+import { formatCurrency, exportToPDF, exportToCSV, formatDate, getMesFaturamentoItem, getMesEntregaItem, getMesesEntregaPedido, getMesesFaturamentoPedido, getMesFaturamentoItemKey, formatMesesEntrega, formatMesAno } from '@/utils/exportUtils';
 import { validarVencimentos } from '@/utils/vencimentoUtils';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
@@ -790,6 +790,13 @@ export default function PedidosFornecedor() {
           : '';
 
         for (const it of itens) {
+          // O mes e do ITEM: um pedido com capsulas de meses diferentes entra
+          // no filtro de outubro inteiro. Sem esta linha o extrato "de outubro"
+          // levava junto os itens de novembro desses pedidos.
+          if (filtroMesFaturamento !== 'todos'
+              && getMesFaturamentoItemKey(pedido, it, produtoEntregaMap) !== filtroMesFaturamento) {
+            continue;
+          }
           const isGrade = it.tipo_venda === 'grade' && (it.total_pecas_grade || 0) > 0;
           const totalItens = (it.quantidade || 0) * (isGrade ? (it.total_pecas_grade || 1) : 1);
           const precoBase = Number(it.preco) || 0;
@@ -856,9 +863,14 @@ export default function PedidosFornecedor() {
 
   // Relatório de Produção — agrega quantidade total por produto/cor
   const handleExportRelatorioProducao = () => {
-    // Pedidos em produção ou aprovados (ainda não faturados por completo)
+    // Parte do que esta filtrado na tela (mes, status, busca, datas) e nao da
+    // lista inteira. Antes lia `pedidos` cru: quem filtrava "outubro de 2026"
+    // e clicava aqui levava a producao de todos os meses.
     const statusProducao = ['aprovado', 'em_producao', 'parcialmente_faturado'];
-    let pedidosParaRelatorio = pedidos.filter(p => statusProducao.includes(p.status));
+    const temFiltroAtivoRelatorio = searchTerm || filtroStatus !== 'todos' || filtroMes !== 'todos'
+      || filtroMesFaturamento !== 'todos' || filtroEmissaoDe || filtroEmissaoAte
+      || filtroFaturamentoDe || filtroFaturamentoAte;
+    let pedidosParaRelatorio = filteredPedidos.filter(p => statusProducao.includes(p.status));
 
     // Se fornecedor, filtrar somente seus pedidos
     if (user?.role !== 'admin' && fornecedorAtual) {
@@ -866,7 +878,9 @@ export default function PedidosFornecedor() {
     }
 
     if (pedidosParaRelatorio.length === 0) {
-      toast.info('Nenhum pedido em produção para gerar relatório');
+      toast.info(temFiltroAtivoRelatorio
+        ? 'Nenhum pedido em produção dentro dos filtros aplicados'
+        : 'Nenhum pedido em produção para gerar relatório');
       return;
     }
 
@@ -879,6 +893,11 @@ export default function PedidosFornecedor() {
       }
 
       itens.forEach(item => {
+        // Mesmo motivo do extrato: o mes e do item, nao do pedido.
+        if (filtroMesFaturamento !== 'todos'
+            && getMesFaturamentoItemKey(pedido, item, produtoEntregaMap) !== filtroMesFaturamento) {
+          return;
+        }
         const cor = item.cor_selecionada?.cor_nome || 'Sem cor';
         const mesEntrega = getMesEntregaItem(pedido, item, produtoEntregaMap);
         const key = `${item.produto_id || item.nome}_${cor}_${mesEntrega}`;
@@ -920,7 +939,9 @@ export default function PedidosFornecedor() {
       .sort((a, b) => a.nome.localeCompare(b.nome) || a.cor.localeCompare(b.cor));
 
     if (data.length === 0) {
-      toast.info('Nenhum item pendente de produção');
+      toast.info(filtroMesFaturamento !== 'todos'
+        ? `Nenhum item pendente de produção em ${formatMesAno(filtroMesFaturamento + '-01')}`
+        : 'Nenhum item pendente de produção');
       return;
     }
 
@@ -1429,12 +1450,21 @@ export default function PedidosFornecedor() {
               console.warn(`Fornecedor não encontrado para pedido ${pedido.id}. fornecedor_id: ${pedido.fornecedor_id}`);
             }
 
-            // Bloqueio e inadimplencia sao coisas diferentes: o bloqueio e
-            // decisao manual do admin e o motivo pode nao ser financeiro
-            // (ex: "Acao de estoque"). Nao chame um de outro.
+            // Tres coisas diferentes, que a tela ja confundiu duas vezes:
+            // 1. BLOQUEIO e decisao manual do admin e o motivo pode nao ser
+            //    financeiro (ex: "Acao de estoque").
+            // 2. PARCELA VENCIDA e o estado da carteira NO SISTEMA. O boleto
+            //    nao e conciliado automaticamente (ver AlertaBloqueio.jsx): o
+            //    valor so sai daqui quando o financeiro registra a baixa, entao
+            //    um cliente que pagou ontem ainda aparece vencido hoje. Por
+            //    isso a tela nao o chama mais de "inadimplente" -- o proprio
+            //    projeto ja considerou esse sinal fraco demais para bloquear
+            //    sozinho.
+            // 3. Os totais sao a posicao GLOBAL do cliente (todos os
+            //    fornecedores), nao a divida com quem esta olhando a tela.
             const clienteBloqueado = cliente?.bloqueado;
             const clienteVencido = (cliente?.total_vencido || 0) > 0;
-            const clienteInadimplente = clienteBloqueado || clienteVencido;
+            const clienteComPendencia = clienteBloqueado || clienteVencido;
 
             // Mesma regra da extração — tela e relatório não podem divergir.
             const mesesEntrega = getMesesEntregaPedido(pedido, produtoEntregaMap);
@@ -1447,12 +1477,12 @@ export default function PedidosFornecedor() {
                 key={pedido.id} 
                 className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow relative" // Updated card styling
               >
-                {/* Alerta de Cliente Inadimplente - Top Right Badge */}
-                {clienteInadimplente && (
+                {/* Situacao do cliente - Top Right Badge */}
+                {clienteComPendencia && (
                   <div className="absolute top-2 right-2 z-10">
                     <Badge className={clienteBloqueado ? 'bg-red-600 text-white' : 'bg-yellow-600 text-white'}>
                       <AlertTriangle className="w-3 h-3 mr-1" />
-                      {clienteBloqueado ? 'Cliente Bloqueado' : 'Cliente Inadimplente'}
+                      {clienteBloqueado ? 'Cliente Bloqueado' : 'Parcela vencida'}
                     </Badge>
                   </div>
                 )}
@@ -1511,8 +1541,8 @@ export default function PedidosFornecedor() {
                   </div>
                 </CardHeader>
 
-                {/* Alertas de Inadimplência - Detailed Alert */}
-                {clienteInadimplente && (
+                {/* Detalhe da situacao do cliente */}
+                {clienteComPendencia && (
                   <CardContent className="pt-0 pb-3">
                     <Alert className={clienteBloqueado ? 'border-red-200 bg-red-50' : 'border-yellow-200 bg-yellow-50'}>
                       <AlertTriangle className={`h-4 w-4 ${clienteBloqueado ? 'text-red-600' : 'text-yellow-600'}`} />
@@ -1531,9 +1561,15 @@ export default function PedidosFornecedor() {
                           </>
                         ) : (
                           <>
-                            <strong>Cliente com valores vencidos.</strong>
+                            <strong>Parcela vencida em aberto no sistema.</strong>
                             <br />
                             Total vencido: {formatCurrency(cliente.total_vencido || 0)}
+                            <span className="text-xs"> (todos os fornecedores, não só os seus pedidos)</span>
+                            <br />
+                            <span className="text-xs">
+                              A baixa do boleto é manual: se o cliente já pagou, o valor só sai
+                              daqui depois que o financeiro registrar o pagamento.
+                            </span>
                           </>
                         )}
                       </AlertDescription>

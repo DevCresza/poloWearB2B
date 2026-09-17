@@ -281,6 +281,23 @@ export const getMesesEntregaPedido = (pedido, produtoEntregaMap = {}) => {
 };
 
 /**
+ * Mês de faturamento de UM item como chave 'YYYY-MM'.
+ *
+ * Mesma regra de getMesFaturamentoItem, mas devolvendo a chave que os filtros
+ * de tela usam em vez do rótulo. Existe porque o mês é propriedade do ITEM: um
+ * pedido com cápsulas de meses diferentes entra no filtro de outubro E no de
+ * novembro, e um relatório que se diz "de outubro" precisa descartar as linhas
+ * dos outros meses — filtrar só a lista de pedidos não basta.
+ */
+export const getMesFaturamentoItemKey = (pedido, item, produtoEntregaMap = {}) => {
+  if (pedido?.nf_data_upload) return String(pedido.nf_data_upload).slice(0, 7);
+  if (item?.mes_entrega) return String(item.mes_entrega).slice(0, 7);
+  const ep = item?.produto_id ? produtoEntregaMap[item.produto_id] : null;
+  const base = ep || pedido?.data_prevista_entrega || pedido?.created_date;
+  return base ? String(base).slice(0, 7) : null;
+};
+
+/**
  * Meses de FATURAMENTO de um pedido, como chaves 'YYYY-MM', para filtro.
  *
  * Mesma regra da coluna "MÊS DE FATURAMENTO" dos relatórios: se a NF já foi
@@ -289,17 +306,15 @@ export const getMesesEntregaPedido = (pedido, produtoEntregaMap = {}) => {
  * telas que carregam o pedido COM itens (MeusPedidos, PedidosFornecedor).
  */
 export const getMesesFaturamentoPedido = (pedido, produtoEntregaMap = {}) => {
+  // Pedido com NF mas sem os itens carregados ainda tem mês: o da nota.
   if (pedido?.nf_data_upload) {
     const k = String(pedido.nf_data_upload).slice(0, 7);
     return k ? [k] : [];
   }
   const itens = Array.isArray(pedido?.itens) ? pedido.itens : [];
-  const keys = itens.map(it => {
-    if (it?.mes_entrega) return String(it.mes_entrega).slice(0, 7);
-    const ep = it?.produto_id ? produtoEntregaMap[it.produto_id] : null;
-    const base = ep || pedido?.data_prevista_entrega || pedido?.created_date;
-    return base ? String(base).slice(0, 7) : null;
-  }).filter(Boolean);
+  const keys = itens
+    .map(it => getMesFaturamentoItemKey(pedido, it, produtoEntregaMap))
+    .filter(Boolean);
   return [...new Set(keys)];
 };
 

@@ -21,7 +21,7 @@ import PedidoDetailsModal from '../components/pedidos/PedidoDetailsModal';
 import PedidoEditModal from '../components/pedidos/PedidoEditModal';
 import PedidoItensEditModal from '../components/pedidos/PedidoItensEditModal';
 import FaturarPedidoModal from '../components/pedidos/FaturarPedidoModal';
-import { exportToCSV, exportToPDF, formatCurrency, formatDateTime, formatDate, getMesFaturamentoItem, getMesEntregaItem, formatMesesEntrega, getMesesFaturamentoResumo, formatMesAno } from '@/utils/exportUtils';
+import { exportToCSV, exportToPDF, formatCurrency, formatDateTime, formatDate, getMesFaturamentoItem, getMesEntregaItem, formatMesesEntrega, getMesesFaturamentoResumo, getMesFaturamentoItemKey, formatMesAno } from '@/utils/exportUtils';
 import MultiSelectFilter from '@/components/MultiSelectFilter';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
@@ -280,6 +280,11 @@ export default function PedidosAdmin() {
           : '';
 
         for (const it of itens) {
+          // Mesmo motivo do relatorio de producao: o mes e do item.
+          if (filtroMesFaturamento !== 'todos'
+              && getMesFaturamentoItemKey(pedido, it, produtoEntregaMap) !== filtroMesFaturamento) {
+            continue;
+          }
           const isGrade = it.tipo_venda === 'grade' && (it.total_pecas_grade || 0) > 0;
           const totalItens = (it.quantidade || 0) * (isGrade ? (it.total_pecas_grade || 1) : 1);
           const precoBase = Number(it.preco) || 0;
@@ -352,11 +357,15 @@ export default function PedidosAdmin() {
 
   // Relatório de Produção (admin)
   const handleExportRelatorioProducao = async () => {
+    // Parte do que esta filtrado na tela, igual aos outros exports desta pagina.
+    // Antes lia `pedidos` cru e ignorava mes, status, cliente e fornecedor.
     const statusProducao = ['aprovado', 'em_producao', 'parcialmente_faturado'];
-    const pedidosParaRelatorio = pedidos.filter(p => statusProducao.includes(p.status));
+    const pedidosParaRelatorio = filteredPedidos.filter(p => statusProducao.includes(p.status));
 
     if (pedidosParaRelatorio.length === 0) {
-      toast.info('Nenhum pedido em produção para gerar relatório');
+      toast.info(temFiltrosAtivos
+        ? 'Nenhum pedido em produção dentro dos filtros aplicados'
+        : 'Nenhum pedido em produção para gerar relatório');
       return;
     }
 
@@ -371,6 +380,13 @@ export default function PedidosAdmin() {
       if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch (e) { itens = []; } }
 
       itens.forEach(item => {
+        // O mes e do ITEM: um pedido com capsulas de meses diferentes entra
+        // inteiro no filtro de outubro. Sem isto o relatorio "de outubro"
+        // levava junto as linhas de novembro desses pedidos.
+        if (filtroMesFaturamento !== 'todos'
+            && getMesFaturamentoItemKey(pedido, item, produtoEntregaMap) !== filtroMesFaturamento) {
+          return;
+        }
         const cor = item.cor_selecionada?.cor_nome || 'Sem cor';
         const mesEntrega = getMesEntregaItem(pedido, item, produtoEntregaMap);
         const key = `${item.produto_id || item.nome}_${cor}_${mesEntrega}`;
@@ -406,7 +422,12 @@ export default function PedidosAdmin() {
     const data = Object.values(agregado).filter(r => r.qtd_total_pecas > 0)
       .sort((a, b) => a.nome.localeCompare(b.nome) || a.cor.localeCompare(b.cor));
 
-    if (data.length === 0) { toast.info('Nenhum item pendente de produção'); return; }
+    if (data.length === 0) {
+      toast.info(filtroMesFaturamento !== 'todos'
+        ? `Nenhum item pendente de produção em ${formatMesAno(filtroMesFaturamento + '-01')}`
+        : 'Nenhum item pendente de produção');
+      return;
+    }
 
     const columns = [
       { key: 'nome', label: 'Produto' },
