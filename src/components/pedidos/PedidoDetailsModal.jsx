@@ -28,6 +28,14 @@ import { Store } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+// Notas de um faturamento. nf_arquivos e a lista; nf_url (campo antigo) vale
+// como item unico para faturamento gravado antes da migration 20260922000001.
+const notasDoFaturamento = (fat) => {
+  const lista = Array.isArray(fat?.nf_arquivos) ? fat.nf_arquivos.filter(a => a?.url) : [];
+  if (lista.length > 0) return lista;
+  return fat?.nf_url ? [{ url: fat.nf_url, nome: 'Nota fiscal' }] : [];
+};
+
 // formatMesAno devolve "outubro de 2026"; no PDF nao ha CSS capitalize.
 // Só a inicial — "Outubro De 2026" nao e portugues.
 const capitalizarMes = (m) => (m ? m.charAt(0).toUpperCase() + m.slice(1) : m);
@@ -1572,11 +1580,20 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                           {fat.status === 'faturado' && <Badge className="bg-indigo-100 text-indigo-700 text-xs">Faturado</Badge>}
                           {fat.status === 'enviado' && <Badge className="bg-orange-100 text-orange-700 text-xs">Enviado</Badge>}
                           {fat.status === 'entregue' && <Badge className="bg-green-100 text-green-700 text-xs">Entregue</Badge>}
-                          {fat.nf_url && (
-                            <Button variant="ghost" size="sm" onClick={() => window.open(fat.nf_url, '_blank')}>
+                          {notasDoFaturamento(fat).map((nota, i) => (
+                            <Button
+                              key={i}
+                              variant="ghost"
+                              size="sm"
+                              title={nota.nome || 'Nota fiscal'}
+                              onClick={() => window.open(nota.url, '_blank')}
+                            >
                               <Download className="w-4 h-4" />
+                              {notasDoFaturamento(fat).length > 1 && (
+                                <span className="ml-1 text-xs">{i + 1}</span>
+                              )}
                             </Button>
-                          )}
+                          ))}
                         </div>
                       </div>
                       {/* Envio info */}
@@ -3027,12 +3044,18 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                             }>
                               {fat.status === 'entregue' ? 'Entregue' : fat.status === 'enviado' ? 'Enviado' : 'Faturado'}
                             </Badge>
-                            {fat.nf_url && (
-                              <Button variant="outline" size="sm" onClick={() => window.open(fat.nf_url, '_blank')}>
+                            {notasDoFaturamento(fat).map((nota, i, arr) => (
+                              <Button
+                                key={i}
+                                variant="outline"
+                                size="sm"
+                                title={nota.nome || 'Nota fiscal'}
+                                onClick={() => window.open(nota.url, '_blank')}
+                              >
                                 <Download className="w-4 h-4 mr-1" />
-                                Baixar NF
+                                {arr.length > 1 ? `Baixar NF ${i + 1}` : 'Baixar NF'}
                               </Button>
-                            )}
+                            ))}
                           </div>
                         </div>
 

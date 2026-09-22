@@ -30,7 +30,9 @@ import { parseNFeXml, casarItensNFe } from '@/utils/nfeXml';
  */
 export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onSuccess }) {
   const [itensFaturamento, setItensFaturamento] = useState([]);
-  const [nfFile, setNfFile] = useState(null);
+  // Lista: o fornecedor pode emitir mais de uma nota para a MESMA remessa
+  // (CFOP diferente, nota complementar, limite do emissor).
+  const [nfFiles, setNfFiles] = useState([]);
   const [nfNumero, setNfNumero] = useState('');
   const [nfDataEmissao, setNfDataEmissao] = useState(new Date().toISOString().split('T')[0]);
   const [metodoPagamento, setMetodoPagamento] = useState(pedido.metodo_pagamento || '');
@@ -59,14 +61,20 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
   // 30+ itens do pedido eram marcados um a um. Agora o arquivo preenche numero,
   // data, transportadora e a selecao dos itens. Nada e obrigatorio: se a leitura
   // falhar, a tela continua funcionando na mao.
-  const handleNfFileChange = async (file) => {
-    setNfFile(file || null);
+  const handleNfFilesChange = async (fileList) => {
+    const arquivos = Array.from(fileList || []);
+    setNfFiles(arquivos);
     setResumoXml(null);
     setTransportadoraXml('');
-    if (!file || !/\.xml$/i.test(file.name)) return;
+
+    // Varias notas, um so casamento de itens: le o primeiro XML da selecao. Os
+    // demais sao anexados sem releitura -- casar item duas vezes marcaria a
+    // mesma linha duas vezes e dobraria a baixa.
+    const xml = arquivos.find(f => /\.xml$/i.test(f.name));
+    if (!xml) return;
 
     try {
-      const nfe = parseNFeXml(await file.text());
+      const nfe = parseNFeXml(await xml.text());
       if (nfe.numero) setNfNumero(nfe.numero);
       if (nfe.dataEmissao) setNfDataEmissao(nfe.dataEmissao);
       if (nfe.transportadora) setTransportadoraXml(nfe.transportadora);
@@ -81,6 +89,10 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
         toast.warning(`NF lida: ${resumo.casados} de ${resumo.totalNF} itens casados. Confira os que ficaram de fora.`);
       } else {
         toast.success(`NF ${nfe.numero} lida: ${resumo.casados} ite${resumo.casados > 1 ? 'ns' : 'm'} selecionado${resumo.casados > 1 ? 's' : ''}.`);
+      }
+
+      if (arquivos.length > 1) {
+        toast.info(`${arquivos.length} arquivos anexados. Os itens vieram do XML "${xml.name}".`);
       }
     } catch (err) {
       console.error('Erro ao ler XML da NF:', err);
@@ -104,7 +116,7 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
     const isQuebraOnly = itensSelecionados.every(it => it._isQuebra);
 
     // NF is required only if there are items being invoiced (not quebra-only)
-    if (!isQuebraOnly && (!nfFile || !nfNumero || !nfDataEmissao)) {
+    if (!isQuebraOnly && (nfFiles.length === 0 || !nfNumero || !nfDataEmissao)) {
       toast.info('Preencha o número, a data de emissão e envie a nota fiscal');
       return;
     }
@@ -131,11 +143,17 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
 
     setUploading(true);
     try {
-      // Upload NF only if not quebra-only
-      let nfUpload = null;
+      // Upload das notas (quebra pura nao tem nota).
+      // nfArquivos guarda todas; nfUrlPrincipal espelha a primeira, que e o que
+      // as telas do cliente e o e-mail ja leem de nf_url.
+      const nfArquivos = [];
       if (!isQuebraOnly) {
-        nfUpload = await UploadFile({ file: nfFile });
+        for (const arquivo of nfFiles) {
+          const enviado = await UploadFile({ file: arquivo });
+          nfArquivos.push({ url: enviado.file_url, nome: arquivo.name });
+        }
       }
+      const nfUrlPrincipal = nfArquivos[0]?.url || null;
 
       // Build faturamento items (only invoiced, not quebra)
       const itensFaturados = itensSelecionados
@@ -156,12 +174,13 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
         .reduce((sum, it) => sum + (it._qtdQuebra * (it.preco || 0)), 0);
 
       // Create faturamento record (only if there are invoiced items — skip for quebra-only)
-      if (itensFaturados.length > 0 && nfUpload) {
+      if (itensFaturados.length > 0 && nfUrlPrincipal) {
         await Faturamento.create({
           pedido_id: pedido.id,
           numero_nf: nfNumero,
           data_emissao: nfDataEmissao,
-          nf_url: nfUpload.file_url,
+          nf_url: nfUrlPrincipal,
+          nf_arquivos: nfArquivos,
           itens: itensFaturados,
           valor_total: valorFaturamento,
           status: 'faturado',
@@ -239,8 +258,8 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
         valor_final: (pedido.valor_total || 0) - novoValorQuebra,
       };
       // Only set NF fields if we have a NF (not quebra-only)
-      if (nfUpload) {
-        pedidoUpdate.nf_url = nfUpload.file_url;
+      if (nfUrlPrincipal) {
+        pedidoUpdate.nf_url = nfUrlPrincipal;
         pedidoUpdate.nf_numero = nfNumero;
         pedidoUpdate.nf_data_upload = nfDataEmissao + 'T00:00:00';
       }
@@ -300,10 +319,10 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
                     ${valorQuebra > 0 ? `<p style="color: #dc2626;"><strong>Quebra de produção:</strong> ${formatCurrency(valorQuebra)}</p>` : ''}
                     ${!todosResolvidos ? `<p><strong>Saldo pendente:</strong> ${formatCurrency((pedido.valor_total || 0) - novoValorFaturado - novoValorQuebra)}</p>` : ''}
                   </div>
-                  ${nfUpload ? `<div style="text-align: center; margin-top: 30px;">
-                    <a href="${nfUpload.file_url}" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px;">
-                      Baixar Nota Fiscal
-                    </a>
+                  ${nfArquivos.length > 0 ? `<div style="text-align: center; margin-top: 30px;">
+                    ${nfArquivos.map((a, i) => `<a href="${a.url}" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; margin: 4px;">
+                      ${nfArquivos.length > 1 ? `Baixar Nota ${i + 1}` : 'Baixar Nota Fiscal'}
+                    </a>`).join('')}
                   </div>` : ''}
                 </div>
               </div>
@@ -563,19 +582,35 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
                 </div>
 
                 <div>
-                  <Label htmlFor="nfFile">Upload da Nota Fiscal *</Label>
+                  <Label htmlFor="nfFile">Upload da(s) Nota(s) Fiscal(is) *</Label>
                   <Input
                     id="nfFile"
                     type="file"
                     accept=".xml,.pdf,.jpg,.jpeg,.png,.crm"
-                    onChange={(e) => handleNfFileChange(e.target.files[0])}
+                    multiple
+                    onChange={(e) => handleNfFilesChange(e.target.files)}
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     <strong>Formatos aceitos:</strong> XML, PDF, JPG, PNG, CRM.{' '}
                     <span className="text-indigo-700 font-medium">
                       Enviando o XML, o número, a data, a transportadora e os itens são preenchidos sozinhos.
-                    </span>
+                    </span>{' '}
+                    Pode selecionar mais de uma nota para esta mesma remessa.
                   </p>
+
+                  {nfFiles.length > 0 && (
+                    <ul className="mt-2 text-xs text-gray-700 space-y-1">
+                      {nfFiles.map((f, i) => (
+                        <li key={i} className="flex items-center gap-2">
+                          <span className="text-gray-400 shrink-0">{i + 1}.</span>
+                          <span className="truncate">{f.name}</span>
+                          {i === 0 && nfFiles.length > 1 && (
+                            <span className="text-gray-400 shrink-0">(principal)</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
 
                 {/* Resultado da leitura do XML */}
