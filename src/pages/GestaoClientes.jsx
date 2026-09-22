@@ -7,7 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Users, Plus, Edit, UserCheck, MessageSquare, Trash2, Store } from 'lucide-react';
+import { Search, Users, Plus, Edit, UserCheck, MessageSquare, Trash2, Store, Download } from 'lucide-react';
+import { exportToCSV } from '@/utils/exportUtils';
 import ClientForm from '../components/admin/ClientForm';
 import AdminLojaManager from '../components/admin/AdminLojaManager';
 import WhatsappModal from '../components/crm/WhatsappModal';
@@ -18,6 +19,8 @@ import { supabase } from '@/lib/supabase';
 export default function GestaoClientes() {
   const [users, setUsers] = useState([]);
   const [lojasCountMap, setLojasCountMap] = useState({});
+  // Lista completa das lojas (a contagem abaixo nao serve para a exportacao)
+  const [lojas, setLojas] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -63,6 +66,7 @@ export default function GestaoClientes() {
         Loja.list()
       ]);
       setUsers(usersList);
+      setLojas(lojasList || []);
 
       // Build count map: user_id → number of lojas
       const countMap = {};
@@ -80,6 +84,72 @@ export default function GestaoClientes() {
     } catch (_error) {
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Uma linha por LOJA (nao por cliente): a rede do franqueado tem varias, e e
+  // a loja que tem CNPJ, codigo e endereco proprios. Segue o filtro da tela --
+  // com "Franqueado" selecionado sai a relacao das franquias.
+  const handleExportLojas = () => {
+    const idsVisiveis = new Set(filteredUsers.map(u => u.id));
+    const donoPorId = new Map(filteredUsers.map(u => [u.id, u]));
+
+    const linhas = lojas
+      .filter(l => idsVisiveis.has(l.user_id))
+      .map(l => {
+        const dono = donoPorId.get(l.user_id);
+        return {
+          rede: dono?.full_name || '',
+          tipo: dono?.tipo_negocio === 'franqueado' ? 'Franqueado' : 'Multimarca',
+          email_acesso: dono?.email || '',
+          razao_social: l.nome || '',
+          nome_fantasia: l.nome_fantasia || '',
+          cnpj: l.cnpj || '',
+          inscricao_estadual: l.inscricao_estadual || '',
+          codigo_cliente: l.codigo_cliente || '',
+          cidade: l.cidade || '',
+          estado: l.estado || '',
+          bairro: l.bairro || '',
+          cep: l.cep || '',
+          endereco: l.endereco_completo || '',
+          telefone: l.telefone || '',
+          whatsapp: l.whatsapp || '',
+          email_loja: l.email || '',
+          transportadora: l.transportadora_padrao || '',
+          situacao: l.ativa ? 'Ativa' : 'Inativa',
+          bloqueada: l.bloqueada ? 'Sim' : 'Não',
+          motivo_bloqueio: l.motivo_bloqueio || ''
+        };
+      })
+      .sort((a, b) => a.rede.localeCompare(b.rede, 'pt-BR') || a.razao_social.localeCompare(b.razao_social, 'pt-BR'));
+
+    const columns = [
+      { key: 'rede', label: 'Rede / Cliente' },
+      { key: 'tipo', label: 'Tipo' },
+      { key: 'email_acesso', label: 'E-mail de Acesso' },
+      { key: 'razao_social', label: 'Razão Social' },
+      { key: 'nome_fantasia', label: 'Nome Fantasia' },
+      { key: 'cnpj', label: 'CNPJ' },
+      { key: 'inscricao_estadual', label: 'Inscrição Estadual' },
+      { key: 'codigo_cliente', label: 'Código Cliente' },
+      { key: 'cidade', label: 'Cidade' },
+      { key: 'estado', label: 'UF' },
+      { key: 'bairro', label: 'Bairro' },
+      { key: 'cep', label: 'CEP' },
+      { key: 'endereco', label: 'Endereço' },
+      { key: 'telefone', label: 'Telefone' },
+      { key: 'whatsapp', label: 'WhatsApp' },
+      { key: 'email_loja', label: 'E-mail da Loja' },
+      { key: 'transportadora', label: 'Transportadora Padrão' },
+      { key: 'situacao', label: 'Situação' },
+      { key: 'bloqueada', label: 'Bloqueada' },
+      { key: 'motivo_bloqueio', label: 'Motivo do Bloqueio' }
+    ];
+
+    const sufixo = filterTipoNegocio === 'all' ? 'todas' : filterTipoNegocio;
+    exportToCSV(linhas, columns, `lojas-${sufixo}-${new Date().toISOString().split('T')[0]}.csv`);
+    if (linhas.length > 0) {
+      toast.success(`${linhas.length} loja(s) exportada(s)`);
     }
   };
 
@@ -188,6 +258,10 @@ export default function GestaoClientes() {
             </div>
             
             <div className="flex gap-2">
+              <Button onClick={handleExportLojas} variant="outline" title="Uma linha por loja, seguindo o filtro acima">
+                <Download className="w-4 h-4 mr-2" />
+                Exportar Lojas
+              </Button>
               <Button onClick={() => setShowWhatsappModal(true)} disabled={selectedUsers.length === 0} variant="outline" className="bg-green-50 hover:bg-green-100">
                 <MessageSquare className="w-4 h-4 mr-2 text-green-600"/> Enviar WhatsApp
               </Button>

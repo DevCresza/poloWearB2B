@@ -72,7 +72,11 @@ export default function PedidosFornecedor() {
   const [boletoNFSelected, setBoletoNFSelected] = useState(null);
   const [boletoNFFile, setBoletoNFFile] = useState(null);
   const [boletoNFQtdParcelas, setBoletoNFQtdParcelas] = useState(1);
-  const [boletoNFParcelas, setBoletoNFParcelas] = useState([{ dataVencimento: '' }]);
+  const [boletoNFParcelas, setBoletoNFParcelas] = useState([{ dataVencimento: '', arquivo: null }]);
+  // Carne unico (um PDF com todas) x um boleto por parcela. Ate agora so
+  // existia o primeiro: o mesmo arquivo era gravado em todas as parcelas,
+  // mesmo quando o fornecedor tinha 3 boletos distintos.
+  const [boletoNFArquivoUnico, setBoletoNFArquivoUnico] = useState(true);
   const [boletoNFUploading, setBoletoNFUploading] = useState(false);
   const [boletoNFLoading, setBoletoNFLoading] = useState(false);
   const [showAtualizarNFModal, setShowAtualizarNFModal] = useState(false);
@@ -995,6 +999,8 @@ export default function PedidosFornecedor() {
     setSelectedPedido(pedido);
     setBoletoNFSelected(null);
     setBoletoNFFile(null);
+    // Carne unico e o caso comum; quem tem um boleto por parcela desmarca.
+    setBoletoNFArquivoUnico(true);
 
     // Auto-preencher parcelas a partir dos prazos cadastrados do fornecedor (somente para boleto faturado)
     const fornecedor = fornecedores.find(f => f.id === pedido.fornecedor_id);
@@ -1007,7 +1013,7 @@ export default function PedidosFornecedor() {
       const novas = prazos.map(dias => {
         const data = new Date(hoje);
         data.setDate(data.getDate() + dias);
-        return { dataVencimento: data.toISOString().split('T')[0] };
+        return { dataVencimento: data.toISOString().split('T')[0], arquivo: null };
       });
       setBoletoNFParcelas(novas);
     } else {
@@ -1015,7 +1021,7 @@ export default function PedidosFornecedor() {
       setBoletoNFQtdParcelas(1);
       const data = new Date(hoje);
       data.setDate(data.getDate() + 30);
-      setBoletoNFParcelas([{ dataVencimento: data.toISOString().split('T')[0] }]);
+      setBoletoNFParcelas([{ dataVencimento: data.toISOString().split('T')[0], arquivo: null }]);
     }
 
     setBoletoNFLoading(true);
@@ -1039,7 +1045,7 @@ export default function PedidosFornecedor() {
       if (boletoNFParcelas[i]?.dataVencimento) return boletoNFParcelas[i];
       const data = new Date(hoje);
       data.setDate(data.getDate() + 30 * (i + 1));
-      return { dataVencimento: data.toISOString().split('T')[0] };
+      return { dataVencimento: data.toISOString().split('T')[0], arquivo: null };
     });
     setBoletoNFParcelas(novas);
   };
@@ -1050,10 +1056,22 @@ export default function PedidosFornecedor() {
     setBoletoNFParcelas(novas);
   };
 
+  const handleBoletoNFArquivoChange = (index, file) => {
+    const novas = [...boletoNFParcelas];
+    novas[index] = { ...novas[index], arquivo: file || null };
+    setBoletoNFParcelas(novas);
+  };
+
   const handleEnviarBoletoNF = async () => {
     if (!boletoNFSelected) { toast.info('Selecione uma Nota Fiscal'); return; }
-    if (!boletoNFFile) { toast.info('Selecione o arquivo do boleto'); return; }
     const temDatas = boletoNFParcelas.some(p => p.dataVencimento);
+    // Sem datas nao nascem parcelas, entao so o arquivo unico faz sentido.
+    const umArquivoSo = boletoNFArquivoUnico || !temDatas || boletoNFQtdParcelas === 1;
+    if (umArquivoSo && !boletoNFFile) { toast.info('Selecione o arquivo do boleto'); return; }
+    if (!umArquivoSo && boletoNFParcelas.some(p => !p.arquivo)) {
+      toast.info('Anexe o boleto de cada parcela, ou marque "mesmo arquivo para todas"');
+      return;
+    }
     if (temDatas && boletoNFParcelas.some(p => !p.dataVencimento)) {
       toast.info('Preencha todas as datas de vencimento');
       return;
@@ -1063,9 +1081,24 @@ export default function PedidosFornecedor() {
     if (checagem.aviso && !window.confirm(checagem.aviso)) return;
     setBoletoNFUploading(true);
     try {
-      const result = await UploadFile({ file: boletoNFFile });
+      // Uma URL por parcela. Com carne unico todas apontam para o mesmo
+      // arquivo -- o comportamento de antes.
+      const urlsPorParcela = [];
+      if (umArquivoSo) {
+        const result = await UploadFile({ file: boletoNFFile });
+        for (let i = 0; i < boletoNFQtdParcelas; i++) urlsPorParcela.push(result.file_url);
+      } else {
+        for (const parcela of boletoNFParcelas) {
+          const result = await UploadFile({ file: parcela.arquivo });
+          urlsPorParcela.push(result.file_url);
+        }
+      }
+
+      // faturamentos.boleto_url e uma coluna so: guarda o primeiro, para o link
+      // da NF continuar abrindo algo. A verdade por parcela fica em
+      // carteira.boleto_url, que e de onde o cliente baixa o dele.
       await Faturamento.update(boletoNFSelected.id, {
-        boleto_url: result.file_url,
+        boleto_url: urlsPorParcela[0],
         boleto_data_upload: new Date().toISOString(),
         qtd_parcelas: boletoNFQtdParcelas
       });
@@ -1097,7 +1130,9 @@ export default function PedidosFornecedor() {
             data_vencimento: boletoNFParcelas[i].dataVencimento,
             parcela_numero: i + 1,
             total_parcelas: boletoNFQtdParcelas,
-            boleto_url: result.file_url,
+            // Fallback defensivo: se por algum motivo faltar URL para esta
+            // posicao, a parcela nasce com o primeiro boleto em vez de sem nenhum.
+            boleto_url: urlsPorParcela[i] || urlsPorParcela[0],
             descricao: boletoNFQtdParcelas > 1
               ? `Parcela ${i + 1}/${boletoNFQtdParcelas} - NF #${boletoNFSelected.numero_nf}`
               : `Boleto - NF #${boletoNFSelected.numero_nf}`,
@@ -2165,15 +2200,28 @@ export default function PedidosFornecedor() {
                   <div className="space-y-2 mt-3">
                     <Label className="text-xs">Datas de Vencimento</Label>
                     {boletoNFParcelas.map((parcela, index) => (
-                      <div key={index} className="flex items-center gap-2 bg-gray-50 p-2 rounded border">
-                        <Badge variant="outline" className="text-xs shrink-0">{index + 1}/{boletoNFQtdParcelas}</Badge>
-                        <span className="text-xs text-gray-500 shrink-0">{formatCurrency(boletoNFSelected.valor_total / boletoNFQtdParcelas)}</span>
-                        <Input
-                          type="date"
-                          value={parcela.dataVencimento}
-                          onChange={(e) => handleBoletoNFDataChange(index, e.target.value)}
-                          className="h-8 text-sm"
-                        />
+                      <div key={index} className="bg-gray-50 p-2 rounded border space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs shrink-0">{index + 1}/{boletoNFQtdParcelas}</Badge>
+                          <span className="text-xs text-gray-500 shrink-0">{formatCurrency(boletoNFSelected.valor_total / boletoNFQtdParcelas)}</span>
+                          <Input
+                            type="date"
+                            value={parcela.dataVencimento}
+                            onChange={(e) => handleBoletoNFDataChange(index, e.target.value)}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        {!boletoNFArquivoUnico && boletoNFQtdParcelas > 1 && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500 shrink-0 w-16">Boleto:</span>
+                            <Input
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png,.crm"
+                              onChange={(e) => handleBoletoNFArquivoChange(index, e.target.files[0])}
+                              className="h-8 text-xs"
+                            />
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -2181,13 +2229,38 @@ export default function PedidosFornecedor() {
 
                 <div className="border-t pt-4">
                   <Label className="text-sm font-semibold">3. Envie o arquivo do boleto</Label>
-                  <Input
-                    type="file"
-                    accept=".pdf,.jpg,.jpeg,.png,.crm"
-                    onChange={(e) => setBoletoNFFile(e.target.files[0])}
-                    className="mt-2"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Formatos: PDF, JPG, PNG</p>
+
+                  {boletoNFQtdParcelas > 1 && (
+                    <label className="flex items-center gap-2 mt-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={boletoNFArquivoUnico}
+                        onChange={(e) => setBoletoNFArquivoUnico(e.target.checked)}
+                        className="h-4 w-4"
+                      />
+                      <span>
+                        Mesmo arquivo para todas as parcelas
+                        <span className="text-gray-500"> (carnê com {boletoNFQtdParcelas} boletos)</span>
+                      </span>
+                    </label>
+                  )}
+
+                  {boletoNFArquivoUnico || boletoNFQtdParcelas === 1 ? (
+                    <>
+                      <Input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png,.crm"
+                        onChange={(e) => setBoletoNFFile(e.target.files[0])}
+                        className="mt-2"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Formatos: PDF, JPG, PNG</p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-gray-600 mt-2">
+                      Anexe o boleto de cada parcela na lista acima — o cliente baixa o dele
+                      junto da parcela correspondente.
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t">
@@ -2196,7 +2269,12 @@ export default function PedidosFornecedor() {
                   </Button>
                   <Button
                     onClick={handleEnviarBoletoNF}
-                    disabled={boletoNFUploading || !boletoNFFile}
+                    disabled={
+                      boletoNFUploading ||
+                      (boletoNFArquivoUnico || boletoNFQtdParcelas === 1
+                        ? !boletoNFFile
+                        : boletoNFParcelas.some(p => !p.arquivo))
+                    }
                     className="bg-blue-600 hover:bg-blue-700"
                   >
                     <Upload className="w-4 h-4 mr-2" />
