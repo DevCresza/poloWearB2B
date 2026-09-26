@@ -77,7 +77,9 @@ export default function PedidosAdmin() {
         User.list(),
         Fornecedor.list(),
         Loja.list(),
-        Produto.list()
+        // So os 3 campos que viram mapa aqui. Com select('*') eram 986 kB
+        // de 642 produtos (variantes_cor, descricoes, fotos) para nada.
+        Produto.list({ columns: 'id,data_prevista_entrega,acao' })
       ]);
       setCurrentUser(me);
       setPedidos(pedidosList || []);

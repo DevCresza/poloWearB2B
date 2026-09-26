@@ -187,7 +187,8 @@ export default function PedidosFornecedor() {
       const [fornecedoresList, lojasList, produtosList] = await Promise.all([
         Fornecedor.list(),
         Loja.list(),
-        Produto.list()
+        // Aqui so se monta o mapa de entrega: duas colunas bastam.
+        Produto.list({ columns: 'id,data_prevista_entrega' })
       ]);
       setFornecedores(fornecedoresList);
 

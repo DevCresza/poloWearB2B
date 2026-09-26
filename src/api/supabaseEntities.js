@@ -19,8 +19,13 @@ const createSupabaseEntity = (tableName) => {
       try {
         // Monta a query base (filtros + ordenacao). Reconstruida a cada pagina
         // porque o query builder do supabase-js e de uso unico.
-        const montarQuery = () => {
-          let q = supabase.from(tableName).select('*');
+        // options.columns: traz so as colunas pedidas. A tela de Pedidos monta
+        // um mapa com 3 campos do produto e baixava a tabela inteira (986 kB de
+        // 642 produtos, com variantes_cor e descricoes) para isso.
+        const montarQuery = (comContagem = false) => {
+          let q = supabase
+            .from(tableName)
+            .select(options.columns || '*', comContagem ? { count: 'exact' } : undefined);
           if (options.filters) {
             Object.entries(options.filters).forEach(([key, value]) => {
               q = q.eq(key, value);
@@ -46,15 +51,49 @@ const createSupabaseEntity = (tableName) => {
         // mostravam dados e totais incompletos. Aqui buscamos em blocos ate
         // acabar, entao list() volta a significar "todos os registros".
         const PAGINA = 1000;
-        let todos = [];
-        let inicio = 0;
-        for (;;) {
-          const { data, error } = await montarQuery().range(inicio, inicio + PAGINA - 1);
+
+        // A primeira pagina vem com a contagem exata. Sabendo o total, as demais
+        // vao em PARALELO: em serie, pedidos_resumo (5.951 linhas) custava 6
+        // idas e voltas encadeadas, e no 4G fraco de celular isso e a diferenca
+        // entre a tela abrir e ficar girando para sempre.
+        const primeira = await montarQuery(true).range(0, PAGINA - 1);
+        if (primeira.error) throw primeira.error;
+        const inicial = primeira.data || [];
+
+        if (inicial.length < PAGINA) return inicial;
+
+        const total = primeira.count;
+        if (total == null) {
+          // Sem contagem (view ou RLS que nao devolve count) nao da para saber
+          // quantas paginas faltam: volta ao laco sequencial, que e lento mas
+          // nunca perde linha.
+          let todos = inicial;
+          let inicio = PAGINA;
+          for (;;) {
+            const { data, error } = await montarQuery().range(inicio, inicio + PAGINA - 1);
+            if (error) throw error;
+            const bloco = data || [];
+            todos = todos.concat(bloco);
+            if (bloco.length < PAGINA) break;
+            inicio += PAGINA;
+          }
+          return todos;
+        }
+
+        const paginasRestantes = Math.ceil(total / PAGINA) - 1;
+        if (paginasRestantes <= 0) return inicial;
+
+        const blocos = await Promise.all(
+          Array.from({ length: paginasRestantes }, (_, i) => {
+            const inicio = (i + 1) * PAGINA;
+            return montarQuery().range(inicio, inicio + PAGINA - 1);
+          })
+        );
+
+        let todos = inicial;
+        for (const { data, error } of blocos) {
           if (error) throw error;
-          const bloco = data || [];
-          todos = todos.concat(bloco);
-          if (bloco.length < PAGINA) break; // ultima pagina
-          inicio += PAGINA;
+          todos = todos.concat(data || []);
         }
         return todos;
       } catch (error) {
