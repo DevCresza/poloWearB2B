@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { User } from '@/api/entities';
 import { Carteira } from '@/api/entities';
-import { ConferenciaTitulosNF } from '@/api/entities';
+import { ConferenciaCobranca } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { Pedido } from '@/api/entities';
 import { Loja } from '@/api/entities';
@@ -185,7 +185,7 @@ export default function CarteiraFinanceira() {
       // A view ja vem recortada pela RLS, entao cada um ve o que e seu.
       if (currentUser.role === 'admin' || currentUser.tipo_negocio === 'fornecedor') {
         try {
-          setConferencia(await ConferenciaTitulosNF.list());
+          setConferencia(await ConferenciaCobranca.list());
         } catch (e) {
           // Conferencia e acessoria: se falhar, a carteira abre do mesmo jeito.
           console.warn('Erro ao carregar conferencia NF x titulos:', e);
@@ -759,48 +759,83 @@ export default function CarteiraFinanceira() {
         </div>
       </div>
 
-      {/* Conferencia: NF x soma dos titulos */}
+      {/* Conferencia de cobranca: nota x pedido x titulos */}
       {(() => {
-        const divergencias = conferencia.filter(c => c.situacao === 'divergencia');
+        const acima = conferencia.filter(c => c.situacao === 'faturado_acima_do_pedido');
+        const foraDaNota = conferencia.filter(c => c.situacao === 'titulos_fora_da_nota');
         const centavos = conferencia.filter(c => c.situacao === 'arredondamento');
-        if (divergencias.length === 0 && centavos.length === 0) return null;
+        if (acima.length === 0 && foraDaNota.length === 0 && centavos.length === 0) return null;
+
+        const grave = acima.length > 0;
+        const algumProblema = grave || foraDaNota.length > 0;
         return (
-          <Alert className={divergencias.length > 0 ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50'}>
-            <AlertTriangle className={`h-4 w-4 ${divergencias.length > 0 ? 'text-red-600' : 'text-gray-500'}`} />
-            <AlertDescription className={divergencias.length > 0 ? 'text-red-800' : 'text-gray-700'}>
-              {divergencias.length > 0 ? (
+          <Alert className={grave ? 'border-red-300 bg-red-50' : algumProblema ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-gray-50'}>
+            <AlertTriangle className={`h-4 w-4 ${grave ? 'text-red-600' : algumProblema ? 'text-amber-600' : 'text-gray-500'}`} />
+            <AlertDescription className={grave ? 'text-red-800' : algumProblema ? 'text-amber-900' : 'text-gray-700'}>
+
+              {/* Nota maior que o pedido. Vem primeiro de proposito: aqui a
+                  cobranca esta CERTA e a nota e que esta errada -- reemitir
+                  boleto para "acertar" cobraria o cliente pelo que ele nao
+                  comprou. Foi o que quase aconteceu com a NF 1199. */}
+              {acima.length > 0 && (
                 <>
                   <strong>
-                    {divergencias.length === 1
-                      ? '1 nota com cobrança fora do valor'
-                      : `${divergencias.length} notas com cobrança fora do valor`}
+                    {acima.length === 1
+                      ? '1 nota faturada acima do pedido'
+                      : `${acima.length} notas faturadas acima do pedido`}
                   </strong>
                   <br />
                   <span className="text-xs">
-                    A soma dos títulos na carteira não fecha com o valor da nota. Confira antes do cliente pagar a menos (ou a mais).
+                    A nota cobre mais do que o cliente comprou. Não reemita boleto para
+                    “acertar”: isso cobraria a diferença dele. Confira a nota com o fornecedor.
                   </span>
                   <ul className="mt-2 space-y-1 text-sm">
-                    {divergencias.map(d => (
+                    {acima.map(d => (
+                      <li key={d.faturamento_id}>
+                        NF <strong>#{d.numero_nf}</strong> — pedido {formatCurrency(Number(d.valor_pedido))},
+                        {' '}faturado {formatCurrency(Number(d.total_faturado))}
+                        {' '}(<strong>{formatCurrency(Number(d.excesso_faturado))} a mais</strong>)
+                        {d.titulos_pagos > 0 && (
+                          <span className="text-xs"> · {d.titulos_pagos} de {d.titulos} título(s) já pago(s)</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {/* Nota coerente com o pedido, mas a cobranca nao bate com ela. */}
+              {foraDaNota.length > 0 && (
+                <div className={acima.length > 0 ? 'mt-3 pt-3 border-t border-current/20' : ''}>
+                  <strong>
+                    {foraDaNota.length === 1
+                      ? '1 nota com cobrança fora do valor'
+                      : `${foraDaNota.length} notas com cobrança fora do valor`}
+                  </strong>
+                  <br />
+                  <span className="text-xs">
+                    A nota bate com o pedido, mas a soma dos títulos não bate com a nota.
+                  </span>
+                  <ul className="mt-2 space-y-1 text-sm">
+                    {foraDaNota.map(d => (
                       <li key={d.faturamento_id}>
                         NF <strong>#{d.numero_nf}</strong> — nota {formatCurrency(Number(d.valor_nota))},
                         {' '}títulos {formatCurrency(Number(d.soma_titulos))}
-                        {' '}(<strong>{Number(d.diferenca) > 0 ? 'falta' : 'excede'} {formatCurrency(Math.abs(Number(d.diferenca)))}</strong>)
+                        {' '}(<strong>{Number(d.diferenca_titulos) > 0 ? 'falta' : 'excede'} {formatCurrency(Math.abs(Number(d.diferenca_titulos)))}</strong>)
                         {d.titulos_pagos > 0 && (
                           <span className="text-xs"> · {d.titulos_pagos} de {d.titulos} já pago(s)</span>
                         )}
                       </li>
                     ))}
                   </ul>
-                </>
-              ) : (
-                <span className="text-xs">
-                  Conferência NF × títulos: tudo certo, fora {centavos.length} nota(s) com diferença de centavos
-                  (resíduo da divisão antiga de parcelas; não vale mexer em título já pago por isso).
-                </span>
+                </div>
               )}
-              {divergencias.length > 0 && centavos.length > 0 && (
-                <p className="mt-2 text-xs opacity-80">
-                  Há também {centavos.length} nota(s) com diferença de centavos — resíduo da divisão antiga, sem ação necessária.
+
+              {centavos.length > 0 && (
+                <p className={`text-xs ${algumProblema ? 'mt-3 opacity-80' : ''}`}>
+                  {algumProblema ? 'Há também ' : 'Conferência de cobrança: tudo certo, fora '}
+                  {centavos.length} nota(s) com diferença de centavos — resíduo da divisão antiga
+                  de parcelas, sem ação necessária.
                 </p>
               )}
             </AlertDescription>

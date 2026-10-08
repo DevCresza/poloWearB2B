@@ -284,9 +284,10 @@ export const Carteira = createSupabaseEntity('carteira');
 // fornecedor. users.total_vencido soma todos os fornecedores e nao serve
 // para a tela do fornecedor. Somente leitura.
 export const CarteiraTotaisPorFornecedor = createSupabaseEntity('carteira_totais_cliente_fornecedor');
-// View (security_invoker): notas cujos titulos nao somam o valor da NF.
-// Somente leitura; ja vem recortada pela RLS de faturamentos/carteira.
-export const ConferenciaTitulosNF = createSupabaseEntity('vw_conferencia_titulos_nf');
+// View (security_invoker): conferencia de cobranca por NF -- confronta a
+// nota com o pedido E com os titulos. Somente leitura; ja vem recortada
+// pela RLS de faturamentos/carteira.
+export const ConferenciaCobranca = createSupabaseEntity('vw_conferencia_cobranca');
 export const Meta = createSupabaseEntity('metas');
 export const UserTable = createSupabaseEntity('users'); // Tabela users (CRUD - diferente de User auth)
 export const Notificacao = createSupabaseEntity('notificacoes');
