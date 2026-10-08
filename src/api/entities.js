@@ -13,6 +13,7 @@ export { PendingUser } from './supabaseEntities';
 export { MovimentacaoEstoque } from './supabaseEntities';
 export { Carteira } from './supabaseEntities';
 export { CarteiraTotaisPorFornecedor } from './supabaseEntities';
+export { ConferenciaTitulosNF } from './supabaseEntities';
 export { Meta } from './supabaseEntities';
 export { Notificacao } from './supabaseEntities';
 export { Loja } from './supabaseEntities';

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { User } from '@/api/entities';
 import { Carteira } from '@/api/entities';
+import { ConferenciaTitulosNF } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { Pedido } from '@/api/entities';
 import { Loja } from '@/api/entities';
@@ -28,6 +29,8 @@ import { Store } from 'lucide-react';
 export default function CarteiraFinanceira() {
   const { lojaSelecionada, lojas, loading: lojasLoading } = useLojaContext();
   const [user, setUser] = useState(null);
+  // Notas cujos titulos nao somam o valor da NF (view vw_conferencia_titulos_nf)
+  const [conferencia, setConferencia] = useState([]);
   const [titulos, setTitulos] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
   const [clientesMap, setClientesMap] = useState({});
@@ -175,6 +178,18 @@ export default function CarteiraFinanceira() {
           if (p) pedidosMapTemp[p.id] = p;
         });
         setPedidosMap(pedidosMapTemp);
+      }
+
+      // Conferencia NF x titulos: so para quem pode agir (equipe e fornecedor).
+      // O cliente nao resolve divergencia de lancamento e so ficaria assustado.
+      // A view ja vem recortada pela RLS, entao cada um ve o que e seu.
+      if (currentUser.role === 'admin' || currentUser.tipo_negocio === 'fornecedor') {
+        try {
+          setConferencia(await ConferenciaTitulosNF.list());
+        } catch (e) {
+          // Conferencia e acessoria: se falhar, a carteira abre do mesmo jeito.
+          console.warn('Erro ao carregar conferencia NF x titulos:', e);
+        }
       }
 
       calculateStats(titulosList);
@@ -743,6 +758,55 @@ export default function CarteiraFinanceira() {
           </Button>
         </div>
       </div>
+
+      {/* Conferencia: NF x soma dos titulos */}
+      {(() => {
+        const divergencias = conferencia.filter(c => c.situacao === 'divergencia');
+        const centavos = conferencia.filter(c => c.situacao === 'arredondamento');
+        if (divergencias.length === 0 && centavos.length === 0) return null;
+        return (
+          <Alert className={divergencias.length > 0 ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50'}>
+            <AlertTriangle className={`h-4 w-4 ${divergencias.length > 0 ? 'text-red-600' : 'text-gray-500'}`} />
+            <AlertDescription className={divergencias.length > 0 ? 'text-red-800' : 'text-gray-700'}>
+              {divergencias.length > 0 ? (
+                <>
+                  <strong>
+                    {divergencias.length === 1
+                      ? '1 nota com cobrança fora do valor'
+                      : `${divergencias.length} notas com cobrança fora do valor`}
+                  </strong>
+                  <br />
+                  <span className="text-xs">
+                    A soma dos títulos na carteira não fecha com o valor da nota. Confira antes do cliente pagar a menos (ou a mais).
+                  </span>
+                  <ul className="mt-2 space-y-1 text-sm">
+                    {divergencias.map(d => (
+                      <li key={d.faturamento_id}>
+                        NF <strong>#{d.numero_nf}</strong> — nota {formatCurrency(Number(d.valor_nota))},
+                        {' '}títulos {formatCurrency(Number(d.soma_titulos))}
+                        {' '}(<strong>{Number(d.diferenca) > 0 ? 'falta' : 'excede'} {formatCurrency(Math.abs(Number(d.diferenca)))}</strong>)
+                        {d.titulos_pagos > 0 && (
+                          <span className="text-xs"> · {d.titulos_pagos} de {d.titulos} já pago(s)</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <span className="text-xs">
+                  Conferência NF × títulos: tudo certo, fora {centavos.length} nota(s) com diferença de centavos
+                  (resíduo da divisão antiga de parcelas; não vale mexer em título já pago por isso).
+                </span>
+              )}
+              {divergencias.length > 0 && centavos.length > 0 && (
+                <p className="mt-2 text-xs opacity-80">
+                  Há também {centavos.length} nota(s) com diferença de centavos — resíduo da divisão antiga, sem ação necessária.
+                </p>
+              )}
+            </AlertDescription>
+          </Alert>
+        );
+      })()}
 
       {/* Alertas de Vencimento */}
       {stats.proximosVencimentos > 0 && (user?.tipo_negocio === 'multimarca' || user?.tipo_negocio === 'franqueado') && (
