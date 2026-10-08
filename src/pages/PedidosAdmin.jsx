@@ -60,8 +60,11 @@ export default function PedidosAdmin() {
     loadData();
   }, []);
 
-  const loadData = async () => {
-    setLoading(true);
+  // `silencioso`: recarrega sem acender o spinner de tela cheia, que destroi e
+  // remonta a lista e joga o scroll para o topo. Mesma razao do PedidosFornecedor:
+  // depois de mexer em UM pedido a lista ja esta na tela.
+  const loadData = async ({ silencioso = false } = {}) => {
+    if (!silencioso) setLoading(true);
     try {
       const me = await User.me();
 
@@ -450,7 +453,7 @@ export default function PedidosAdmin() {
     setUpdatingPedidoId(pedidoId);
     try {
       await Pedido.update(pedidoId, { status: newStatus });
-      await loadData();
+      await loadData({ silencioso: true });
     } catch (_error) {
       toast.error('Falha ao atualizar status.');
     } finally {
@@ -466,7 +469,7 @@ export default function PedidosAdmin() {
         ...(newStatus === 'pago' && { data_pagamento: new Date().toISOString() })
       };
       await Pedido.update(pedidoId, updateData);
-      await loadData();
+      await loadData({ silencioso: true });
     } catch (_error) {
       toast.error('Falha ao atualizar status do pagamento.');
     } finally {
@@ -1154,7 +1157,7 @@ export default function PedidosAdmin() {
           onSuccess={() => {
             setShowFaturarModal(false);
             setSelectedPedido(null);
-            loadData();
+            loadData({ silencioso: true });
           }}
         />
       )}

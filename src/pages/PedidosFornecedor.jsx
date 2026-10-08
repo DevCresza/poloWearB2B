@@ -109,11 +109,19 @@ export default function PedidosFornecedor() {
   const [boletoUnicoFile, setBoletoUnicoFile] = useState(null);
 
   useEffect(() => {
-    loadPedidos(); // Changed from loadData to loadPedidos
+    // Carga inicial: aqui o spinner e legitimo, nao ha lista na tela ainda.
+    loadPedidos();
   }, []);
 
-  const loadPedidos = async () => { // Renamed from loadData
-    setLoading(true);
+  // `silencioso`: recarrega os dados SEM acender o spinner de tela cheia.
+  //
+  // O `if (loading)` la embaixo troca a pagina inteira pelo spinner, entao o
+  // DOM da lista e destruido e remontado -- e o scroll volta ao topo. Com 400
+  // pedidos, o fornecedor aprovava um e perdia o lugar, sem conseguir achar o
+  // mesmo pedido para imprimir. Depois de mexer em UM pedido a lista ja esta
+  // na tela: basta atualizar os dados por baixo.
+  const loadPedidos = async ({ silencioso = false } = {}) => { // Renamed from loadData
+    if (!silencioso) setLoading(true);
     try {
       const currentUser = await User.me();
 
@@ -253,7 +261,7 @@ export default function PedidosFornecedor() {
       toast.success('Pedido aprovado com sucesso!');
       setShowApprovalModal(false);
       setDataEntrega('');
-      loadPedidos(); // Changed from loadData
+      loadPedidos({ silencioso: true }); // Changed from loadData
     } catch (error) {
       toast.error('Erro ao aprovar pedido');
     }
@@ -285,7 +293,7 @@ export default function PedidosFornecedor() {
       toast.info('Pedido recusado');
       setShowRejectModal(false);
       setMotivoRecusa('');
-      loadPedidos(); // Changed from loadData
+      loadPedidos({ silencioso: true }); // Changed from loadData
     } catch (error) {
       toast.error('Erro ao recusar pedido');
     }
@@ -400,7 +408,7 @@ export default function PedidosFornecedor() {
       toast.info('Informacoes de envio salvas!');
       setShowEnvioModal(false);
       resetEnvioForm();
-      loadPedidos();
+      loadPedidos({ silencioso: true });
     } catch (error) {
       toast.error('Erro ao atualizar informacoes de envio');
     }
@@ -441,7 +449,7 @@ export default function PedidosFornecedor() {
       });
 
       toast.info('Método de pagamento alterado!');
-      loadPedidos(); // Changed from loadData
+      loadPedidos({ silencioso: true }); // Changed from loadData
     } catch (error) {
       toast.error('Erro ao alterar método de pagamento');
     }
@@ -547,7 +555,7 @@ export default function PedidosFornecedor() {
       setBoletoFile(null);
       setQtdParcelas(1);
       setParcelas([{ dataVencimento: '', boletoFile: null }]);
-      loadPedidos();
+      loadPedidos({ silencioso: true });
     } catch (error) {
       console.error('Erro ao enviar boleto:', error);
       toast.error('Erro ao enviar boleto');
@@ -611,7 +619,7 @@ export default function PedidosFornecedor() {
       setNfFile(null);
       setNfNumero('');
       setNfDataEmissao('');
-      loadPedidos();
+      loadPedidos({ silencioso: true });
     } catch (error) {
       console.error('Erro ao atualizar NF:', error);
       toast.error('Erro ao atualizar nota fiscal');
@@ -661,7 +669,7 @@ export default function PedidosFornecedor() {
       toast.info('Pedido cancelado');
       setShowCancelarModal(false);
       setMotivoCancelamento('');
-      loadPedidos();
+      loadPedidos({ silencioso: true });
     } catch (error) {
       toast.error('Erro ao cancelar pedido');
     }
@@ -1145,7 +1153,7 @@ export default function PedidosFornecedor() {
       }
       toast.success(`Boleto enviado para NF #${boletoNFSelected.numero_nf}!`);
       setShowBoletoNFModal(false);
-      loadPedidos();
+      loadPedidos({ silencioso: true });
     } catch (error) {
       console.error('Erro ao enviar boleto:', error);
       toast.error('Erro ao enviar boleto: ' + (error?.message || 'Erro desconhecido'));
@@ -1922,7 +1930,7 @@ export default function PedidosFornecedor() {
           pedido={selectedPedido}
           clientes={clientes}
           onClose={() => setShowFaturarModal(false)}
-          onSuccess={() => { setShowFaturarModal(false); loadPedidos(); }}
+          onSuccess={() => { setShowFaturarModal(false); loadPedidos({ silencioso: true }); }}
         />
       )}
 
