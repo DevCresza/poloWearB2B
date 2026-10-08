@@ -598,6 +598,14 @@ export default function Catalogo() {
   // disponibilidade/data). Uma capsula aparece se tiver ao menos um produto
   // que casa com o filtro. Os demais filtros (categoria/genero) nao se aplicam
   // as capsulas para nao esconder capsulas que legitimamente misturam itens.
+  // Selo de sortimento obrigatorio: a capa da capsula marca quando QUALQUER
+  // produto dela precisa estar em toda loja. A obrigacao e do produto, entao
+  // a capsula so reflete o que tem dentro.
+  const capsulaTemObrigatorio = (capsula) => {
+    const ids = Array.isArray(capsula.produto_ids) ? capsula.produto_ids : [];
+    return ids.some(id => todosProdutos.find(p => p.id === id)?.compra_obrigatoria);
+  };
+
   const capsulasFiltradas = activeCapsulas.filter(capsula => {
     // Fornecedor vem da propria capsula (coluna fornecedor_id), nao dos
     // produtos: filtrar por fornecedor escondia so os produtos e deixava as
@@ -1273,12 +1281,20 @@ export default function Catalogo() {
                   onClick={() => handleSelectCapsula(capsula)}
                   className="shrink-0 w-40 sm:w-48 cursor-pointer group"
                 >
-                  <div className="aspect-square rounded-xl overflow-hidden bg-gradient-to-br from-pink-100 to-purple-100 mb-2">
+                  <div className="relative aspect-square rounded-xl overflow-hidden bg-gradient-to-br from-pink-100 to-purple-100 mb-2">
                     {capsula.imagem_capa_url ? (
                       <img src={capsula.imagem_capa_url} alt={capsula.nome} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
                         <Sparkles className="w-10 h-10 text-purple-400" />
+                      </div>
+                    )}
+                    {capsulaTemObrigatorio(capsula) && (
+                      <div className="absolute top-1.5 left-1.5 right-1.5">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow">
+                          <Star className="w-3 h-3 fill-current" />
+                          Compra obrigatória
+                        </span>
                       </div>
                     )}
                   </div>
@@ -1502,6 +1518,12 @@ export default function Catalogo() {
                       <Badge className="bg-yellow-500 text-white">
                         <Star className="w-3 h-3 mr-1 fill-current" />
                         Destaque
+                      </Badge>
+                    )}
+                    {selectedProduto.compra_obrigatoria && (
+                      <Badge className="bg-amber-600 text-white">
+                        <Star className="w-3 h-3 mr-1 fill-current" />
+                        Compra obrigatória
                       </Badge>
                     )}
                     {selectedProduto.disponibilidade === 'pre_venda' && (

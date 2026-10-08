@@ -69,6 +69,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
     venda_por_tamanho: false,
     estoque_por_tamanho: {}, // { "36": 20, "37": 15, ... }
     is_destaque: false,
+    compra_obrigatoria: false,
     is_mais_vendido: false,
     ativo: true,
     visivel_apenas_capsulas: false,
@@ -1344,6 +1345,25 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                   className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                 >
                   Produto em Destaque
+                </label>
+              </div>
+
+              {/* Diferente de "destaque", que e vitrine: aqui e obrigacao de
+                  sortimento -- produto que toda loja precisa ter. */}
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="compra_obrigatoria"
+                  checked={formData.compra_obrigatoria}
+                  onCheckedChange={(checked) => setFormData({...formData, compra_obrigatoria: checked})}
+                />
+                <label
+                  htmlFor="compra_obrigatoria"
+                  className="text-sm font-medium leading-none cursor-pointer"
+                >
+                  Compra Obrigatória
+                  <span className="block text-xs font-normal text-gray-500">
+                    Produto que toda loja precisa ter
+                  </span>
                 </label>
               </div>
 
