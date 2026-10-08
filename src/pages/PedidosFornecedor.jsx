@@ -414,8 +414,18 @@ export default function PedidosFornecedor() {
     }
   };
 
+  const ROTULO_PAGAMENTO = {
+    boleto_faturado: 'Boleto Faturado',
+    boleto: 'Boleto',
+    cartao_credito: 'Cartão de Crédito',
+    pix: 'PIX',
+    a_vista: 'À Vista',
+    transferencia: 'Transferência'
+  };
+
   const handleMudarMetodoPagamento = async (pedido, novoMetodo) => {
-    if (!confirm(`Deseja alterar o método de pagamento para ${novoMetodo.toUpperCase()}?`)) {
+    const rotulo = ROTULO_PAGAMENTO[novoMetodo] || novoMetodo;
+    if (!confirm(`Deseja alterar o método de pagamento para ${rotulo}?`)) {
       return;
     }
 
@@ -439,8 +449,8 @@ export default function PedidosFornecedor() {
             <div style="padding: 30px; background: white;">
               <p>O método de pagamento do seu pedido <strong>#${pedido.id.slice(-8).toUpperCase()}</strong> foi alterado.</p>
               <div style="background: #dbeafe; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                <p><strong>Método anterior:</strong> ${pedido.metodo_pagamento.toUpperCase()}</p>
-                <p><strong>Novo método:</strong> ${novoMetodo.toUpperCase()}</p>
+                <p><strong>Método anterior:</strong> ${ROTULO_PAGAMENTO[pedido.metodo_pagamento] || pedido.metodo_pagamento}</p>
+                <p><strong>Novo método:</strong> ${rotulo}</p>
               </div>
               <p>Esta alteração foi feita pelo fornecedor.</p>
             </div>
@@ -1748,12 +1758,30 @@ export default function PedidosFornecedor() {
                                 <FileText className="w-4 h-4 mr-2" />
                                 Faturar Pedido
                               </Button>
-                              <Button
-                                variant="outline"
-                                onClick={() => handleMudarMetodoPagamento(pedido, pedido.metodo_pagamento === 'boleto' ? 'a_vista' : 'boleto')}
+                              {/* Antes era um botao que so alternava boleto <-> a vista.
+                                  O fornecedor nao tinha como escolher cartao nem
+                                  boleto faturado, que e a forma da esmagadora
+                                  maioria dos pedidos. */}
+                              <Select
+                                value={pedido.metodo_pagamento || ''}
+                                onValueChange={(novo) => {
+                                  if (novo !== pedido.metodo_pagamento) {
+                                    handleMudarMetodoPagamento(pedido, novo);
+                                  }
+                                }}
                               >
-                                Mudar para {pedido.metodo_pagamento === 'boleto' ? 'À Vista' : 'Boleto'}
-                              </Button>
+                                <SelectTrigger className="w-[200px]">
+                                  <SelectValue placeholder="Forma de pagamento" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="boleto_faturado">Boleto Faturado</SelectItem>
+                                  <SelectItem value="boleto">Boleto</SelectItem>
+                                  <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
+                                  <SelectItem value="pix">PIX</SelectItem>
+                                  <SelectItem value="a_vista">À Vista</SelectItem>
+                                  <SelectItem value="transferencia">Transferência</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </>
                           )}
 

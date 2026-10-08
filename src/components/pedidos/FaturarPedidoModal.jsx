@@ -544,10 +544,15 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o método" />
               </SelectTrigger>
+              {/* Faltavam cartao_credito e boleto_faturado -- este ultimo e a
+                  forma de 5.484 dos 6.220 pedidos. Sem eles na lista, o
+                  fornecedor nao conseguia corrigir a forma de pagamento aqui. */}
               <SelectContent>
+                <SelectItem value="boleto_faturado">Boleto Faturado</SelectItem>
                 <SelectItem value="boleto">Boleto</SelectItem>
-                <SelectItem value="a_vista">À Vista</SelectItem>
+                <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
                 <SelectItem value="pix">PIX</SelectItem>
+                <SelectItem value="a_vista">À Vista</SelectItem>
                 <SelectItem value="transferencia">Transferência</SelectItem>
               </SelectContent>
             </Select>
