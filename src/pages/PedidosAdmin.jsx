@@ -30,6 +30,19 @@ import { can, PERM } from '@/utils/permissoes';
 export default function PedidosAdmin() {
   const navigate = useNavigate();
   const [pedidos, setPedidos] = useState([]);
+  // Quantos pedidos foram carregados x quantos existem. Sem isso a tela
+  // mentiria em "Mostrando X de Y" ao trabalhar com uma janela.
+  const [totalPedidos, setTotalPedidos] = useState(0);
+  const [carregandoTudo, setCarregandoTudo] = useState(false);
+
+  // A lista nao le endereco_entrega (so o modal, que refaz Pedido.get ao
+  // abrir), e esse jsonb e 1.242 kB dos 3.727 kB do resumo -- um terco do
+  // peso para nada. Lista explicita porque PostgREST nao tem "menos esta".
+  const COLUNAS_LISTA = 'id,comprador_user_id,fornecedor_id,status,status_pagamento,valor_total,desconto,valor_frete,valor_final,data_prevista_entrega,data_entrega_real,transportadora,codigo_rastreio,nota_fiscal,observacoes,observacoes_internas,created_date,updated_at,franqueado_id,mes_referencia,metodo_pagamento,metodo_pagamento_original,data_pagamento,data_aprovacao,data_envio_real,nf_url,nf_numero,nf_data_upload,boleto_url,boleto_data_upload,cliente_confirmou_boleto,cliente_confirmou_nf,cliente_confirmou_recebimento,observacoes_comprador,observacoes_fornecedor,urgente,motivo_recusa,comprovante_pagamento_url,comprovante_pagamento_data,qtd_parcelas,parcelas_info,link_rastreio,valor_frete_fob,data_confirmacao_nf,data_confirmacao_boleto,data_confirmacao_recebimento,loja_id,tipo_frete,frete_incluso_boleto,frete_modo_cobranca,impresso,data_impressao,valor_faturado,valor_quebra,observacao_recebimento,estoque_baixado,pix_info,itens_revisados_em,cartao_link_pagamento,emitido_por_admin_user_id,criado_por_user_id,criado_por_papel,qtd_pecas,meses_entrega';
+
+  // Janela padrao. Sao 6.358 pedidos; no 4G de celular a tela nao abria.
+  // Os mais recentes sao o trabalho do dia; o resto entra sob demanda.
+  const JANELA_PADRAO = 1000;
   const [users, setUsers] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
   const [lojasMap, setLojasMap] = useState({});
@@ -63,8 +76,9 @@ export default function PedidosAdmin() {
   // `silencioso`: recarrega sem acender o spinner de tela cheia, que destroi e
   // remonta a lista e joga o scroll para o topo. Mesma razao do PedidosFornecedor:
   // depois de mexer em UM pedido a lista ja esta na tela.
-  const loadData = async ({ silencioso = false } = {}) => {
+  const loadData = async ({ silencioso = false, tudo = false } = {}) => {
     if (!silencioso) setLoading(true);
+    if (tudo) setCarregandoTudo(true);
     try {
       const me = await User.me();
 
@@ -73,10 +87,15 @@ export default function PedidosAdmin() {
       // PedidosFornecedor — aqui ele via o total geral de TODOS os pedidos do
       // sistema, nao so dos dele.
 
-      const [pedidosList, usersList, fornecedoresList, lojasList, produtosList] = await Promise.all([
+      const [pedidosList, totalNoBanco, usersList, fornecedoresList, lojasList, produtosList] = await Promise.all([
         // Resumo leve (sem o itens jsonb): a lista/kanban so precisam de escalares
         // + qtd_pecas + meses_entrega. O itens completo e buscado ao abrir/exportar.
-        PedidoResumo.list({ sort: '-created_date' }),
+        PedidoResumo.list({
+          sort: '-created_date',
+          columns: COLUNAS_LISTA,
+          ...(tudo ? {} : { limit: JANELA_PADRAO })
+        }),
+        PedidoResumo.count().catch(() => null),
         User.list(),
         Fornecedor.list(),
         Loja.list(),
@@ -86,6 +105,7 @@ export default function PedidosAdmin() {
       ]);
       setCurrentUser(me);
       setPedidos(pedidosList || []);
+      setTotalPedidos(totalNoBanco ?? (pedidosList || []).length);
       setUsers(usersList || []);
       setFornecedores(fornecedoresList || []);
 
@@ -120,6 +140,7 @@ export default function PedidosAdmin() {
       toast.error('Não foi possível carregar os pedidos. Veja o aviso na tela.');
     } finally {
       setLoading(false);
+      setCarregandoTudo(false);
     }
   };
 
@@ -946,7 +967,26 @@ export default function PedidosAdmin() {
           {temFiltrosAtivos && (
             <div className="text-sm text-gray-500 pt-2 border-t">
               Filtros ativos: {filtrosStatus.length + filtrosPagamento.length + filtrosFornecedor.length + filtrosCliente.length + (filtroPeriodo !== 'all' ? 1 : 0)} |
-              Mostrando {filteredPedidos.length} de {pedidos.length} pedidos
+              Mostrando {filteredPedidos.length} de {pedidos.length} pedidos carregados
+            </div>
+          )}
+
+          {/* A janela precisa ser VISIVEL: filtrar sobre um recorte sem avisar
+              esconderia pedido antigo e a pessoa concluiria que ele nao existe. */}
+          {totalPedidos > pedidos.length && (
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t text-sm">
+              <span className="text-amber-800">
+                Carregados os <strong>{pedidos.length}</strong> pedidos mais recentes,
+                de <strong>{totalPedidos}</strong>. Os filtros e a busca valem só sobre eles.
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={carregandoTudo}
+                onClick={() => loadData({ silencioso: true, tudo: true })}
+              >
+                {carregandoTudo ? 'Carregando…' : 'Carregar todos'}
+              </Button>
             </div>
           )}
         </CardContent>

@@ -45,6 +45,13 @@ export default function PedidosFornecedor() {
   const [lojasMap, setLojasMap] = useState({});
   // produto_id -> data_prevista_entrega (define o mes de faturamento de cada item)
   const [produtoEntregaMap, setProdutoEntregaMap] = useState({});
+  // Esta tela precisa do jsonb `itens` (filtros de mes, exports, faturar),
+  // entao nao da para enxugar coluna como em PedidosAdmin -- a saida e
+  // trazer menos LINHAS. Sem janela, o admin aqui baixava os 6.358 pedidos
+  // completos: 12 MB, que no celular simplesmente nao termina.
+  const [totalPedidos, setTotalPedidos] = useState(0);
+  const [carregandoTudo, setCarregandoTudo] = useState(false);
+  const JANELA_PADRAO = 500;
   // '<cliente_id>|<fornecedor_id>' -> { total_em_aberto, total_vencido }
   const [totaisPorCliente, setTotaisPorCliente] = useState({});
   const [loading, setLoading] = useState(true);
@@ -122,8 +129,9 @@ export default function PedidosFornecedor() {
   // pedidos, o fornecedor aprovava um e perdia o lugar, sem conseguir achar o
   // mesmo pedido para imprimir. Depois de mexer em UM pedido a lista ja esta
   // na tela: basta atualizar os dados por baixo.
-  const loadPedidos = async ({ silencioso = false } = {}) => { // Renamed from loadData
+  const loadPedidos = async ({ silencioso = false, tudo = false } = {}) => { // Renamed from loadData
     if (!silencioso) setLoading(true);
+    if (tudo) setCarregandoTudo(true);
     try {
       const currentUser = await User.me();
 
@@ -147,7 +155,11 @@ export default function PedidosFornecedor() {
       let fornecedorAtualId = null;
 
       if (currentUser.role === 'admin') {
-        pedidosList = await Pedido.list({ sort: '-created_date' });
+        pedidosList = await Pedido.list({
+          sort: '-created_date',
+          ...(tudo ? {} : { limit: JANELA_PADRAO })
+        });
+        setTotalPedidos(await Pedido.count().catch(() => pedidosList.length));
         clientesList = await User.list(); // Load all users for admin
       } else if (currentUser.tipo_negocio === 'fornecedor') {
         // Usar fornecedor_id do usuário diretamente (se disponível)
@@ -170,7 +182,14 @@ export default function PedidosFornecedor() {
         if (fornecedor) {
           setFornecedorAtual(fornecedor);
           fornecedorAtualId = fornecedorId;
-          pedidosList = await Pedido.filter({ fornecedor_id: fornecedorId }, '-created_date');
+          pedidosList = await Pedido.filter(
+            { fornecedor_id: fornecedorId },
+            '-created_date',
+            tudo ? null : JANELA_PADRAO
+          );
+          setTotalPedidos(
+            await Pedido.count({ fornecedor_id: fornecedorId }).catch(() => pedidosList.length)
+          );
 
           // Buscar todos os clientes para evitar problemas de "não encontrado"
           const todosClientes = await User.list();
@@ -233,6 +252,7 @@ export default function PedidosFornecedor() {
     } catch (error) {
     } finally {
       setLoading(false);
+      setCarregandoTudo(false);
     }
   };
 
@@ -1560,6 +1580,25 @@ export default function PedidosFornecedor() {
 
       {/* Lista de Pedidos */}
       <div className="space-y-4">
+        {/* A janela tem que aparecer: filtrar sobre um recorte sem avisar
+            esconderia pedido antigo e a pessoa concluiria que ele sumiu. */}
+        {totalPedidos > pedidos.length && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+            <span className="text-amber-900">
+              Carregados os <strong>{pedidos.length}</strong> pedidos mais recentes,
+              de <strong>{totalPedidos}</strong>. Os filtros valem só sobre eles.
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={carregandoTudo}
+              onClick={() => loadPedidos({ silencioso: true, tudo: true })}
+            >
+              {carregandoTudo ? 'Carregando…' : 'Carregar todos'}
+            </Button>
+          </div>
+        )}
+
         {filteredPedidos.length === 0 ? (
           <Card>
             <CardContent className="p-12 text-center">
