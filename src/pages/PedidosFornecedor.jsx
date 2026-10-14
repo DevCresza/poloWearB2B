@@ -32,6 +32,7 @@ import PedidoItensEditModal from '@/components/pedidos/PedidoItensEditModal';
 import FaturarPedidoModal from '../components/pedidos/FaturarPedidoModal';
 import { formatCurrency, exportToPDF, exportToCSV, formatDate, getMesFaturamentoItem, getMesEntregaItem, getMesesEntregaPedido, getMesesFaturamentoPedido, getMesFaturamentoItemKey, formatMesesEntrega, formatMesAno } from '@/utils/exportUtils';
 import { validarVencimentos } from '@/utils/vencimentoUtils';
+import { dividirBoleto, valorInformado } from '@/utils/divisaoBoleto';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
 
@@ -1106,13 +1107,13 @@ export default function PedidosFornecedor() {
 
   const handleEnviarBoletoNF = async () => {
     if (!boletoNFSelected) { toast.info('Selecione uma Nota Fiscal'); return; }
-    const valorNota = boletoNFSelected.valor_total || 0;
-    const valorCartao = Math.max(0, parseFloat(String(boletoNFValorCartao).replace(',', '.')) || 0);
-    if (valorCartao >= valorNota && valorCartao > 0) {
-      toast.error('A parte no cartão tem que ser menor que o valor da nota. Se for tudo no cartão, troque a forma de pagamento em vez de dividir.');
-      return;
-    }
-    const valorBoleto = valorNota - valorCartao;
+    const divisao = dividirBoleto(
+      boletoNFSelected.valor_total || 0,
+      valorInformado(boletoNFValorCartao),
+      boletoNFQtdParcelas
+    );
+    if (divisao.erro) { toast.error(divisao.erro); return; }
+    const { valorCartao, valorBoleto } = divisao;
 
     const temDatas = boletoNFParcelas.some(p => p.dataVencimento);
     // Sem datas nao nascem parcelas, entao so o arquivo unico faz sentido.
@@ -1167,22 +1168,7 @@ export default function PedidosFornecedor() {
           else await Carteira.delete(antiga.id);
         }
 
-        // O boleto cobre so a parte dele. Antes dividia o valor CHEIO da nota,
-        // o que com pagamento dividido cobraria o cliente duas vezes.
-        //
-        // Divisao em centavos inteiros, com a sobra espalhada nas primeiras
-        // parcelas. Dividir direto em float deixava a soma dos titulos fora do
-        // valor da nota por ate 2 centavos (22 das 200 notas em producao hoje).
-        const centavosBoleto = Math.round(valorBoleto * 100);
-        const centavosBase = Math.floor(centavosBoleto / boletoNFQtdParcelas);
-        const sobraCentavos = centavosBoleto - centavosBase * boletoNFQtdParcelas;
-        const valorDaParcela = (i) => (centavosBase + (i < sobraCentavos ? 1 : 0)) / 100;
-
-        // O cartao vira mais um titulo da nota. Precisa de parcela_numero para
-        // contar como divida real (total_em_aberto ignora quem nao tem), e o
-        // indice unico (faturamento_id, parcela_numero) nao aceita repetido --
-        // por isso ele entra como o ultimo numero, nao como "parcela 1".
-        const totalTitulos = boletoNFQtdParcelas + (valorCartao > 0 ? 1 : 0);
+        const { valorDaParcela, totalTitulos } = divisao;
         const metodoBoleto = boletoNFSelected.metodo_pagamento
           || selectedPedido.metodo_pagamento || 'boleto';
 
