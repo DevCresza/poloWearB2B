@@ -23,7 +23,7 @@ import { Faturamento } from '@/api/entities';
 import { UploadFile } from '@/api/integrations';
 import { formatDateTime, formatCurrency, getMesesEntregaPedido, getMesesFaturamentoPedido, formatMesAno } from '@/utils/exportUtils';
 import { parseNFeXml } from '@/utils/nfeXml';
-import { dividirBoleto, valorInformado } from '@/utils/divisaoBoleto';
+import { conferirDivisao, parcelar, valorInformado, ehBoleto, rotuloMetodo, METODOS } from '@/utils/divisaoPagamento';
 import { validarVencimentos } from '@/utils/vencimentoUtils';
 import { Store } from 'lucide-react';
 import { jsPDF } from 'jspdf';
@@ -112,10 +112,6 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   const [boletoFatFile, setBoletoFatFile] = useState(null);
   const [boletoFatQtdParcelas, setBoletoFatQtdParcelas] = useState(1);
   const [boletoFatParcelas, setBoletoFatParcelas] = useState([{ dataVencimento: '' }]);
-  // Pagamento dividido: quanto DESTA nota sai no cartao. Mesma regra do
-  // modal do fornecedor (PedidosFornecedor.handleEnviarBoletoNF) -- se uma
-  // mudar, a outra tem que mudar junto.
-  const [boletoFatValorCartao, setBoletoFatValorCartao] = useState('');
   const [uploadingBoletoFat, setUploadingBoletoFat] = useState(false);
 
   // Verificar se é cliente (somente visualização)
@@ -216,6 +212,13 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     setBoletoFatParcelas(novas);
   };
 
+  // Quanto DESTA nota sai em boleto, pela divisao declarada ao faturar.
+  const parteBoletoDaNota = (f) => {
+    const linhas = Array.isArray(f?.pagamentos) ? f.pagamentos : [];
+    if (linhas.length === 0) return f?.valor_total || 0;
+    return linhas.filter(l => ehBoleto(l.metodo)).reduce((s2, l) => s2 + (Number(l.valor) || 0), 0);
+  };
+
   const handleBoletoFatDataChange = (index, value) => {
     const novas = [...boletoFatParcelas];
     novas[index] = { ...novas[index], dataVencimento: value };
@@ -236,13 +239,18 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       toast.info('Selecione o arquivo do boleto');
       return;
     }
-    const divisao = dividirBoleto(
-      fat.valor_total || 0,
-      valorInformado(boletoFatValorCartao),
-      boletoFatQtdParcelas
-    );
-    if (divisao.erro) { toast.error(divisao.erro); return; }
-    const { valorCartao, valorBoleto } = divisao;
+    // A divisao ja foi declarada ao faturar (faturamentos.pagamentos). Aqui o
+    // boleto cobre so a parte dele; nota antiga, sem lista, e o valor cheio.
+    const linhasPagamento = Array.isArray(fat.pagamentos) ? fat.pagamentos : [];
+    const parteBoleto = linhasPagamento.length > 0
+      ? linhasPagamento.filter(l => ehBoleto(l.metodo)).reduce((s2, l) => s2 + (Number(l.valor) || 0), 0)
+      : (fat.valor_total || 0);
+
+    if (parteBoleto <= 0) {
+      toast.error('Esta nota não tem parte em boleto. Confira a divisão do pagamento no faturamento.');
+      return;
+    }
+    const valoresParcelas = parcelar(parteBoleto, boletoFatQtdParcelas);
 
     const temParcelasConfiguradas = boletoFatParcelas.some(p => p.dataVencimento);
     if (temParcelasConfiguradas && boletoFatParcelas.some(p => !p.dataVencimento)) {
@@ -259,8 +267,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       await Faturamento.update(fat.id, {
         boleto_url: result.file_url,
         boleto_data_upload: new Date().toISOString(),
-        qtd_parcelas: boletoFatQtdParcelas,
-        valor_cartao: valorCartao
+        qtd_parcelas: boletoFatQtdParcelas
       });
 
       // Create parcelas in carteira linked to this faturamento
@@ -273,12 +280,16 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
         const numerosPagos = new Set();
         for (const antiga of (jaExistentes || [])) {
           if (!antiga.parcela_numero) continue;
+          // So os titulos DE BOLETO sao refeitos aqui. A parte paga a vista,
+          // no cartao ou em pix virou titulo na hora de faturar e nao tem nada
+          // a ver com este reenvio -- apagar junto sumiria com a cobranca.
+          if (antiga.metodo_pagamento && !ehBoleto(antiga.metodo_pagamento)) continue;
           if (antiga.status === 'pago') numerosPagos.add(antiga.parcela_numero);
           else await Carteira.delete(antiga.id);
         }
 
-        const { valorDaParcela, totalTitulos } = divisao;
-        const metodoBoleto = fat.metodo_pagamento || pedido.metodo_pagamento || 'boleto';
+        const metodoBoleto = linhasPagamento.find(l => ehBoleto(l.metodo))?.metodo
+          || fat.metodo_pagamento || pedido.metodo_pagamento || 'boleto';
 
         for (let i = 0; i < boletoFatQtdParcelas; i++) {
           // Parcela ja quitada nao volta a ser cobrada.
@@ -288,14 +299,14 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
             faturamento_id: fat.id,
             tipo: 'a_receber',
             status: 'pendente',
-            valor: valorDaParcela(i),
+            valor: valoresParcelas[i],
             data_vencimento: boletoFatParcelas[i].dataVencimento,
             parcela_numero: i + 1,
-            total_parcelas: totalTitulos,
+            total_parcelas: boletoFatQtdParcelas,
             metodo_pagamento: metodoBoleto,
             boleto_url: result.file_url,
-            descricao: totalTitulos > 1
-              ? `Parcela ${i + 1}/${totalTitulos} - NF #${fat.numero_nf}`
+            descricao: boletoFatQtdParcelas > 1
+              ? `Parcela ${i + 1}/${boletoFatQtdParcelas} - NF #${fat.numero_nf}`
               : `Boleto - NF #${fat.numero_nf}`,
             loja_id: pedido.loja_id || null,
             cliente_user_id: pedido.comprador_user_id || null,
@@ -303,36 +314,11 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
           });
         }
 
-        // A parte do cartao tambem e titulo: sem ela o em-aberto do cliente
-        // ficaria menor que a nota e pareceria cobranca faltando. Nasce
-        // pendente e o financeiro da baixa pelo mesmo "Registrar como pago".
-        if (valorCartao > 0 && !numerosPagos.has(totalTitulos)) {
-          await Carteira.create({
-            pedido_id: pedido.id,
-            faturamento_id: fat.id,
-            tipo: 'a_receber',
-            status: 'pendente',
-            valor: valorCartao,
-            data_vencimento: boletoFatParcelas[0]?.dataVencimento || null,
-            parcela_numero: totalTitulos,
-            total_parcelas: totalTitulos,
-            metodo_pagamento: 'cartao_credito',
-            descricao: `Cartão de Crédito - NF #${fat.numero_nf}`,
-            loja_id: pedido.loja_id || null,
-            cliente_user_id: pedido.comprador_user_id || null,
-            fornecedor_id: pedido.fornecedor_id || null
-          });
-        }
       }
 
-      toast.success(
-        valorCartao > 0
-          ? `NF #${fat.numero_nf}: ${formatCurrency(valorCartao)} no cartão e ${formatCurrency(valorBoleto)} em boleto.`
-          : 'Boleto enviado para NF #' + fat.numero_nf
-      );
+      toast.success(`Boleto enviado para NF #${fat.numero_nf} (${formatCurrency(parteBoleto)}).`);
       setBoletoFatId(null);
       setBoletoFatFile(null);
-      setBoletoFatValorCartao('');
       // Reload faturamentos
       const list = await Faturamento.filter({ pedido_id: pedido.id }, '-created_date');
       setFaturamentos(list || []);
@@ -3143,62 +3129,16 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                                 <div className="flex items-end">
                                   <div className="text-xs text-blue-800">
                                     <p><strong>Valor NF:</strong> {formatCurrency(fat.valor_total)}</p>
-                                    <p><strong>Por parcela:</strong> {formatCurrency(
-                                      ((fat.valor_total || 0) - Math.max(0, parseFloat(String(boletoFatValorCartao).replace(',', '.')) || 0)) / boletoFatQtdParcelas
-                                    )}</p>
+                                    <p><strong>Por parcela:</strong> {formatCurrency(parteBoletoDaNota(fat) / boletoFatQtdParcelas)}</p>
                                   </div>
                                 </div>
                               </div>
-                              {/* Pagamento dividido na mesma nota */}
-                              <div className="rounded border border-amber-200 bg-amber-50 p-2 space-y-2">
-                                <Label className="text-xs font-semibold">Parte no cartão (opcional)</Label>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-gray-600">R$</span>
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    placeholder="0,00"
-                                    value={boletoFatValorCartao}
-                                    onChange={(e) => setBoletoFatValorCartao(e.target.value)}
-                                    className="h-8 text-sm max-w-[150px]"
-                                  />
-                                </div>
-                                {(() => {
-                                  const nota = fat.valor_total || 0;
-                                  const cartao = Math.max(0, parseFloat(String(boletoFatValorCartao).replace(',', '.')) || 0);
-                                  if (cartao <= 0) {
-                                    return <p className="text-xs text-gray-600">Deixe zerado se a nota inteira vai no boleto.</p>;
-                                  }
-                                  if (cartao >= nota) {
-                                    return (
-                                      <p className="text-xs text-red-700 font-medium">
-                                        Tem que ser menor que {formatCurrency(nota)}. Se for tudo no cartão,
-                                        troque a forma de pagamento em vez de dividir.
-                                      </p>
-                                    );
-                                  }
-                                  const boleto = nota - cartao;
-                                  return (
-                                    <p className="text-xs text-amber-900">
-                                      Nota {formatCurrency(nota)} = <strong>{formatCurrency(cartao)}</strong> no cartão
-                                      + <strong>{formatCurrency(boleto)}</strong> em boleto
-                                      {boletoFatQtdParcelas > 1 && <> ({boletoFatQtdParcelas}x de {formatCurrency(boleto / boletoFatQtdParcelas)})</>}.
-                                      <br />
-                                      O cartão vira um título à parte na carteira, para dar baixa.
-                                    </p>
-                                  );
-                                })()}
-                              </div>
-
                               <div className="space-y-2">
                                 <Label className="text-xs">Datas de Vencimento</Label>
                                 {boletoFatParcelas.map((parcela, index) => (
                                   <div key={index} className="flex items-center gap-2 bg-white p-2 rounded border border-blue-200">
                                     <Badge variant="outline" className="text-xs shrink-0">{index + 1}/{boletoFatQtdParcelas}</Badge>
-                                    <span className="text-xs text-gray-500 shrink-0">{formatCurrency(
-                                      ((fat.valor_total || 0) - Math.max(0, parseFloat(String(boletoFatValorCartao).replace(',', '.')) || 0)) / boletoFatQtdParcelas
-                                    )}</span>
+                                    <span className="text-xs text-gray-500 shrink-0">{formatCurrency(parteBoletoDaNota(fat) / boletoFatQtdParcelas)}</span>
                                     <Input
                                       type="date"
                                       value={parcela.dataVencimento}

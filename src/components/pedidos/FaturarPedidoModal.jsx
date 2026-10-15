@@ -12,6 +12,7 @@ import { Pedido, Faturamento, Carteira } from '@/api/entities';
 import { UploadFile, SendEmail } from '@/api/integrations';
 import { formatCurrency } from '@/utils/exportUtils';
 import { parseNFeXml, casarItensNFe } from '@/utils/nfeXml';
+import { conferirDivisao, ehBoleto, rotuloMetodo, METODOS } from '@/utils/divisaoPagamento';
 
 /**
  * Faturamento (total ou parcial) de um pedido.
@@ -35,7 +36,12 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
   const [nfFiles, setNfFiles] = useState([]);
   const [nfNumero, setNfNumero] = useState('');
   const [nfDataEmissao, setNfDataEmissao] = useState(new Date().toISOString().split('T')[0]);
-  const [metodoPagamento, setMetodoPagamento] = useState(pedido.metodo_pagamento || '');
+  // Divisao do pagamento desta nota. Uma linha = uma forma. O cliente que
+  // paga metade a vista e metade no credito tem duas linhas aqui -- antes
+  // era um select unico e nao havia como registrar isso.
+  const [pagamentos, setPagamentos] = useState([
+    { metodo: pedido.metodo_pagamento || 'boleto_faturado', valor: '' }
+  ]);
   const [resumoXml, setResumoXml] = useState(null);
   const [transportadoraXml, setTransportadoraXml] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -101,6 +107,31 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
     }
   };
 
+  // Valor que este faturamento vai gerar -- a divisao tem que fechar com ele.
+  const valorAFaturar = itensFaturamento
+    .filter(it => it._selected && !it._isQuebra)
+    .reduce((s2, it) => s2 + (it._qtdFaturar * (it.preco || 0)), 0);
+
+  const divisaoPagamento = conferirDivisao(pagamentos, valorAFaturar);
+
+  const alterarPagamento = (i, campo, valor) => {
+    setPagamentos(prev => prev.map((l, idx) => (idx === i ? { ...l, [campo]: valor } : l)));
+  };
+
+  // A nova linha ja nasce com o que falta para fechar: dividir R$ 17.277,12 em
+  // duas partes nao deveria obrigar ninguem a calcular a metade na mao.
+  const adicionarPagamento = () => {
+    const jaSomado = pagamentos.reduce((s2, l) => s2 + (parseFloat(String(l.valor).replace(',', '.')) || 0), 0);
+    const restante = Math.max(0, valorAFaturar - jaSomado);
+    const usados = new Set(pagamentos.map(l => l.metodo));
+    const livre = METODOS.find(m => !usados.has(m.valor))?.valor || '';
+    setPagamentos(prev => [...prev, { metodo: livre, valor: restante > 0 ? restante.toFixed(2) : '' }]);
+  };
+
+  const removerPagamento = (i) => {
+    setPagamentos(prev => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
+  };
+
   const handleFaturar = async () => {
     // Prevent double-clicks
     if (uploading) return;
@@ -118,6 +149,12 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
     // NF is required only if there are items being invoiced (not quebra-only)
     if (!isQuebraOnly && (nfFiles.length === 0 || !nfNumero || !nfDataEmissao)) {
       toast.info('Preencha o número, a data de emissão e envie a nota fiscal');
+      return;
+    }
+
+    // Quebra pura nao gera cobranca, entao nao precisa de divisao.
+    if (!isQuebraOnly && divisaoPagamento.erro) {
+      toast.error(divisaoPagamento.erro);
       return;
     }
 
@@ -175,7 +212,7 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
 
       // Create faturamento record (only if there are invoiced items — skip for quebra-only)
       if (itensFaturados.length > 0 && nfUrlPrincipal) {
-        await Faturamento.create({
+        const faturamentoCriado = await Faturamento.create({
           pedido_id: pedido.id,
           numero_nf: nfNumero,
           data_emissao: nfDataEmissao,
@@ -185,8 +222,47 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
           valor_total: valorFaturamento,
           status: 'faturado',
           transportadora: transportadoraXml || null,
-          metodo_pagamento: metodoPagamento || pedido.metodo_pagamento || null
+          pagamentos: divisaoPagamento.linhas,
+          // metodo_pagamento espelha a PRIMEIRA forma: relatorios, exports e o
+          // PDF do pedido leem essa coluna e nao devem quebrar com a divisao.
+          metodo_pagamento: divisaoPagamento.linhas[0]?.metodo || pedido.metodo_pagamento || null
         });
+
+        // Partes que NAO sao boleto viram titulo agora: elas nao tem boleto
+        // para anexar depois, entao se nao nascerem aqui nunca nascem -- e o
+        // em-aberto do cliente ficaria menor que a nota, parecendo cobranca
+        // faltando. A parte em boleto fica para o fluxo de boleto, que precisa
+        // do PDF e das datas de vencimento.
+        const semBoleto = divisaoPagamento.linhas.filter(l => !ehBoleto(l.metodo));
+        if (faturamentoCriado?.id && semBoleto.length > 0) {
+          for (let i = 0; i < semBoleto.length; i++) {
+            const linha = semBoleto[i];
+            await Carteira.create({
+              pedido_id: pedido.id,
+              faturamento_id: faturamentoCriado.id,
+              tipo: 'a_receber',
+              status: 'pendente',
+              valor: linha.valor,
+              // Sem data de vencimento de proposito. total_vencido conta
+              // 'pendente' COM data_vencimento < hoje; com a data da emissao,
+              // toda venda a vista viraria "vencida" no dia seguinte e o
+              // cliente apareceria inadimplente sem dever nada. Sem data, o
+              // titulo entra no em-aberto (que e verdade: ainda nao teve
+              // baixa) e nunca no vencido.
+              data_vencimento: null,
+              // Numeracao alta e propria: o indice unico
+              // (faturamento_id, parcela_numero) nao aceita repetido, e estes
+              // titulos nao podem colidir com as parcelas 1..N do boleto.
+              parcela_numero: 900 + i,
+              total_parcelas: semBoleto.length,
+              metodo_pagamento: linha.metodo,
+              descricao: `${rotuloMetodo(linha.metodo)} - NF #${nfNumero}`,
+              loja_id: pedido.loja_id || null,
+              cliente_user_id: pedido.comprador_user_id || null,
+              fornecedor_id: pedido.fornecedor_id || null
+            });
+          }
+        }
       }
 
       // Update pedido items with qtd_faturada/qtd_quebra
@@ -264,8 +340,8 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
         pedidoUpdate.nf_data_upload = nfDataEmissao + 'T00:00:00';
       }
       // Save método de pagamento if changed
-      if (metodoPagamento) {
-        pedidoUpdate.metodo_pagamento = metodoPagamento;
+      if (divisaoPagamento.linhas[0]?.metodo) {
+        pedidoUpdate.metodo_pagamento = divisaoPagamento.linhas[0].metodo;
       }
       // Transportadora lida do XML. So preenche se o pedido ainda nao tem, para
       // nao sobrescrever o que ja foi informado no "Informar Envio".
@@ -534,28 +610,78 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
             ) : null;
           })()}
 
-          {/* Método de Pagamento */}
-          <div>
-            <Label>Método de Pagamento</Label>
-            <Select
-              value={metodoPagamento || pedido?.metodo_pagamento || ''}
-              onValueChange={(value) => setMetodoPagamento(value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione o método" />
-              </SelectTrigger>
-              {/* Faltavam cartao_credito e boleto_faturado -- este ultimo e a
-                  forma de 5.484 dos 6.220 pedidos. Sem eles na lista, o
-                  fornecedor nao conseguia corrigir a forma de pagamento aqui. */}
-              <SelectContent>
-                <SelectItem value="boleto_faturado">Boleto Faturado</SelectItem>
-                <SelectItem value="boleto">Boleto</SelectItem>
-                <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
-                <SelectItem value="pix">PIX</SelectItem>
-                <SelectItem value="a_vista">À Vista</SelectItem>
-                <SelectItem value="transferencia">Transferência</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Formas de pagamento desta nota. Era um select unico: o cliente que
+              paga metade a vista e metade no credito nao tinha como registrar. */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Formas de Pagamento</Label>
+              <span className="text-xs text-gray-600">
+                Valor a faturar: <strong>{formatCurrency(valorAFaturar)}</strong>
+              </span>
+            </div>
+
+            {pagamentos.map((linha, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <Select
+                  value={linha.metodo}
+                  onValueChange={(v) => alterarPagamento(i, 'metodo', v)}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Selecione a forma" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {METODOS.map(m => (
+                      <SelectItem key={m.valor} value={m.valor}>{m.rotulo}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-xs text-gray-600">R$</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder={pagamentos.length === 1 ? formatCurrency(valorAFaturar).replace('R$', '').trim() : '0,00'}
+                    value={linha.valor}
+                    onChange={(e) => alterarPagamento(i, 'valor', e.target.value)}
+                    className="w-32"
+                  />
+                </div>
+                {pagamentos.length > 1 && (
+                  <Button variant="ghost" size="icon" onClick={() => removerPagamento(i)} title="Remover forma">
+                    <XCircle className="w-4 h-4 text-gray-400" />
+                  </Button>
+                )}
+              </div>
+            ))}
+
+            <div className="flex items-center justify-between gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={adicionarPagamento}
+                disabled={pagamentos.length >= METODOS.length}
+              >
+                + Dividir em outra forma
+              </Button>
+
+              {valorAFaturar > 0 && (
+                divisaoPagamento.erro ? (
+                  <span className="text-xs text-red-700 font-medium">{divisaoPagamento.erro}</span>
+                ) : pagamentos.length > 1 ? (
+                  <span className="text-xs text-green-700">
+                    {divisaoPagamento.linhas.map(l => `${rotuloMetodo(l.metodo)} ${formatCurrency(l.valor)}`).join('  +  ')}
+                  </span>
+                ) : null
+              )}
+            </div>
+
+            {divisaoPagamento.valorBoleto > 0 && divisaoPagamento.valorAVista > 0 && !divisaoPagamento.erro && (
+              <p className="text-xs text-gray-600">
+                A parte em boleto ({formatCurrency(divisaoPagamento.valorBoleto)}) é cobrada no envio do boleto,
+                com as datas de vencimento. O resto vira título na carteira agora.
+              </p>
+            )}
           </div>
 
           {/* NF fields — hidden when quebra-only */}
@@ -708,7 +834,10 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
             </Button>
             <Button
               onClick={handleFaturar}
-              disabled={uploading}
+              // Divisao que nao fecha com o valor da nota nao passa daqui: o
+              // handler tambem recusa, mas deixar o botao ativo convida a
+              // clicar e so entao descobrir. Quebra pura nao tem cobranca.
+              disabled={uploading || (valorAFaturar > 0 && !!divisaoPagamento.erro)}
               className="bg-indigo-600 hover:bg-indigo-700"
             >
               {uploading ? 'Processando...' : 'Faturar Selecionados'}

@@ -32,7 +32,7 @@ import PedidoItensEditModal from '@/components/pedidos/PedidoItensEditModal';
 import FaturarPedidoModal from '../components/pedidos/FaturarPedidoModal';
 import { formatCurrency, exportToPDF, exportToCSV, formatDate, getMesFaturamentoItem, getMesEntregaItem, getMesesEntregaPedido, getMesesFaturamentoPedido, getMesFaturamentoItemKey, formatMesesEntrega, formatMesAno } from '@/utils/exportUtils';
 import { validarVencimentos } from '@/utils/vencimentoUtils';
-import { dividirBoleto, valorInformado } from '@/utils/divisaoBoleto';
+import { conferirDivisao, parcelar, valorInformado, ehBoleto, rotuloMetodo, METODOS } from '@/utils/divisaoPagamento';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
 
@@ -78,8 +78,6 @@ export default function PedidosFornecedor() {
   // existia o primeiro: o mesmo arquivo era gravado em todas as parcelas,
   // mesmo quando o fornecedor tinha 3 boletos distintos.
   const [boletoNFArquivoUnico, setBoletoNFArquivoUnico] = useState(true);
-  // Pagamento dividido: quanto DESTA nota sai no cartao. O boleto cobre o resto.
-  const [boletoNFValorCartao, setBoletoNFValorCartao] = useState('');
   const [boletoNFUploading, setBoletoNFUploading] = useState(false);
   const [boletoNFLoading, setBoletoNFLoading] = useState(false);
   const [showAtualizarNFModal, setShowAtualizarNFModal] = useState(false);
@@ -1025,7 +1023,6 @@ export default function PedidosFornecedor() {
     setBoletoNFFile(null);
     // Carne unico e o caso comum; quem tem um boleto por parcela desmarca.
     setBoletoNFArquivoUnico(true);
-    setBoletoNFValorCartao('');
 
     // Auto-preencher parcelas a partir dos prazos cadastrados do fornecedor (somente para boleto faturado)
     const fornecedor = fornecedores.find(f => f.id === pedido.fornecedor_id);
@@ -1075,6 +1072,14 @@ export default function PedidosFornecedor() {
     setBoletoNFParcelas(novas);
   };
 
+  // Quanto DESTA nota sai em boleto, segundo a divisao declarada ao faturar.
+  // Faturamento antigo (sem lista) e nota inteira, como sempre foi.
+  const parteBoletoDaNota = (fat) => {
+    const linhas = Array.isArray(fat?.pagamentos) ? fat.pagamentos : [];
+    if (linhas.length === 0) return fat?.valor_total || 0;
+    return linhas.filter(l => ehBoleto(l.metodo)).reduce((s2, l) => s2 + (Number(l.valor) || 0), 0);
+  };
+
   const handleBoletoNFDataChange = (index, value) => {
     const novas = [...boletoNFParcelas];
     novas[index] = { ...novas[index], dataVencimento: value };
@@ -1089,13 +1094,19 @@ export default function PedidosFornecedor() {
 
   const handleEnviarBoletoNF = async () => {
     if (!boletoNFSelected) { toast.info('Selecione uma Nota Fiscal'); return; }
-    const divisao = dividirBoleto(
-      boletoNFSelected.valor_total || 0,
-      valorInformado(boletoNFValorCartao),
-      boletoNFQtdParcelas
-    );
-    if (divisao.erro) { toast.error(divisao.erro); return; }
-    const { valorCartao, valorBoleto } = divisao;
+    // A divisao do pagamento ja foi declarada ao faturar e vive em
+    // faturamentos.pagamentos. Aqui o boleto cobre apenas a parte dele --
+    // faturamento antigo, sem lista, cai no valor cheio como sempre foi.
+    const linhasPagamento = Array.isArray(boletoNFSelected.pagamentos) ? boletoNFSelected.pagamentos : [];
+    const parteBoleto = linhasPagamento.length > 0
+      ? linhasPagamento.filter(l => ehBoleto(l.metodo)).reduce((s2, l) => s2 + (Number(l.valor) || 0), 0)
+      : (boletoNFSelected.valor_total || 0);
+
+    if (parteBoleto <= 0) {
+      toast.error('Esta nota não tem parte em boleto. Confira a divisão do pagamento no faturamento.');
+      return;
+    }
+    const valoresParcelas = parcelar(parteBoleto, boletoNFQtdParcelas);
 
     const temDatas = boletoNFParcelas.some(p => p.dataVencimento);
     // Sem datas nao nascem parcelas, entao so o arquivo unico faz sentido.
@@ -1133,8 +1144,7 @@ export default function PedidosFornecedor() {
       await Faturamento.update(boletoNFSelected.id, {
         boleto_url: urlsPorParcela[0],
         boleto_data_upload: new Date().toISOString(),
-        qtd_parcelas: boletoNFQtdParcelas,
-        valor_cartao: valorCartao
+        qtd_parcelas: boletoNFQtdParcelas
       });
       // Criar parcelas na carteira
       if (temDatas) {
@@ -1146,12 +1156,16 @@ export default function PedidosFornecedor() {
         const numerosPagos = new Set();
         for (const antiga of (jaExistentes || [])) {
           if (!antiga.parcela_numero) continue;
+          // So os titulos DE BOLETO sao refeitos aqui. A parte paga a vista,
+          // no cartao ou em pix virou titulo na hora de faturar e nao tem nada
+          // a ver com este reenvio -- apagar junto sumiria com a cobranca.
+          if (antiga.metodo_pagamento && !ehBoleto(antiga.metodo_pagamento)) continue;
           if (antiga.status === 'pago') numerosPagos.add(antiga.parcela_numero);
           else await Carteira.delete(antiga.id);
         }
 
-        const { valorDaParcela, totalTitulos } = divisao;
-        const metodoBoleto = boletoNFSelected.metodo_pagamento
+        const metodoBoleto = linhasPagamento.find(l => ehBoleto(l.metodo))?.metodo
+          || boletoNFSelected.metodo_pagamento
           || selectedPedido.metodo_pagamento || 'boleto';
 
         for (let i = 0; i < boletoNFQtdParcelas; i++) {
@@ -1162,16 +1176,16 @@ export default function PedidosFornecedor() {
             faturamento_id: boletoNFSelected.id,
             tipo: 'a_receber',
             status: 'pendente',
-            valor: valorDaParcela(i),
+            valor: valoresParcelas[i],
             data_vencimento: boletoNFParcelas[i].dataVencimento,
             parcela_numero: i + 1,
-            total_parcelas: totalTitulos,
+            total_parcelas: boletoNFQtdParcelas,
             metodo_pagamento: metodoBoleto,
             // Fallback defensivo: se por algum motivo faltar URL para esta
             // posicao, a parcela nasce com o primeiro boleto em vez de sem nenhum.
             boleto_url: urlsPorParcela[i] || urlsPorParcela[0],
-            descricao: totalTitulos > 1
-              ? `Parcela ${i + 1}/${totalTitulos} - NF #${boletoNFSelected.numero_nf}`
+            descricao: boletoNFQtdParcelas > 1
+              ? `Parcela ${i + 1}/${boletoNFQtdParcelas} - NF #${boletoNFSelected.numero_nf}`
               : `Boleto - NF #${boletoNFSelected.numero_nf}`,
             loja_id: selectedPedido.loja_id || null,
             cliente_user_id: selectedPedido.comprador_user_id || null,
@@ -1179,33 +1193,8 @@ export default function PedidosFornecedor() {
           });
         }
 
-        // A parte do cartao tambem e titulo: sem ela o em-aberto do cliente
-        // ficaria menor que a nota e pareceria cobranca faltando. Nasce
-        // pendente; quando a maquininha confirmar, o financeiro da baixa pelo
-        // mesmo "Registrar como pago" dos boletos.
-        if (valorCartao > 0 && !numerosPagos.has(totalTitulos)) {
-          await Carteira.create({
-            pedido_id: selectedPedido.id,
-            faturamento_id: boletoNFSelected.id,
-            tipo: 'a_receber',
-            status: 'pendente',
-            valor: valorCartao,
-            data_vencimento: boletoNFParcelas[0]?.dataVencimento || null,
-            parcela_numero: totalTitulos,
-            total_parcelas: totalTitulos,
-            metodo_pagamento: 'cartao_credito',
-            descricao: `Cartão de Crédito - NF #${boletoNFSelected.numero_nf}`,
-            loja_id: selectedPedido.loja_id || null,
-            cliente_user_id: selectedPedido.comprador_user_id || null,
-            fornecedor_id: selectedPedido.fornecedor_id || null
-          });
-        }
       }
-      toast.success(
-        valorCartao > 0
-          ? `NF #${boletoNFSelected.numero_nf}: ${formatCurrency(valorCartao)} no cartão e ${formatCurrency(valorBoleto)} em boleto.`
-          : `Boleto enviado para NF #${boletoNFSelected.numero_nf}!`
-      );
+      toast.success(`Boleto enviado para NF #${boletoNFSelected.numero_nf} (${formatCurrency(parteBoleto)}).`);
       setShowBoletoNFModal(false);
       loadPedidos({ silencioso: true });
     } catch (error) {
@@ -2273,59 +2262,9 @@ export default function PedidosFornecedor() {
                     <div className="flex items-end">
                       <div className="text-xs text-blue-800">
                         <p><strong>Valor NF:</strong> {formatCurrency(boletoNFSelected.valor_total)}</p>
-                        <p><strong>Por parcela:</strong> {formatCurrency(
-                          ((boletoNFSelected.valor_total || 0) - Math.max(0, parseFloat(String(boletoNFValorCartao).replace(',', '.')) || 0)) / boletoNFQtdParcelas
-                        )}</p>
+                        <p><strong>Por parcela:</strong> {formatCurrency(parteBoletoDaNota(boletoNFSelected) / boletoNFQtdParcelas)}</p>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Pagamento dividido na mesma nota */}
-                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
-                    <Label className="text-xs font-semibold">
-                      Parte no cartão (opcional)
-                    </Label>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-600">R$</span>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="0,00"
-                        value={boletoNFValorCartao}
-                        onChange={(e) => setBoletoNFValorCartao(e.target.value)}
-                        className="h-8 text-sm max-w-[160px]"
-                      />
-                    </div>
-                    {(() => {
-                      const nota = boletoNFSelected.valor_total || 0;
-                      const cartao = Math.max(0, parseFloat(String(boletoNFValorCartao).replace(',', '.')) || 0);
-                      if (cartao <= 0) {
-                        return (
-                          <p className="text-xs text-gray-600">
-                            Deixe zerado se a nota inteira vai no boleto.
-                          </p>
-                        );
-                      }
-                      if (cartao >= nota) {
-                        return (
-                          <p className="text-xs text-red-700 font-medium">
-                            Tem que ser menor que {formatCurrency(nota)}. Se for tudo no cartão,
-                            troque a forma de pagamento em vez de dividir.
-                          </p>
-                        );
-                      }
-                      const boleto = nota - cartao;
-                      return (
-                        <p className="text-xs text-amber-900">
-                          Nota {formatCurrency(nota)} = <strong>{formatCurrency(cartao)}</strong> no cartão
-                          + <strong>{formatCurrency(boleto)}</strong> em boleto
-                          {boletoNFQtdParcelas > 1 && <> ({boletoNFQtdParcelas}x de {formatCurrency(boleto / boletoNFQtdParcelas)})</>}.
-                          <br />
-                          O cartão vira um título à parte na carteira, para o financeiro dar baixa.
-                        </p>
-                      );
-                    })()}
                   </div>
 
                   <div className="space-y-2 mt-3">
@@ -2334,9 +2273,7 @@ export default function PedidosFornecedor() {
                       <div key={index} className="bg-gray-50 p-2 rounded border space-y-2">
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="text-xs shrink-0">{index + 1}/{boletoNFQtdParcelas}</Badge>
-                          <span className="text-xs text-gray-500 shrink-0">{formatCurrency(
-                            ((boletoNFSelected.valor_total || 0) - Math.max(0, parseFloat(String(boletoNFValorCartao).replace(',', '.')) || 0)) / boletoNFQtdParcelas
-                          )}</span>
+                          <span className="text-xs text-gray-500 shrink-0">{formatCurrency(parteBoletoDaNota(boletoNFSelected) / boletoNFQtdParcelas)}</span>
                           <Input
                             type="date"
                             value={parcela.dataVencimento}
