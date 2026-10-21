@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Package, Edit, Star, Search, AlertTriangle, Eye, Trash2, Download, Copy, LayoutGrid, List } from 'lucide-react';
+import { Plus, Package, Edit, Star, Search, AlertTriangle, Eye, Trash2, Download, Copy, LayoutGrid, List, Archive, ArchiveRestore } from 'lucide-react';
 import { exportToCSV, exportToPDF, formatCurrency } from '@/utils/exportUtils';
 import ProductForm from '../components/admin/ProductForm';
 import { Switch } from '@/components/ui/switch';
@@ -201,6 +201,25 @@ export default function GestaoProdutos() {
     }
   };
 
+  // Arquivar nao apaga: o produto sai de circulacao mas continua nos pedidos
+  // antigos, nos relatorios e no historico. Por isso e reversivel e nao pede a
+  // confirmacao dura do excluir.
+  const handleArquivar = async (produto, arquivar) => {
+    try {
+      await Produto.update(produto.id, {
+        arquivado: arquivar,
+        arquivado_em: arquivar ? new Date().toISOString() : null
+      });
+      toast.success(arquivar
+        ? `"${produto.nome}" arquivado — saiu da gestão e do catálogo.`
+        : `"${produto.nome}" desarquivado.`);
+      loadData();
+    } catch (error) {
+      console.error('Erro ao arquivar produto:', error);
+      toast.error('Não foi possível arquivar o produto.');
+    }
+  };
+
   const handleDelete = async (produto) => {
     if (!confirm(`Tem certeza que deseja excluir o produto "${produto.nome}"? Esta ação não pode ser desfeita e o produto será removido de todas as cápsulas.`)) {
       return;
@@ -290,9 +309,23 @@ export default function GestaoProdutos() {
       matchesMesEntrega = false;
     }
 
-    let matchesStatus = true;
-    if (filterStatus === 'ativos') matchesStatus = produto.ativo !== false;
-    else if (filterStatus === 'inativos') matchesStatus = produto.ativo === false;
+    // Arquivado e um eixo separado de ativo/inativo: colecao encerrada some de
+    // TODAS as visoes, inclusive de "Todos". So o modo "Arquivados" os mostra,
+    // e la a busca corre so entre eles -- que e o pedido: filtrar o acervo sem
+    // ter a colecao velha no caminho do dia a dia.
+    const arquivado = produto.arquivado === true;
+    let matchesStatus;
+    if (filterStatus === 'arquivados') {
+      matchesStatus = arquivado;
+    } else if (arquivado) {
+      matchesStatus = false;
+    } else if (filterStatus === 'ativos') {
+      matchesStatus = produto.ativo !== false;
+    } else if (filterStatus === 'inativos') {
+      matchesStatus = produto.ativo === false;
+    } else {
+      matchesStatus = true; // "Todos" = todos os NAO arquivados
+    }
 
     return matchesSearch && matchesFornecedor && matchesCategoria && matchesGenero && matchesMesEntrega && matchesStatus;
   });
@@ -421,7 +454,8 @@ export default function GestaoProdutos() {
                   <SelectContent>
                     <SelectItem value="ativos">Somente ativos</SelectItem>
                     <SelectItem value="inativos">Somente inativos</SelectItem>
-                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="all">Todos (sem arquivados)</SelectItem>
+                    <SelectItem value="arquivados">Arquivados</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -542,6 +576,21 @@ export default function GestaoProdutos() {
                                 title="Duplicar"
                               >
                                 <Copy className="w-3 h-3" />
+                              </Button>
+                            )}
+                            {podeEditar && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleArquivar(produto, !produto.arquivado)}
+                                className="h-7 px-1.5 text-amber-700 border-amber-300"
+                                title={produto.arquivado
+                                  ? 'Desarquivar: volta para a gestão e para o catálogo'
+                                  : 'Arquivar: sai da gestão e do catálogo, sem apagar'}
+                              >
+                                {produto.arquivado
+                                  ? <ArchiveRestore className="w-3 h-3" />
+                                  : <Archive className="w-3 h-3" />}
                               </Button>
                             )}
                             {podeExcluir && (
@@ -724,6 +773,23 @@ export default function GestaoProdutos() {
                                 >
                                   <Copy className="w-4 h-4 mr-1" />
                                   Duplicar
+                                </Button>
+                              )}
+                              {podeEditar && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-amber-700 border-amber-300"
+                                  onClick={() => handleArquivar(produto, !produto.arquivado)}
+                                  title={produto.arquivado
+                                    ? 'Volta para a gestão e para o catálogo'
+                                    : 'Sai da gestão e do catálogo, sem apagar'}
+                                >
+                                  {produto.arquivado ? (
+                                    <><ArchiveRestore className="w-4 h-4 mr-1" />Desarquivar</>
+                                  ) : (
+                                    <><Archive className="w-4 h-4 mr-1" />Arquivar</>
+                                  )}
                                 </Button>
                               )}
                               {podeExcluir && (

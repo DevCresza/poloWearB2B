@@ -503,6 +503,8 @@ export default function Catalogo() {
 
   const filteredProducts = (produtos || []).filter(produto => {
     if (!produto.ativo) return false;
+    // Colecao encerrada nao entra no catalogo nem com filtro.
+    if (produto.arquivado) return false;
 
     // Só verifica estoque para produtos de pronta entrega
     if (produto.disponibilidade === 'pronta_entrega' && produto.controla_estoque && !produto.permite_venda_sem_estoque) {

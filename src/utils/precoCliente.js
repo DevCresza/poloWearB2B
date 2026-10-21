@@ -89,6 +89,12 @@ export function isProdutoVisivelParaCliente(produto, user) {
   if (!produto) return false;
   if (!user) return false;
 
+  // Arquivado e colecao encerrada: sai de circulacao para TODO mundo, antes de
+  // qualquer regra de papel. Fica acima do early return de admin/fornecedor de
+  // proposito -- se ficasse depois, o produto encerrado continuaria aparecendo
+  // no catalogo de quem tem acesso amplo.
+  if (produto.arquivado === true) return false;
+
   const papel = getPapel(user);
 
   // Vendedor nunca e o sujeito. Se chegou aqui com o vendedor, alguem esqueceu
