@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Capsula, Fornecedor, User } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Plus, Edit, Trash2, Image, Sparkles } from 'lucide-react';
+import { Plus, Edit, Trash2, Image, Sparkles, Archive, ArchiveRestore } from 'lucide-react';
 import CapsulaForm from '../components/admin/CapsulaForm';
 import { toast } from 'sonner';
 import { can, PERM } from '@/utils/permissoes';
@@ -15,6 +15,8 @@ export default function GestaoCapsulas() {
   const [showForm, setShowForm] = useState(false);
   const [editingCapsula, setEditingCapsula] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  // Arquivadas ficam fora por padrao; este botao alterna para ver so elas.
+  const [verArquivadas, setVerArquivadas] = useState(false);
 
   useEffect(() => {
     loadCurrentUser();
@@ -63,6 +65,25 @@ export default function GestaoCapsulas() {
     }
   };
 
+  // Arquivar a capsula tira ela inteira de circulacao. Diferente de arquivar
+  // um PRODUTO dela, que tira so o produto e a capsula segue com um item a
+  // menos -- quem encerra a capsula e a pessoa, nao o efeito colateral.
+  const handleArquivar = async (capsula, arquivar) => {
+    try {
+      await Capsula.update(capsula.id, {
+        arquivada: arquivar,
+        arquivada_em: arquivar ? new Date().toISOString() : null
+      });
+      toast.success(arquivar
+        ? `Cápsula "${capsula.nome}" arquivada — saiu do catálogo.`
+        : `Cápsula "${capsula.nome}" desarquivada.`);
+      loadCapsulas();
+    } catch (error) {
+      console.error('Erro ao arquivar cápsula:', error);
+      toast.error('Não foi possível arquivar a cápsula.');
+    }
+  };
+
   const handleEdit = (capsula) => {
     setEditingCapsula(capsula);
     setShowForm(true);
@@ -107,6 +128,16 @@ export default function GestaoCapsulas() {
               </CardTitle>
               <CardDescription>Crie e gerencie coleções de produtos.</CardDescription>
             </div>
+            <Button
+              variant="outline"
+              onClick={() => setVerArquivadas(v => !v)}
+              className="mr-2"
+            >
+              <Archive className="w-4 h-4 mr-2" />
+              {verArquivadas
+                ? 'Ver ativas'
+                : `Arquivadas (${capsulas.filter(c => c.arquivada).length})`}
+            </Button>
             <Button onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-neumorphic-button active:shadow-neumorphic-button-inset transition-all">
               <Plus className="w-4 h-4 mr-2" />
               Nova Cápsula
@@ -117,7 +148,8 @@ export default function GestaoCapsulas() {
               <p>Carregando...</p>
             ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[...capsulas]
+                {capsulas
+                  .filter(c => (c.arquivada === true) === verArquivadas)
                   .sort((a, b) => {
                     const oa = Number(a.ordem_exibicao) || 0;
                     const ob = Number(b.ordem_exibicao) || 0;
@@ -162,6 +194,17 @@ export default function GestaoCapsulas() {
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="icon" onClick={() => handleEdit(capsula)}>
                         <Edit className="w-4 h-4"/>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-amber-600 hover:text-amber-700"
+                        onClick={() => handleArquivar(capsula, !capsula.arquivada)}
+                        title={capsula.arquivada
+                          ? 'Desarquivar: volta para o catálogo'
+                          : 'Arquivar: sai do catálogo, sem apagar'}
+                      >
+                        {capsula.arquivada ? <ArchiveRestore className="w-4 h-4"/> : <Archive className="w-4 h-4"/>}
                       </Button>
                        <Button variant="ghost" size="icon" onClick={() => handleDelete(capsula.id)} className="text-red-500 hover:text-red-600">
                         <Trash2 className="w-4 h-4"/>

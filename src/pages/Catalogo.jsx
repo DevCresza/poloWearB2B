@@ -145,6 +145,15 @@ export default function Catalogo() {
           capsula.produto_ids = [];
         }
 
+        // Produto arquivado sai da capsula AQUI, na origem. Varios pontos
+        // derivam de produto_ids -- contagem no card, preco total, o que vai
+        // para o carrinho, os filtros. Cortar so na exibicao esconderia o item
+        // mas continuaria cobrando por ele, que e o pior dos mundos.
+        const arquivados = new Set(
+          (produtosList || []).filter(p => p.arquivado).map(p => p.id)
+        );
+        capsula.produto_ids = capsula.produto_ids.filter(pid => !arquivados.has(pid));
+
         // Parse produtos_quantidades se vier como string
         if (capsula.produtos_quantidades) {
           try {
@@ -160,6 +169,12 @@ export default function Catalogo() {
       });
       // Filtrar cápsulas visíveis para o perfil (flag própria + produtos internos disponíveis)
       const capsulasVisiveis = (capsulasList || []).filter(capsula => {
+        // Capsula encerrada pela pessoa some inteira. Ja um produto arquivado
+        // dentro dela saiu de produto_ids acima: a capsula segue, com um item
+        // a menos, em vez de desaparecer por causa de uma peca.
+        if (capsula.arquivada) return false;
+        // Capsula que ficou sem nenhum produto nao tem o que vender.
+        if ((capsula.produto_ids || []).length === 0) return false;
         const produtosInternos = (capsula.produto_ids || [])
           .map(pid => (produtosList || []).find(p => p.id === pid))
           .filter(Boolean);

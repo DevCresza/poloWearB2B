@@ -117,6 +117,10 @@ export function isCapsulaVisivelParaCliente(capsula, produtosInternos, user) {
   if (!capsula) return false;
   if (!user) return false;
 
+  // Capsula encerrada sai de circulacao para todos, antes de qualquer papel --
+  // mesma razao do produto arquivado.
+  if (capsula.arquivada === true) return false;
+
   const papel = getPapel(user);
   if (papel === PAPEIS.VENDEDOR) return false; // ver isProdutoVisivelParaCliente
   if (papel === PAPEIS.ADMIN || papel === PAPEIS.CADASTRO) return true;
@@ -129,7 +133,13 @@ export function isCapsulaVisivelParaCliente(capsula, produtosInternos, user) {
   if (!flagOk) return false;
 
   if (!Array.isArray(produtosInternos) || produtosInternos.length === 0) return true;
-  return produtosInternos.every(p => isProdutoVisivelParaCliente(p, user));
+
+  // Produto arquivado nao derruba a capsula: ele sai dela e o resto continua.
+  // Antes, `every` fazia uma peca de inverno arquivada sumir com toda capsula
+  // que a contivesse. Quem encerra a capsula e a pessoa, arquivando a capsula.
+  const emCirculacao = produtosInternos.filter(p => p?.arquivado !== true);
+  if (emCirculacao.length === 0) return false; // sobrou capsula sem produto
+  return emCirculacao.every(p => isProdutoVisivelParaCliente(p, user));
 }
 
 /**
