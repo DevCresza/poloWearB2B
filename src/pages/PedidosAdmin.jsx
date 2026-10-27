@@ -656,6 +656,10 @@ export default function PedidosAdmin() {
     const totais = {
       novo_pedido: { count: 0, valor: 0, pecas: 0 },
       em_producao: { count: 0, valor: 0, pecas: 0 },
+      // Sem esta linha o pedido parcialmente faturado nao entra em card nenhum:
+      // statusColumns tem a coluna, mas `if (!total) return null` a descartava e
+      // o Total Geral tambem a ignorava. Era o pedido sumir ao ser faturado.
+      parcialmente_faturado: { count: 0, valor: 0, pecas: 0 },
       faturado: { count: 0, valor: 0, pecas: 0 },
       em_transporte: { count: 0, valor: 0, pecas: 0 },
       pendente_pagamento: { count: 0, valor: 0, pecas: 0 },
@@ -883,6 +887,7 @@ export default function PedidosAdmin() {
               options={[
                 { value: 'novo_pedido', label: 'Novos' },
                 { value: 'em_producao', label: 'Em Produção' },
+                { value: 'parcialmente_faturado', label: 'Parc. Faturados' },
                 { value: 'faturado', label: 'Faturados' },
                 { value: 'em_transporte', label: 'Em Transporte' },
                 { value: 'pendente_pagamento', label: 'Aguardando Pagamento' },

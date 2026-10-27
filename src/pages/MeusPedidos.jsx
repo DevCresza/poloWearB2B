@@ -853,6 +853,7 @@ export default function MeusPedidos() {
                 { value: 'em_analise', label: 'Em Análise', color: 'bg-yellow-500' },
                 { value: 'aprovado', label: 'Aprovados', color: 'bg-green-500' },
                 { value: 'em_producao', label: 'Em Produção', color: 'bg-purple-500' },
+                { value: 'parcialmente_faturado', label: 'Parc. Faturados', color: 'bg-cyan-500' },
                 { value: 'faturado', label: 'Faturados', color: 'bg-indigo-500' },
                 { value: 'em_transporte', label: 'Em Transporte', color: 'bg-orange-500' },
                 { value: 'pendente_pagamento', label: 'Aguardando Pagamento', color: 'bg-amber-500' },
