@@ -18,6 +18,7 @@ export { Meta } from './supabaseEntities';
 export { Notificacao } from './supabaseEntities';
 export { Loja } from './supabaseEntities';
 export { Faturamento } from './supabaseEntities';
+export { PedidoHistorico } from './supabaseEntities';
 export { Banner } from './supabaseEntities';
 
 // auth sdk - Usando Supabase Auth:

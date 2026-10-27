@@ -294,3 +294,8 @@ export const Notificacao = createSupabaseEntity('notificacoes');
 export const Loja = createSupabaseEntity('lojas');
 export const Banner = createSupabaseEntity('banners');
 export const Faturamento = createSupabaseEntity('faturamentos');
+// Trilha de auditoria de pedidos: quem mudou o que e quando. Escrita so pelo
+// trigger trg_pedidos_historico -- a tabela nao tem policy de INSERT/UPDATE/
+// DELETE, entao qualquer escrita daqui seria recusada pelo banco. Leitura
+// recortada pela RLS: equipe ve tudo, cliente o proprio, fornecedor os dele.
+export const PedidoHistorico = createSupabaseEntity('pedido_historico');

@@ -14,17 +14,19 @@ import {
   Package, MapPin, DollarSign, Calendar, FileText,
   Download, CheckCircle, Clock, Truck, User, Building,
   Phone, Mail, CreditCard, Upload, AlertTriangle, Pencil, ChevronDown, ChevronUp,
-  Printer, Copy
+  Printer, Copy, History
 } from 'lucide-react';
 import { Pedido, Produto } from '@/api/entities';
 import { Carteira } from '@/api/entities';
 import { Loja, Fornecedor } from '@/api/entities';
 import { Faturamento } from '@/api/entities';
+import { PedidoHistorico } from '@/api/entities';
 import { UploadFile } from '@/api/integrations';
 import { formatDateTime, formatCurrency, getMesesEntregaPedido, getMesesFaturamentoPedido, formatMesAno } from '@/utils/exportUtils';
 import { parseNFeXml } from '@/utils/nfeXml';
 import { conferirDivisao, parcelar, valorInformado, ehBoleto, rotuloMetodo, METODOS } from '@/utils/divisaoPagamento';
 import { validarVencimentos } from '@/utils/vencimentoUtils';
+import { autorDaLinha, resumoDaLinha, detalhesDaLinha } from '@/utils/historicoPedido';
 import { Store } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -43,6 +45,11 @@ const capitalizarMes = (m) => (m ? m.charAt(0).toUpperCase() + m.slice(1) : m);
 
 export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentUser, userMap, fornecedorMap, produtoEntregaMap = null, defaultTab = 'itens' }) {
   const [lojaInfo, setLojaInfo] = useState(null);
+  // Trilha de auditoria: carregada so quando a aba e aberta. A maioria de quem
+  // abre o pedido quer ver itens ou NF, nao o historico -- nao vale pagar a
+  // consulta em toda abertura do modal.
+  const [historico, setHistorico] = useState(null);
+  const [carregandoHistorico, setCarregandoHistorico] = useState(false);
   // Entrega cadastrada nos produtos do pedido. As telas de admin/fornecedor ja
   // carregam todos os produtos e passam o mapa pronto; a tela do cliente nao —
   // e sem ele o mes caia no fallback (data do pedido), fazendo cliente e admin
@@ -757,6 +764,25 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       'a_vista': 'À Vista'
     };
     return labels[metodo] || metodo;
+  };
+
+  const carregarHistorico = async () => {
+    if (historico !== null || carregandoHistorico) return;
+    setCarregandoHistorico(true);
+    try {
+      const linhas = await PedidoHistorico.filter(
+        { pedido_id: pedido.id }, '-quando'
+      );
+      setHistorico(Array.isArray(linhas) ? linhas : []);
+    } catch (error) {
+      console.error('Erro ao carregar historico do pedido:', error);
+      // Lista vazia em vez de null: null significa "ainda nao buscamos" e
+      // deixaria a aba tentando de novo a cada clique.
+      setHistorico([]);
+      toast.error('Não foi possível carregar o histórico deste pedido.');
+    } finally {
+      setCarregandoHistorico(false);
+    }
   };
 
   const getStatusInfo = (status) => {
@@ -1475,12 +1501,17 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
             </div>
           )}
 
-          <Tabs defaultValue={defaultTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+          <Tabs
+            defaultValue={defaultTab}
+            className="w-full"
+            onValueChange={(aba) => { if (aba === 'historico') carregarHistorico(); }}
+          >
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="itens">Itens do Pedido</TabsTrigger>
               <TabsTrigger value="entrega">Entrega</TabsTrigger>
               <TabsTrigger value="pagamento">Pagamento</TabsTrigger>
               <TabsTrigger value="documentos">Documentos</TabsTrigger>
+              <TabsTrigger value="historico">Histórico</TabsTrigger>
             </TabsList>
 
             {/* Tab: Itens do Pedido */}
@@ -3190,6 +3221,78 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="historico" className="space-y-4">
+              {carregandoHistorico && (
+                <div className="py-10 text-center text-sm text-gray-500">
+                  Carregando histórico…
+                </div>
+              )}
+
+              {!carregandoHistorico && historico !== null && historico.length === 0 && (
+                <Alert>
+                  <History className="h-4 w-4" />
+                  <AlertDescription>
+                    Nenhuma alteração registrada para este pedido. O registro de quem
+                    altera os pedidos passou a funcionar em 27/10/2026 — o que aconteceu
+                    antes dessa data não foi gravado e não há como recuperar.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {!carregandoHistorico && historico !== null && historico.length > 0 && (
+                <div className="space-y-3">
+                  {historico.map((linha) => {
+                    const detalhes = detalhesDaLinha(linha);
+                    const cancelamento = linha.status_para === 'cancelado';
+                    return (
+                      <div
+                        key={linha.id}
+                        className={`rounded-lg border p-4 ${cancelamento ? 'border-red-200 bg-red-50' : 'bg-white'}`}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            {cancelamento
+                              ? <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                              : <History className="w-4 h-4 text-gray-400 shrink-0" />}
+                            <span className={`font-medium ${cancelamento ? 'text-red-800' : 'text-gray-900'}`}>
+                              {resumoDaLinha(linha)}
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-500 whitespace-nowrap">
+                            {formatDateTime(linha.quando)}
+                          </span>
+                        </div>
+
+                        <div className="mt-1 flex items-center gap-1.5 text-sm text-gray-600">
+                          <User className="w-3.5 h-3.5 shrink-0" />
+                          <span className="break-all">{autorDaLinha(linha)}</span>
+                        </div>
+
+                        {detalhes.length > 0 && (
+                          <div className="mt-3 space-y-1 border-t pt-2">
+                            {detalhes.map((d) => (
+                              <div key={d.campo} className="text-xs text-gray-600 flex flex-wrap gap-x-1.5">
+                                <span className="font-medium text-gray-700">{d.rotulo}:</span>
+                                {d.de === null && d.para === null ? (
+                                  <span className="text-gray-500">alterado</span>
+                                ) : (
+                                  <>
+                                    <span className="line-through text-gray-400">{d.de}</span>
+                                    <span>→</span>
+                                    <span className="text-gray-900">{d.para}</span>
+                                  </>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </TabsContent>
