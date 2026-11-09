@@ -33,7 +33,30 @@ export default function PedidosAdmin() {
   // A lista nao le endereco_entrega (so o modal, que refaz Pedido.get ao
   // abrir), e esse jsonb e 1.242 kB dos 3.727 kB do resumo -- um terco do
   // peso para nada. Lista explicita porque PostgREST nao tem "menos esta".
-  const COLUNAS_LISTA = 'id,comprador_user_id,fornecedor_id,status,status_pagamento,valor_total,desconto,valor_frete,valor_final,data_prevista_entrega,data_entrega_real,transportadora,codigo_rastreio,nota_fiscal,observacoes,observacoes_internas,created_date,updated_at,franqueado_id,mes_referencia,metodo_pagamento,metodo_pagamento_original,data_pagamento,data_aprovacao,data_envio_real,nf_url,nf_numero,nf_data_upload,boleto_url,boleto_data_upload,cliente_confirmou_boleto,cliente_confirmou_nf,cliente_confirmou_recebimento,observacoes_comprador,observacoes_fornecedor,urgente,motivo_recusa,comprovante_pagamento_url,comprovante_pagamento_data,qtd_parcelas,parcelas_info,link_rastreio,valor_frete_fob,data_confirmacao_nf,data_confirmacao_boleto,data_confirmacao_recebimento,loja_id,tipo_frete,frete_incluso_boleto,frete_modo_cobranca,impresso,data_impressao,valor_faturado,valor_quebra,observacao_recebimento,estoque_baixado,pix_info,itens_revisados_em,cartao_link_pagamento,emitido_por_admin_user_id,criado_por_user_id,criado_por_papel,qtd_pecas,meses_entrega';
+  // So o que a LISTA, o kanban, os filtros e os cards leem de fato.
+  //
+  // A versao anterior pedia 64 colunas -- praticamente a tabela inteira menos
+  // o itens -- e isso custava 14 MB de JSON nos 6.813 pedidos. O peso nao
+  // estava nos valores e sim nos NOMES das colunas, repetidos linha a linha:
+  // 64 chaves como "comprovante_pagamento_data" dao mais de 1 kB por pedido
+  // antes de qualquer conteudo. Com estas 18 o mesmo resultado da 4,1 MB.
+  //
+  // Nenhum modal depende desta lista: handleViewDetails, handleEditPedido,
+  // handleEditItens e o botao de faturar passam por carregarPedidoCompleto,
+  // que busca a linha inteira; os exports detalhados usam Pedido.listByIds.
+  //
+  // Ao usar um campo novo na lista ou no PedidoCard, acrescente aqui -- senao
+  // ele chega undefined e a tela erra em silencio.
+  const COLUNAS_LISTA = [
+    'id', 'comprador_user_id', 'fornecedor_id', 'loja_id',
+    'status', 'status_pagamento', 'metodo_pagamento',
+    'valor_total', 'valor_final', 'qtd_pecas',
+    'created_date', 'data_prevista_entrega', 'meses_entrega',
+    // nf_data_upload nao aparece direto na tela: quem le e
+    // getMesesFaturamentoResumo, que define o mes de faturamento do filtro.
+    'nf_data_upload', 'nf_url', 'boleto_url',
+    'codigo_rastreio', 'impresso',
+  ].join(',');
 
   const [users, setUsers] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
@@ -1100,8 +1123,12 @@ export default function PedidosAdmin() {
                                   variant="outline"
                                   size="sm"
                                   className="border-indigo-300 text-indigo-700 hover:bg-indigo-50"
-                                  onClick={() => {
-                                    setSelectedPedido(pedido);
+                                  onClick={async () => {
+                                    // A lista traz o resumo, que nao tem itens.
+                                    // Sem esta busca o modal de faturar abria
+                                    // vazio e acusava "Selecione pelo menos um
+                                    // item" sobre uma lista que nunca chegou.
+                                    setSelectedPedido(await carregarPedidoCompleto(pedido));
                                     setShowFaturarModal(true);
                                   }}
                                   title="Faturar (total ou parcial), anexando a NF"
