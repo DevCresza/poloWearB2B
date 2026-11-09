@@ -443,7 +443,21 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
     } catch (error) {
       console.error('Erro ao faturar:', error);
       console.error('Erro detalhes:', error?.message, error?.details, error?.hint, JSON.stringify(error));
-      toast.error(`Erro ao faturar pedido: ${error?.message || 'Erro desconhecido'}`);
+
+      // 23505 = uniq_faturamento_nota_valor. E o envio repetido: a nota com
+      // este valor ja entrou. Sem esta mensagem o fornecedor leria
+      // "duplicate key value violates unique constraint" e tentaria de novo.
+      const duplicada = error?.code === '23505'
+        || /uniq_faturamento_nota_valor|duplicate key/i.test(error?.message || '');
+      if (duplicada) {
+        toast.error(
+          `A NF ${nfNumero} com este valor já foi lançada neste pedido. ` +
+          'Feche e reabra o pedido para conferir — o faturamento provavelmente já foi gravado.',
+          { duration: 10000 }
+        );
+      } else {
+        toast.error(`Erro ao faturar pedido: ${error?.message || 'Erro desconhecido'}`);
+      }
     } finally {
       setUploading(false);
     }
