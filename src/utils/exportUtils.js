@@ -273,6 +273,13 @@ export const getMesFaturamentoItem = (pedido, item, produtoEntregaMap = {}) => {
  * pedido e o relatório não podem divergir.
  */
 export const getMesesEntregaPedido = (pedido, produtoEntregaMap = {}) => {
+  // Coluna `meses_entrega_efetivos` primeiro: ela ja e esta mesma conta,
+  // resolvida no banco (ver a migration 20261109000004). Assim a tela que
+  // carrega so o resumo chega no mesmo mes da que carrega os itens.
+  const efetivos = pedido?.meses_entrega_efetivos;
+  if (Array.isArray(efetivos) && efetivos.length > 0) {
+    return [...new Set(efetivos.filter(Boolean))].map(m => formatMesAno(`${m}-01`));
+  }
   const itens = Array.isArray(pedido?.itens) ? pedido.itens : [];
   const meses = itens
     .map(it => getMesEntregaItem(pedido, it, produtoEntregaMap))
@@ -311,6 +318,16 @@ export const getMesesFaturamentoPedido = (pedido, produtoEntregaMap = {}) => {
     const k = String(pedido.nf_data_upload).slice(0, 7);
     return k ? [k] : [];
   }
+  // Fonte única: a coluna resolvida no banco. Até 09/11/2026 esta função e a
+  // getMesesFaturamentoResumo calculavam o mês de formas DIFERENTES — a de cá
+  // usava a data prevista do produto, a de lá pulava esse passo — e 1.301
+  // pedidos (R$ 5,49 mi em status vivo) caíam em meses distintos conforme a
+  // tela. Agora as duas leem o mesmo array.
+  const efetivos = pedido?.meses_entrega_efetivos;
+  if (Array.isArray(efetivos) && efetivos.length > 0) {
+    return [...new Set(efetivos.filter(Boolean).map(m => String(m).slice(0, 7)))];
+  }
+  // Pedido carregado sem a coluna: refaz a conta item a item (mesma regra).
   const itens = Array.isArray(pedido?.itens) ? pedido.itens : [];
   const keys = itens
     .map(it => getMesFaturamentoItemKey(pedido, it, produtoEntregaMap))
@@ -319,21 +336,15 @@ export const getMesesFaturamentoPedido = (pedido, produtoEntregaMap = {}) => {
 };
 
 /**
- * Igual a getMesesFaturamentoPedido, mas para telas que carregam o RESUMO do
- * pedido (sem o itens jsonb) — usa a coluna pré-calculada `meses_entrega` no
- * lugar dos itens. NF vence; senão os meses da cápsula; senão o mês do próprio
- * pedido (para nada ficar fora do filtro). Usado no PedidosAdmin.
+ * Mantida só como nome: hoje é a MESMA função de getMesesFaturamentoPedido.
+ *
+ * Existia para as telas que carregam o resumo (sem o itens jsonb) e, por isso,
+ * usava uma regra mais fraca — ignorava a data prevista do produto. Com
+ * `meses_entrega_efetivos` resolvido no banco, resumo e pedido completo
+ * respondem igual e não há mais duas regras. Novos usos devem chamar
+ * getMesesFaturamentoPedido direto.
  */
-export const getMesesFaturamentoResumo = (pedido) => {
-  if (pedido?.nf_data_upload) {
-    const k = String(pedido.nf_data_upload).slice(0, 7);
-    return k ? [k] : [];
-  }
-  const me = Array.isArray(pedido?.meses_entrega) ? pedido.meses_entrega.filter(Boolean) : [];
-  if (me.length) return [...new Set(me.map(m => String(m).slice(0, 7)))];
-  const base = pedido?.data_prevista_entrega || pedido?.created_date;
-  return base ? [String(base).slice(0, 7)] : [];
-};
+export const getMesesFaturamentoResumo = (pedido) => getMesesFaturamentoPedido(pedido);
 
 /**
  * Rótulos de mês a partir do array pré-calculado `pedido.meses_entrega`

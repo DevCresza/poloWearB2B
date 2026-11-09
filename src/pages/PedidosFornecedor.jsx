@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Pedido } from '@/api/entities';
+import { Pedido, PedidoResumo } from '@/api/entities';
 import { toast } from 'sonner';
 import { Produto } from '@/api/entities';
 import { User } from '@/api/entities';
@@ -37,6 +37,29 @@ import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
 
 export default function PedidosFornecedor() {
+  // So o que a LISTA, os filtros e os botoes leem. A tela carregava a linha
+  // inteira, com o itens jsonb junto: 72 MB para o admin (todos os pedidos) e
+  // 12 MB para o maior fornecedor, sendo 80-90% disso o itens -- que a lista
+  // nunca mostra.
+  //
+  // O itens entra sob demanda: carregarPedidoCompleto ao abrir qualquer modal,
+  // e Pedido.listByIds nos dois exports que descem ao nivel do item.
+  //
+  // meses_entrega_efetivos e o que faz o filtro de mes continuar certo sem o
+  // itens -- e a mesma conta, resolvida no banco (migration 20261109000004).
+  const COLUNAS_LISTA = [
+    'id', 'comprador_user_id', 'fornecedor_id', 'loja_id',
+    'status', 'status_pagamento', 'metodo_pagamento',
+    'valor_total', 'valor_final', 'valor_faturado', 'valor_frete_fob',
+    'qtd_pecas', 'created_date', 'data_prevista_entrega', 'mes_referencia',
+    'meses_entrega_efetivos',
+    'transportadora', 'codigo_rastreio',
+    'nf_url', 'nf_numero', 'nf_data_upload', 'boleto_url',
+    'frete_incluso_boleto', 'frete_modo_cobranca',
+    'observacoes_comprador', 'comprovante_pagamento_url',
+    'urgente', 'impresso', 'estoque_baixado',
+  ].join(',');
+
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [fornecedorAtual, setFornecedorAtual] = useState(null); // Fornecedor do usuário logado
@@ -148,7 +171,7 @@ export default function PedidosFornecedor() {
       if (currentUser.role === 'admin') {
         // Sem limite: o Relatorio Producao e o Extrato partem de
         // filteredPedidos, entao uma janela truncaria o export em silencio.
-        pedidosList = await Pedido.list({ sort: '-created_date' });
+        pedidosList = await PedidoResumo.list({ sort: '-created_date', columns: COLUNAS_LISTA });
         clientesList = await User.list(); // Load all users for admin
       } else if (currentUser.tipo_negocio === 'fornecedor') {
         // Usar fornecedor_id do usuário diretamente (se disponível)
@@ -171,7 +194,7 @@ export default function PedidosFornecedor() {
         if (fornecedor) {
           setFornecedorAtual(fornecedor);
           fornecedorAtualId = fornecedorId;
-          pedidosList = await Pedido.filter({ fornecedor_id: fornecedorId }, '-created_date');
+          pedidosList = await PedidoResumo.list({ filters: { fornecedor_id: fornecedorId }, sort: '-created_date', columns: COLUNAS_LISTA });
 
           // Buscar todos os clientes para evitar problemas de "não encontrado"
           const todosClientes = await User.list();
@@ -712,12 +735,10 @@ export default function PedidosFornecedor() {
     const data = pedidosParaExportar.map(p => {
       const cli = clientes.find(c => c.id === p.comprador_user_id);
       const loja = p.loja_id ? lojasMap[p.loja_id] : null;
-      let itens = p.itens || [];
-      if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch { itens = []; } }
-      const qtdPecas = (itens || []).reduce((sum, it) => {
-        const isGrade = it.tipo_venda === 'grade' && (it.total_pecas_grade || 0) > 0;
-        return sum + (it.quantidade || 0) * (isGrade ? (it.total_pecas_grade || 1) : 1);
-      }, 0);
+      // qtd_pecas vem calculada pelo trigger pedidos_calc_resumo com esta
+      // mesma formula (conferido: bate em 6.813 de 6.813). Usar a coluna
+      // dispensa carregar o itens inteiro so para somar.
+      const qtdPecas = p.qtd_pecas || 0;
       return {
         id_formatado: `#${p.id?.slice(-8).toUpperCase() || 'N/A'}`,
         cnpj: loja?.cnpj || cli?.cnpj || '-',
@@ -759,12 +780,10 @@ export default function PedidosFornecedor() {
     const data = pedidosParaExportar.map(p => {
       const cli = clientes.find(c => c.id === p.comprador_user_id);
       const loja = p.loja_id ? lojasMap[p.loja_id] : null;
-      let itens = p.itens || [];
-      if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch { itens = []; } }
-      const qtdPecas = (itens || []).reduce((sum, it) => {
-        const isGrade = it.tipo_venda === 'grade' && (it.total_pecas_grade || 0) > 0;
-        return sum + (it.quantidade || 0) * (isGrade ? (it.total_pecas_grade || 1) : 1);
-      }, 0);
+      // qtd_pecas vem calculada pelo trigger pedidos_calc_resumo com esta
+      // mesma formula (conferido: bate em 6.813 de 6.813). Usar a coluna
+      // dispensa carregar o itens inteiro so para somar.
+      const qtdPecas = p.qtd_pecas || 0;
       return {
         id_formatado: `#${p.id?.slice(-8).toUpperCase() || 'N/A'}`,
         cnpj: loja?.cnpj || cli?.cnpj || '-',
@@ -789,15 +808,18 @@ export default function PedidosFornecedor() {
   // Extrato detalhado por item (1 linha por item) — visao de faturamento.
   // Filtra os pedidos do fornecedor logado (admin ve todos) e respeita
   // filtros de status/cliente da tela.
-  const handleExportExtratoItens = () => {
+  const handleExportExtratoItens = async () => {
     try {
       // Exporta o que está filtrado na tela (inclui o MÊS DE FATURAMENTO).
-      const pedidosParaExportar = filteredPedidos;
-
-      if (!pedidosParaExportar || pedidosParaExportar.length === 0) {
+      if (!filteredPedidos || filteredPedidos.length === 0) {
         toast.info('Não há pedidos para exportar');
         return;
       }
+
+      // A lista não traz o itens; este extrato é linha a linha de item.
+      toast.info('Preparando extrato de itens…');
+      const pedidosParaExportar = await comItens(filteredPedidos);
+      if (!pedidosParaExportar) return;
 
       const statusLabels = {
         novo_pedido: 'Novo Pedido',
@@ -912,7 +934,7 @@ export default function PedidosFornecedor() {
   };
 
   // Relatório de Produção — agrega quantidade total por produto/cor
-  const handleExportRelatorioProducao = () => {
+  const handleExportRelatorioProducao = async () => {
     // Parte do que esta filtrado na tela (mes, status, busca, datas) e nao da
     // lista inteira. Antes lia `pedidos` cru: quem filtrava "outubro de 2026"
     // e clicava aqui levava a producao de todos os meses.
@@ -933,6 +955,13 @@ export default function PedidosFornecedor() {
         : 'Nenhum pedido em produção para gerar relatório');
       return;
     }
+
+    // O relatório agrega item por item, então aqui o itens é obrigatório --
+    // e a lista da tela não o traz mais.
+    toast.info('Preparando relatório de produção…');
+    const comItensDoRelatorio = await comItens(pedidosParaRelatorio);
+    if (!comItensDoRelatorio) return;
+    pedidosParaRelatorio = comItensDoRelatorio;
 
     // Agregar itens por produto + cor
     const agregado = {};
@@ -1016,9 +1045,38 @@ export default function PedidosFornecedor() {
   };
 
 
+  // A lista traz o resumo, sem o itens. Todo modal que mexe em item -- faturar,
+  // revisar, cancelar, recusar, ver detalhes -- precisa da linha inteira, entao
+  // ela e buscada no clique. Uma ida ao banco por abertura de modal custa menos
+  // que 12 MB em toda carga da tela.
+  const carregarPedidoCompleto = async (pedido) => {
+    try {
+      const completo = await Pedido.get(pedido.id);
+      return { ...pedido, ...completo };
+    } catch (e) {
+      console.warn('Falha ao carregar os itens do pedido; abrindo com o resumo.', e);
+      return pedido;
+    }
+  };
+
+  // Idem para os exports que descem ao nivel do item. Os que so precisam da
+  // contagem de pecas usam p.qtd_pecas, que a coluna ja traz pronta.
+  const comItens = async (lista) => {
+    if (!Array.isArray(lista) || lista.length === 0) return lista || [];
+    try {
+      const completos = await Pedido.listByIds(lista.map(x => x.id));
+      const porId = new Map(completos.map(c => [c.id, c]));
+      return lista.map(x => ({ ...x, ...(porId.get(x.id) || {}) }));
+    } catch (e) {
+      console.error('Falha ao carregar os itens para o export:', e);
+      toast.error('Não consegui carregar os itens dos pedidos para este relatório.');
+      return null;
+    }
+  };
+
   // --- Boleto por NF (modal dedicado) ---
   const handleOpenBoletoNFModal = async (pedido) => {
-    setSelectedPedido(pedido);
+    setSelectedPedido(await carregarPedidoCompleto(pedido));
     setBoletoNFSelected(null);
     setBoletoNFFile(null);
     // Carne unico e o caso comum; quem tem um boleto por parcela desmarca.
@@ -1757,8 +1815,8 @@ export default function PedidosFornecedor() {
                           {pedido.status === 'novo_pedido' && (
                             <>
                               <Button
-                                onClick={() => {
-                                  setSelectedPedido(pedido);
+                                onClick={async () => {
+                                  setSelectedPedido(await carregarPedidoCompleto(pedido));
                                   setShowApprovalModal(true);
                                 }}
                                 className="bg-green-600 hover:bg-green-700"
@@ -1768,8 +1826,8 @@ export default function PedidosFornecedor() {
                               </Button>
                               <Button
                                 variant="destructive"
-                                onClick={() => {
-                                  setSelectedPedido(pedido);
+                                onClick={async () => {
+                                  setSelectedPedido(await carregarPedidoCompleto(pedido));
                                   setShowRejectModal(true);
                                 }}
                               >
@@ -1782,8 +1840,8 @@ export default function PedidosFornecedor() {
                           {(pedido.status === 'em_producao' || pedido.status === 'parcialmente_faturado') && (
                             <>
                               <Button
-                                onClick={() => {
-                                  setSelectedPedido(pedido);
+                                onClick={async () => {
+                                  setSelectedPedido(await carregarPedidoCompleto(pedido));
                                   setShowFaturarModal(true);
                                 }}
                                 className="bg-indigo-600 hover:bg-indigo-700"
@@ -1820,8 +1878,8 @@ export default function PedidosFornecedor() {
 
                           {(pedido.status === 'faturado' || pedido.status === 'parcialmente_faturado') && (
                             <Button
-                              onClick={() => {
-                                setSelectedPedido(pedido);
+                              onClick={async () => {
+                                setSelectedPedido(await carregarPedidoCompleto(pedido));
                                 // Ja vem preenchida quando saiu do XML da NF
                                 setTransportadora(pedido.transportadora || '');
                                 setShowEnvioModal(true);
@@ -1837,8 +1895,8 @@ export default function PedidosFornecedor() {
                           {['faturado', 'parcialmente_faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'].includes(pedido.status) && pedido.nf_url && (
                             <Button
                               variant="outline"
-                              onClick={() => {
-                                setSelectedPedido(pedido);
+                              onClick={async () => {
+                                setSelectedPedido(await carregarPedidoCompleto(pedido));
                                 setNfNumero(pedido.nf_numero || '');
                                 setNfDataEmissao(pedido.nf_data_upload ? pedido.nf_data_upload.split('T')[0] : '');
                                 setNfFile(null);
@@ -1879,8 +1937,8 @@ export default function PedidosFornecedor() {
 
                       <Button
                         variant="outline"
-                        onClick={() => {
-                          setSelectedPedido(pedido);
+                        onClick={async () => {
+                          setSelectedPedido(await carregarPedidoCompleto(pedido));
                           setDetailsDefaultTab('itens');
                           setShowDetailsModal(true);
                         }}
@@ -1893,8 +1951,8 @@ export default function PedidosFornecedor() {
                       {!['entregue', 'cancelado', 'finalizado'].includes(pedido.status) && (
                         <Button
                           variant="outline"
-                          onClick={() => {
-                            setSelectedPedido(pedido);
+                          onClick={async () => {
+                            setSelectedPedido(await carregarPedidoCompleto(pedido));
                             setShowItensEditModal(true);
                           }}
                           title="Revisar quantidade dos itens"
@@ -1909,8 +1967,8 @@ export default function PedidosFornecedor() {
                         <Button
                           variant="outline"
                           className="border-red-300 text-red-700 hover:bg-red-50"
-                          onClick={() => {
-                            setSelectedPedido(pedido);
+                          onClick={async () => {
+                            setSelectedPedido(await carregarPedidoCompleto(pedido));
                             setShowCancelarModal(true);
                           }}
                         >

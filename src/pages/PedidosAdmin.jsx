@@ -51,7 +51,7 @@ export default function PedidosAdmin() {
     'id', 'comprador_user_id', 'fornecedor_id', 'loja_id',
     'status', 'status_pagamento', 'metodo_pagamento',
     'valor_total', 'valor_final', 'qtd_pecas',
-    'created_date', 'data_prevista_entrega', 'meses_entrega',
+    'created_date', 'data_prevista_entrega', 'meses_entrega_efetivos',
     // nf_data_upload nao aparece direto na tela: quem le e
     // getMesesFaturamentoResumo, que define o mes de faturamento do filtro.
     'nf_data_upload', 'nf_url', 'boleto_url',
