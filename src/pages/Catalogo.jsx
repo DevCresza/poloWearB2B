@@ -669,7 +669,18 @@ export default function Catalogo() {
       if (!mapa.has(chave)) mapa.set(chave, []);
       mapa.get(chave).push(c);
     }
-    const comGrupo = [...mapa.entries()].filter(([k]) => k !== SEM_GRUPO);
+    // Ordem das linhas: a menor ordem_exibicao dentro do grupo, depois o nome.
+    // E o mesmo campo que ja ordena as capsulas, entao mover uma linha para
+    // cima e baixar a ordem de qualquer capsula dela -- nao ha um segundo
+    // cadastro de ordem so para as linhas.
+    const comGrupo = [...mapa.entries()]
+      .filter(([k]) => k !== SEM_GRUPO)
+      .sort((a, b) => {
+        const oa = Math.min(...a[1].map(c => Number(c.ordem_exibicao) || 0));
+        const ob = Math.min(...b[1].map(c => Number(c.ordem_exibicao) || 0));
+        if (oa !== ob) return oa - ob;
+        return a[0].localeCompare(b[0], 'pt-BR');
+      });
     const semGrupo = mapa.get(SEM_GRUPO);
     // Quando TUDO esta sem grupo a vitrine e a de sempre: uma faixa so,
     // com o titulo "Cápsulas". Nada muda ate alguem preencher o campo.
@@ -1327,7 +1338,7 @@ export default function Catalogo() {
             mes e ano da colecao. Cada grupo e uma faixa horizontal propria. */}
         {activeCapsulas.length > 0 && (
           <div className="space-y-5">
-            {anosCapsulas.length > 1 && (
+            {anosCapsulas.length > 0 && (
               <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
                 {[{ label: 'Todos os anos', value: 'all' }, ...anosCapsulas.map(a => ({ label: String(a), value: String(a) }))].map(opt => (
                   <button
