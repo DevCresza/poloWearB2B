@@ -29,11 +29,19 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
     disponivel_multimarca: false,
     ordem_exibicao: 0,
     meses_disponiveis: [], // ['YYYY-MM'] — meses que o cliente pode escolher no checkout
+    grupo: '',   // titulo da linha no catalogo; vazio cai na linha generica
+    ano: '',     // ano da colecao; vazio aparece em qualquer ano
   });
   const [allProdutos, setAllProdutos] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
   const [selectedFornecedor, setSelectedFornecedor] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  // Montar a capsula de inverno nova e escolher entre produtos da colecao
+  // passada e da nova e impossivel se as duas aparecem juntas. Arquivado sai
+  // da lista por padrao; o toggle existe porque a capsula antiga que esta
+  // sendo editada precisa continuar mostrando o que ja tem dentro.
+  const [mostrarArquivados, setMostrarArquivados] = useState(false);
+  const [gruposExistentes, setGruposExistentes] = useState([]);
   const [loading, setLoading] = useState(false);
 
   // Effect 1: carrega produtos e fornecedores UMA VEZ ao montar.
@@ -51,6 +59,20 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
         const fornecedoresList = await Fornecedor.list();
         setAllProdutos(produtosList || []);
         setFornecedores(fornecedoresList || []);
+
+        // Sugestoes para o campo "Linha no catalogo". Digitar o grupo na mao
+        // toda vez produziria "Inverno", "inverno" e "INVERNO" como tres
+        // linhas diferentes na vitrine.
+        try {
+          const capsulasList = await Capsula.list();
+          const grupos = Array.from(new Set(
+            (capsulasList || []).map(c => (c.grupo || '').trim()).filter(Boolean)
+          )).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+          setGruposExistentes(grupos);
+        } catch (e) {
+          // Sem sugestoes o campo continua funcionando como texto livre.
+          console.warn('Erro ao carregar grupos de capsulas:', e);
+        }
       } catch (error) {
         console.error('Erro ao carregar dados:', error);
       }
@@ -178,6 +200,8 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
       disponivel_franqueado: capsula.disponivel_franqueado !== false,
       disponivel_multimarca: capsula.disponivel_multimarca === true,
       meses_disponiveis: Array.isArray(capsula.meses_disponiveis) ? capsula.meses_disponiveis : [],
+      grupo: capsula.grupo || '',
+      ano: capsula.ano ? String(capsula.ano) : '',
     });
   // Reagimos ao id da capsula editada e a chegada dos produtos.
   // NAO depender de `capsula` inteiro (referencia nova a cada render pai
@@ -323,8 +347,23 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
     const matchesFornecedor = fornecedorTravado
       ? p.fornecedor_id === fornecedorTravado
       : selectedFornecedor === 'all' || p.fornecedor_id === selectedFornecedor;
-    return matchesSearch && matchesFornecedor;
+    // Produto arquivado ja selecionado continua visivel mesmo com o filtro
+    // ligado: escondido, ele sairia da capsula sem ninguem perceber -- a
+    // lista e o unico lugar onde da para desmarcar.
+    const matchesArquivo = mostrarArquivados
+      || !p.arquivado
+      || formData.produto_ids.includes(p.id);
+    return matchesSearch && matchesFornecedor && matchesArquivo;
   });
+
+  const arquivadosOcultos = mostrarArquivados
+    ? 0
+    : allProdutos.filter(p => {
+        if (!p.arquivado || formData.produto_ids.includes(p.id)) return false;
+        return fornecedorTravado
+          ? p.fornecedor_id === fornecedorTravado
+          : selectedFornecedor === 'all' || p.fornecedor_id === selectedFornecedor;
+      }).length;
 
   // Função para obter a primeira foto do produto
   const getPrimeiraFoto = (produto) => {
@@ -419,10 +458,15 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
 
     setLoading(true);
     try {
+      // grupo/ano vao como null quando vazios: string vazia viraria um grupo
+      // chamado "" no catalogo, e ano '' nao converte para smallint.
+      const anoNum = parseInt(formData.ano, 10);
       const dataToSave = {
         ...formData,
         produtos_quantidades: formData.produtos_quantidades,
-        fornecedor_id: fornecedorDaCapsula
+        fornecedor_id: fornecedorDaCapsula,
+        grupo: (formData.grupo || '').trim() || null,
+        ano: Number.isFinite(anoNum) ? anoNum : null,
       };
 
       if (capsula) {
@@ -461,6 +505,44 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
                 <Label htmlFor="descricao" className="font-medium">Descrição</Label>
                 <Textarea id="descricao" value={formData.descricao} onChange={e => setFormData({...formData, descricao: e.target.value})} className="bg-slate-100 shadow-neumorphic-inset" />
               </div>
+              {/* Grupo e ano montam a vitrine: o grupo vira o titulo da linha
+                  no catalogo e o ano vira os botoes de filtro. Os dois sao
+                  opcionais -- sem grupo a capsula cai na linha generica, sem
+                  ano ela aparece em qualquer ano selecionado. */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <Label htmlFor="grupo" className="font-medium">Linha no catálogo</Label>
+                  <Input
+                    id="grupo"
+                    list="capsula-grupos"
+                    placeholder="Ex: Inverno"
+                    value={formData.grupo}
+                    onChange={e => setFormData({ ...formData, grupo: e.target.value })}
+                    className="bg-slate-100 shadow-neumorphic-inset"
+                  />
+                  <datalist id="capsula-grupos">
+                    {gruposExistentes.map(g => <option key={g} value={g} />)}
+                  </datalist>
+                </div>
+                <div>
+                  <Label htmlFor="ano" className="font-medium">Ano</Label>
+                  <Input
+                    id="ano"
+                    type="number"
+                    min="2020"
+                    max="2099"
+                    placeholder="2027"
+                    value={formData.ano}
+                    onChange={e => setFormData({ ...formData, ano: e.target.value })}
+                    className="bg-slate-100 shadow-neumorphic-inset"
+                  />
+                </div>
+              </div>
+              <p className="-mt-4 text-xs text-gray-500">
+                A linha vira um título no catálogo e o ano vira botão de filtro.
+                Deixe em branco para a cápsula aparecer sempre, na linha geral.
+              </p>
+
               <div>
                 <Label className="font-medium">Imagem de Capa</Label>
                 <ImageUploader
@@ -604,6 +686,23 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
                   />
                 </div>
               </div>
+
+              <div className="mt-2 flex items-center gap-2">
+                <Checkbox
+                  id="cap_mostrar_arquivados"
+                  checked={mostrarArquivados}
+                  onCheckedChange={(v) => setMostrarArquivados(!!v)}
+                />
+                <Label htmlFor="cap_mostrar_arquivados" className="cursor-pointer text-sm text-gray-600">
+                  Mostrar produtos arquivados
+                  {arquivadosOcultos > 0 && (
+                    <span className="ml-1 text-xs text-gray-400">
+                      ({arquivadosOcultos} fora da lista)
+                    </span>
+                  )}
+                </Label>
+              </div>
+
               <ScrollArea className="h-96 mt-4 p-4 rounded-lg bg-slate-100 shadow-neumorphic-inset">
                 <div className="space-y-3">
                   {filteredProdutos.map(produto => {
@@ -635,6 +734,11 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
                           <div className="flex-1">
                             <label htmlFor={`prod-${produto.id}`} className="cursor-pointer font-medium">
                               {produto.nome}
+                              {produto.arquivado && (
+                                <span className="ml-2 align-middle rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+                                  Arquivado
+                                </span>
+                              )}
                             </label>
                             <div className="text-xs text-gray-500">{produto.marca}</div>
                             

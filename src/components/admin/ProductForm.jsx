@@ -92,7 +92,10 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
 
   // Grades por tipo de categoria
   const tamanhosRoupa = ['PP', 'P', 'M', 'G', 'GG', 'G1', 'G2', 'G3', 'G4', 'G5'];
-  const tamanhosCalcaBermuda = ['36', '38', '40', '42', '44', '46', '48', '50', '52', '54', 'P', 'M', 'G', 'GG', 'G1'];
+  // G2/G3 entraram em 09/11/2026: a grade de baixo parava em G1 enquanto a de
+  // cima ia ate G5, entao calca e bermuda nao tinham como oferecer plus size.
+  // Shorts nao esta aqui de proposito -- usa tamanhosRoupa, que ja tem G2/G3.
+  const tamanhosCalcaBermuda = ['36', '38', '40', '42', '44', '46', '48', '50', '52', '54', 'P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
   const tamanhosCalcados = ['34', '35', '36', '37', '38', '39', '40', '41', '42', '43'];
 
   const categoriasCalcaBermuda = ['Calças', 'Bermudas'];
@@ -1349,7 +1352,9 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
               </div>
 
               {/* Diferente de "destaque", que e vitrine: aqui e obrigacao de
-                  sortimento -- produto que toda loja precisa ter. */}
+                  sortimento -- produto que toda loja precisa ter. O selo se
+                  chamava "Compra Obrigatoria" ate 09/11/2026; o nome mudou para
+                  "Essenciais" so na tela. A coluna segue compra_obrigatoria. */}
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="compra_obrigatoria"
@@ -1360,7 +1365,7 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
                   htmlFor="compra_obrigatoria"
                   className="text-sm font-medium leading-none cursor-pointer"
                 >
-                  Compra Obrigatória
+                  Essenciais
                   <span className="block text-xs font-normal text-gray-500">
                     Produto que toda loja precisa ter
                   </span>

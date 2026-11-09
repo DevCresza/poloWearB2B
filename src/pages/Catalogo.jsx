@@ -46,6 +46,9 @@ export default function Catalogo() {
   const [selectedDisponibilidade, setSelectedDisponibilidade] = useState('all');
   const [filtroEstoque, setFiltroEstoque] = useState('all');
   const [filtroMesEntrega, setFiltroMesEntrega] = useState('all');
+  // Ano da colecao das capsulas. 'all' = todos; capsula sem ano aparece sempre
+  // (basico continuo nao pertence a uma colecao).
+  const [filtroAnoCapsula, setFiltroAnoCapsula] = useState('all');
   const [ordenacao, setOrdenacao] = useState('estoque_desc');
   const [selectedCapsula, setSelectedCapsula] = useState(null);
   const [selectedProduto, setSelectedProduto] = useState(null);
@@ -615,9 +618,9 @@ export default function Catalogo() {
   // disponibilidade/data). Uma capsula aparece se tiver ao menos um produto
   // que casa com o filtro. Os demais filtros (categoria/genero) nao se aplicam
   // as capsulas para nao esconder capsulas que legitimamente misturam itens.
-  // Selo de sortimento obrigatorio: a capa da capsula marca quando QUALQUER
-  // produto dela precisa estar em toda loja. A obrigacao e do produto, entao
-  // a capsula so reflete o que tem dentro.
+  // Selo "Essenciais" (ate 09/11/2026 chamado "Compra obrigatoria"): a capa da
+  // capsula marca quando QUALQUER produto dela precisa estar em toda loja. A
+  // obrigacao e do produto, entao a capsula so reflete o que tem dentro.
   const capsulaTemObrigatorio = (capsula) => {
     const ids = Array.isArray(capsula.produto_ids) ? capsula.produto_ids : [];
     return ids.some(id => todosProdutos.find(p => p.id === id)?.compra_obrigatoria);
@@ -640,6 +643,42 @@ export default function Catalogo() {
       || prods.some(p => p.data_prevista_entrega && p.data_prevista_entrega.slice(0, 7) === filtroMesEntrega);
     return matchDisp && matchMes;
   });
+
+  // Botoes de ano: so os anos que existem em capsula ativa. Um botao "2027"
+  // num catalogo sem nada de 2027 so gera lista vazia.
+  const anosCapsulas = Array.from(
+    new Set(activeCapsulas.map(c => c.ano).filter(a => Number.isFinite(Number(a)) && Number(a) > 0))
+  ).map(Number).sort((a, b) => a - b);
+
+  const capsulasDoAno = capsulasFiltradas.filter(c => {
+    if (filtroAnoCapsula === 'all') return true;
+    // Sem ano = continua o ano todo. Esconder essas no filtro deixaria o
+    // cliente sem os basicos justamente quando ele esta montando a colecao.
+    if (!c.ano) return true;
+    return Number(c.ano) === Number(filtroAnoCapsula);
+  });
+
+  // Uma linha por grupo, na ordem em que os grupos aparecem na lista ja
+  // ordenada (ordem_exibicao e depois nome). As sem grupo fecham a vitrine
+  // numa linha propria -- nunca somem por falta de preenchimento.
+  const SEM_GRUPO = '__sem_grupo__';
+  const linhasDeCapsulas = (() => {
+    const mapa = new Map();
+    for (const c of capsulasDoAno) {
+      const chave = (c.grupo || '').trim() || SEM_GRUPO;
+      if (!mapa.has(chave)) mapa.set(chave, []);
+      mapa.get(chave).push(c);
+    }
+    const comGrupo = [...mapa.entries()].filter(([k]) => k !== SEM_GRUPO);
+    const semGrupo = mapa.get(SEM_GRUPO);
+    // Quando TUDO esta sem grupo a vitrine e a de sempre: uma faixa so,
+    // com o titulo "Cápsulas". Nada muda ate alguem preencher o campo.
+    const titulo = comGrupo.length === 0 ? 'Cápsulas' : 'Outras cápsulas';
+    return [
+      ...comGrupo.map(([grupo, itens]) => ({ titulo: grupo, itens })),
+      ...(semGrupo ? [{ titulo, itens: semGrupo }] : []),
+    ];
+  })();
 
   // IDs dos produtos campeões de venda (top 8) — usado para o selo "Mais Vendido"
   const topVendidosIds = useMemo(() => {
@@ -1284,42 +1323,76 @@ export default function Catalogo() {
           })}
         </div>
 
-        {/* Faixa horizontal de Cápsulas — respeita os filtros Pronta Entrega e mês */}
+        {/* Capsulas em linhas com titulo — respeita os filtros Pronta Entrega,
+            mes e ano da colecao. Cada grupo e uma faixa horizontal propria. */}
         {activeCapsulas.length > 0 && (
-          <div className="space-y-3">
-            <h2 className="text-base sm:text-lg font-bold text-gray-900 uppercase tracking-wider">Cápsulas</h2>
-            {capsulasFiltradas.length === 0 ? (
-              <p className="text-sm text-gray-500">Nenhuma cápsula para este filtro.</p>
+          <div className="space-y-5">
+            {anosCapsulas.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+                {[{ label: 'Todos os anos', value: 'all' }, ...anosCapsulas.map(a => ({ label: String(a), value: String(a) }))].map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setFiltroAnoCapsula(opt.value)}
+                    className={`shrink-0 px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold tracking-wide border transition-all ${
+                      filtroAnoCapsula === opt.value
+                        ? 'bg-purple-600 text-white border-purple-600'
+                        : 'bg-white text-gray-700 border-gray-300 hover:border-purple-500'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {linhasDeCapsulas.length === 0 ? (
+              <div className="space-y-3">
+                <h2 className="text-base sm:text-lg font-bold text-gray-900 uppercase tracking-wider">Cápsulas</h2>
+                <p className="text-sm text-gray-500">Nenhuma cápsula para este filtro.</p>
+              </div>
             ) : (
-            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
-              {capsulasFiltradas.map(capsula => (
-                <div
-                  key={capsula.id}
-                  onClick={() => handleSelectCapsula(capsula)}
-                  className="shrink-0 w-40 sm:w-48 cursor-pointer group"
-                >
-                  <div className="relative aspect-square rounded-xl overflow-hidden bg-gradient-to-br from-pink-100 to-purple-100 mb-2">
-                    {capsula.imagem_capa_url ? (
-                      <img src={capsula.imagem_capa_url} alt={capsula.nome} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Sparkles className="w-10 h-10 text-purple-400" />
+              linhasDeCapsulas.map(linha => (
+                <div key={linha.titulo} className="space-y-3">
+                  <h2 className="text-base sm:text-lg font-bold text-gray-900 uppercase tracking-wider">
+                    {linha.titulo}
+                    <span className="ml-2 text-xs font-normal normal-case tracking-normal text-gray-400">
+                      {linha.itens.length} {linha.itens.length === 1 ? 'cápsula' : 'cápsulas'}
+                    </span>
+                  </h2>
+                  <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
+                    {linha.itens.map(capsula => (
+                      <div
+                        key={capsula.id}
+                        onClick={() => handleSelectCapsula(capsula)}
+                        className="shrink-0 w-40 sm:w-48 cursor-pointer group"
+                      >
+                        <div className="relative aspect-square rounded-xl overflow-hidden bg-gradient-to-br from-pink-100 to-purple-100 mb-2">
+                          {capsula.imagem_capa_url ? (
+                            <img src={capsula.imagem_capa_url} alt={capsula.nome} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Sparkles className="w-10 h-10 text-purple-400" />
+                            </div>
+                          )}
+                          {capsulaTemObrigatorio(capsula) && (
+                            <div className="absolute top-1.5 left-1.5 right-1.5">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow">
+                                <Star className="w-3 h-3 fill-current" />
+                                Essenciais
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-xs sm:text-sm font-semibold text-gray-900 line-clamp-1">{capsula.nome}</p>
+                        <p className="text-[11px] text-gray-500">
+                          {capsula.produto_ids?.length || 0} produtos
+                          {capsula.ano ? ` · ${capsula.ano}` : ''}
+                        </p>
                       </div>
-                    )}
-                    {capsulaTemObrigatorio(capsula) && (
-                      <div className="absolute top-1.5 left-1.5 right-1.5">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow">
-                          <Star className="w-3 h-3 fill-current" />
-                          Compra obrigatória
-                        </span>
-                      </div>
-                    )}
+                    ))}
                   </div>
-                  <p className="text-xs sm:text-sm font-semibold text-gray-900 line-clamp-1">{capsula.nome}</p>
-                  <p className="text-[11px] text-gray-500">{capsula.produto_ids?.length || 0} produtos</p>
                 </div>
-              ))}
-            </div>
+              ))
             )}
           </div>
         )}
@@ -1540,7 +1613,7 @@ export default function Catalogo() {
                     {selectedProduto.compra_obrigatoria && (
                       <Badge className="bg-amber-600 text-white">
                         <Star className="w-3 h-3 mr-1 fill-current" />
-                        Compra obrigatória
+                        Essenciais
                       </Badge>
                     )}
                     {selectedProduto.disponibilidade === 'pre_venda' && (

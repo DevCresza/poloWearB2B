@@ -181,6 +181,22 @@ export default function GestaoCapsulas() {
                         #{Number(capsula.ordem_exibicao) || 0}
                       </span>
                     </div>
+                    {/* Linha e ano definem onde a capsula aparece no catalogo.
+                        Sem isso a unica forma de saber era abrir a edicao. */}
+                    {(capsula.grupo || capsula.ano) && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {capsula.grupo && (
+                          <span className="text-[11px] font-semibold uppercase tracking-wide bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                            {capsula.grupo}
+                          </span>
+                        )}
+                        {capsula.ano && (
+                          <span className="text-[11px] font-semibold bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full">
+                            {capsula.ano}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     <p className="text-sm text-gray-600 line-clamp-2">{capsula.descricao}</p>
                     <p className="text-sm font-medium text-blue-600">{capsula.produto_ids?.length || 0} produtos</p>
                     {capsula.fornecedor_id && fornecedoresMap[capsula.fornecedor_id] && (

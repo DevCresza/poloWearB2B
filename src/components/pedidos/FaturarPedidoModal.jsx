@@ -42,6 +42,11 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
   const [pagamentos, setPagamentos] = useState([
     { metodo: pedido.metodo_pagamento || 'boleto_faturado', valor: '' }
   ]);
+  // Dados de cada XML anexado, por nome de arquivo. O casamento de itens sai
+  // so do primeiro (casar duas vezes dobraria a baixa), mas o NUMERO de cada
+  // nota precisa ser gravado -- sem isso a remessa com duas notas guardava os
+  // dois arquivos e um numero so, e a segunda nota virava um anexo anonimo.
+  const [dadosPorArquivo, setDadosPorArquivo] = useState({});
   const [resumoXml, setResumoXml] = useState(null);
   const [transportadoraXml, setTransportadoraXml] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -72,6 +77,22 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
     setNfFiles(arquivos);
     setResumoXml(null);
     setTransportadoraXml('');
+    setDadosPorArquivo({});
+
+    // Numero e data de cada XML da selecao, inclusive os que nao casam itens.
+    const lidos = {};
+    for (const arquivo of arquivos) {
+      if (!/\.xml$/i.test(arquivo.name)) continue;
+      try {
+        const dados = parseNFeXml(await arquivo.text());
+        if (dados?.numero) {
+          lidos[arquivo.name] = { numero: dados.numero, dataEmissao: dados.dataEmissao || null };
+        }
+      } catch (_e) {
+        // Arquivo ilegivel continua anexado, so sem numero proprio.
+      }
+    }
+    setDadosPorArquivo(lidos);
 
     // Varias notas, um so casamento de itens: le o primeiro XML da selecao. Os
     // demais sao anexados sem releitura -- casar item duas vezes marcaria a
@@ -187,7 +208,15 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
       if (!isQuebraOnly) {
         for (const arquivo of nfFiles) {
           const enviado = await UploadFile({ file: arquivo });
-          nfArquivos.push({ url: enviado.file_url, nome: arquivo.name });
+          // Numero lido do proprio XML; sem XML, cai no numero digitado -- que
+          // e o certo quando ha uma nota so.
+          const lido = dadosPorArquivo[arquivo.name];
+          nfArquivos.push({
+            url: enviado.file_url,
+            nome: arquivo.name,
+            numero: String(lido?.numero || nfNumero || '').trim() || null,
+            data_emissao: lido?.dataEmissao || nfDataEmissao || null,
+          });
         }
       }
       const nfUrlPrincipal = nfArquivos[0]?.url || null;
@@ -735,6 +764,13 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
                         <li key={i} className="flex items-center gap-2">
                           <span className="text-gray-400 shrink-0">{i + 1}.</span>
                           <span className="truncate">{f.name}</span>
+                          {/* Confirma na tela o numero que cada nota vai gravar:
+                              com duas notas, so o nome do arquivo nao diz. */}
+                          {dadosPorArquivo[f.name]?.numero && (
+                            <span className="shrink-0 font-medium text-indigo-700">
+                              NF #{dadosPorArquivo[f.name].numero}
+                            </span>
+                          )}
                           {i === 0 && nfFiles.length > 1 && (
                             <span className="text-gray-400 shrink-0">(principal)</span>
                           )}

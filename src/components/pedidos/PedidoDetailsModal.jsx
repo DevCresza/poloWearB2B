@@ -14,7 +14,7 @@ import {
   Package, MapPin, DollarSign, Calendar, FileText,
   Download, CheckCircle, Clock, Truck, User, Building,
   Phone, Mail, CreditCard, Upload, AlertTriangle, Pencil, ChevronDown, ChevronUp,
-  Printer, Copy, History
+  Printer, Copy, History, Plus
 } from 'lucide-react';
 import { Pedido, Produto } from '@/api/entities';
 import { Carteira } from '@/api/entities';
@@ -33,10 +33,27 @@ import autoTable from 'jspdf-autotable';
 
 // Notas de um faturamento. nf_arquivos e a lista; nf_url (campo antigo) vale
 // como item unico para faturamento gravado antes da migration 20260922000001.
+//
+// Uma remessa pode sair com mais de uma nota -- CFOP diferente, nota
+// complementar, limite de itens do emissor. Cada entrada carrega o proprio
+// numero desde 09/11/2026; as gravadas antes so tem url/nome, e para essas o
+// numero da PRIMEIRA e o numero_nf do faturamento (era o unico que havia).
 const notasDoFaturamento = (fat) => {
   const lista = Array.isArray(fat?.nf_arquivos) ? fat.nf_arquivos.filter(a => a?.url) : [];
-  if (lista.length > 0) return lista;
-  return fat?.nf_url ? [{ url: fat.nf_url, nome: 'Nota fiscal' }] : [];
+  const base = lista.length > 0
+    ? lista
+    : (fat?.nf_url ? [{ url: fat.nf_url, nome: 'Nota fiscal' }] : []);
+  return base.map((nota, i) => ({
+    ...nota,
+    numero: nota.numero || (i === 0 ? fat?.numero_nf : null),
+    data_emissao: nota.data_emissao || (i === 0 ? fat?.data_emissao : null),
+  }));
+};
+
+const dataBR = (iso) => {
+  if (!iso) return null;
+  const d = String(iso).slice(0, 10);
+  return d.split('-').reverse().join('/');
 };
 
 // formatMesAno devolve "outubro de 2026"; no PDF nao ha CSS capitalize.
@@ -116,6 +133,15 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
 
   // Boleto por faturamento
   const [boletoFatId, setBoletoFatId] = useState(null); // which faturamento is being edited
+
+  // Anexar uma SEGUNDA nota ao mesmo faturamento. Ate 09/11/2026 o unico
+  // caminho para isso era "Atualizar Nota Fiscal", que substitui: a remessa
+  // com duas notas perdia a primeira sem avisar ninguem.
+  const [notaFatId, setNotaFatId] = useState(null);
+  const [notaFile, setNotaFile] = useState(null);
+  const [notaNumero, setNotaNumero] = useState('');
+  const [notaData, setNotaData] = useState('');
+  const [salvandoNota, setSalvandoNota] = useState(false);
   const [boletoFatFile, setBoletoFatFile] = useState(null);
   const [boletoFatQtdParcelas, setBoletoFatQtdParcelas] = useState(1);
   const [boletoFatParcelas, setBoletoFatParcelas] = useState([{ dataVencimento: '' }]);
@@ -126,6 +152,11 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
 
   // Verificar se usuário pode fazer upload (fornecedor ou admin, nunca cliente)
   const canUpload = !isCliente && (currentUser?.role === 'admin' || currentUser?.tipo_negocio === 'fornecedor');
+  // Todas as notas do pedido, somando as de cada faturamento. Pedido antigo
+  // sem faturamento conta a nota espelhada em pedidos.nf_url.
+  const totalNotasDoPedido = faturamentos.length > 0
+    ? faturamentos.reduce((n, f) => n + notasDoFaturamento(f).length, 0)
+    : (pedido.nf_url ? 1 : 0);
 
   // Carregar parcelas do pedido
   // Load loja info if pedido has loja_id
@@ -723,6 +754,76 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       toast.error('Erro ao enviar nota fiscal');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const abrirFormNota = (fatId) => {
+    setNotaFatId(fatId);
+    setNotaFile(null);
+    setNotaNumero('');
+    setNotaData('');
+  };
+
+  // Le o XML da nota adicional para preencher numero e data. O casamento de
+  // itens NAO roda aqui de proposito: os itens ja foram baixados no
+  // faturamento: casar de novo dobraria a quantidade faturada.
+  const handleNotaFileChange = async (file) => {
+    setNotaFile(file || null);
+    if (!file || !/\.xml$/i.test(file.name)) return;
+    try {
+      const nfe = parseNFeXml(await file.text());
+      if (nfe.numero) setNotaNumero(nfe.numero);
+      if (nfe.dataEmissao) setNotaData(nfe.dataEmissao);
+      toast.success(`NF ${nfe.numero} lida do XML.`);
+    } catch (err) {
+      console.error('Erro ao ler XML da nota adicional:', err);
+      toast.warning(`Anexo mantido, mas não consegui ler o XML: ${err?.message || 'erro desconhecido'}`);
+    }
+  };
+
+  const handleAnexarNota = async (fat) => {
+    if (!notaFile) { toast.info('Selecione o arquivo da nota'); return; }
+    if (!notaNumero) { toast.info('Informe o número da nota'); return; }
+
+    const jaExiste = notasDoFaturamento(fat)
+      .some(n => String(n.numero || '').trim() === String(notaNumero).trim());
+    if (jaExiste) {
+      toast.error(`A NF ${notaNumero} já está anexada a este faturamento.`);
+      return;
+    }
+
+    setSalvandoNota(true);
+    try {
+      const enviado = await UploadFile({ file: notaFile });
+      // Parte da lista JA GRAVADA, nao do estado da tela: a nota antiga
+      // continua na lista. Era exatamente isso que o fluxo de substituir
+      // perdia.
+      const atuais = notasDoFaturamento(fat).map(n => ({
+        url: n.url,
+        nome: n.nome,
+        ...(n.numero ? { numero: String(n.numero) } : {}),
+        ...(n.data_emissao ? { data_emissao: String(n.data_emissao).slice(0, 10) } : {}),
+      }));
+      const nova = {
+        url: enviado.file_url,
+        nome: notaFile.name,
+        numero: String(notaNumero).trim(),
+        ...(notaData ? { data_emissao: notaData } : {}),
+      };
+      await Faturamento.update(fat.id, { nf_arquivos: [...atuais, nova] });
+
+      toast.success(`NF ${nova.numero} anexada. O faturamento agora tem ${atuais.length + 1} notas.`);
+      setNotaFatId(null);
+      setNotaFile(null);
+      setNotaNumero('');
+      setNotaData('');
+      const list = await Faturamento.filter({ pedido_id: pedido.id }, '-created_date');
+      setFaturamentos(list || []);
+    } catch (error) {
+      console.error('Erro ao anexar nota adicional:', error);
+      toast.error(`Não consegui anexar a nota: ${error?.message || 'erro desconhecido'}`);
+    } finally {
+      setSalvandoNota(false);
     }
   };
 
@@ -2861,10 +2962,21 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                     <div>
                       <div className="flex items-center gap-2 mb-1">
                         <FileText className="w-5 h-5 text-green-600" />
-                        <h4 className="font-semibold">Nota Fiscal</h4>
+                        {/* Este bloco mostra UMA nota: a ultima que o pedido
+                            recebeu. Chamar isso de "Nota Fiscal" fazia parecer
+                            que era a unica do pedido -- com faturamento parcial
+                            sao varias, todas listadas logo abaixo. */}
+                        <h4 className="font-semibold">
+                          {totalNotasDoPedido > 1 ? 'Nota fiscal mais recente' : 'Nota Fiscal'}
+                        </h4>
                       </div>
                       {pedido.nf_numero && (
                         <p className="text-sm text-gray-600">NF: {pedido.nf_numero}</p>
+                      )}
+                      {totalNotasDoPedido > 1 && (
+                        <p className="text-xs text-gray-500">
+                          Este pedido tem {totalNotasDoPedido} notas — veja todas em “Notas Fiscais” abaixo.
+                        </p>
                       )}
                       {pedido.nf_data_upload && (
                         <p className="text-sm text-gray-600">
@@ -2904,14 +3016,21 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                         className="w-full text-green-700 border-green-300 hover:bg-green-100"
                       >
                         <Pencil className="w-4 h-4 mr-2" />
-                        Atualizar Nota Fiscal
+                        Corrigir esta nota (substitui)
                       </Button>
+                      {faturamentos.length > 0 && (
+                        <p className="mt-2 text-xs text-gray-600">
+                          Para acrescentar uma <strong>segunda nota</strong> à mesma remessa, use
+                          “Anexar outra nota” na lista de Notas Fiscais abaixo — corrigir aqui
+                          troca a nota atual.
+                        </p>
+                      )}
                     </div>
                   )}
                   {canUpload && showEditNF && (
                     <div className="mt-4 pt-4 border-t border-green-200 space-y-3">
                       <div className="flex items-center justify-between">
-                        <p className="text-sm font-semibold text-green-800">Atualizar Nota Fiscal:</p>
+                        <p className="text-sm font-semibold text-green-800">Corrigir a nota fiscal:</p>
                         <Button variant="ghost" size="sm" onClick={() => setShowEditNF(false)} className="text-xs text-gray-500">
                           <ChevronUp className="w-4 h-4 mr-1" /> Fechar
                         </Button>
@@ -2939,6 +3058,14 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                           />
                         </div>
                       </div>
+                      <Alert className="border-amber-300 bg-amber-50 py-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                        <AlertDescription className="text-xs text-amber-900">
+                          Isto <strong>substitui</strong> a nota {pedido.nf_numero ? `#${pedido.nf_numero}` : 'atual'}:
+                          use só quando o número ou o arquivo foram lançados errados. Nota a mais na
+                          mesma remessa se anexa pela lista abaixo.
+                        </AlertDescription>
+                      </Alert>
                       <div>
                         <Label className="text-xs">Arquivo da NF *</Label>
                         <Input
@@ -2967,7 +3094,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                         className="w-full bg-green-600 hover:bg-green-700"
                       >
                         <Upload className="w-4 h-4 mr-2" />
-                        {uploading ? 'Enviando...' : 'Atualizar Nota Fiscal'}
+                        {uploading ? 'Enviando...' : 'Substituir nota fiscal'}
                       </Button>
                     </div>
                   )}
@@ -3082,9 +3209,12 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       <div key={fat.id || fi} className="bg-white p-3 rounded-lg border space-y-2">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="font-medium">NF #{fat.numero_nf}</p>
+                            <p className="font-medium">
+                              Faturamento de {fat.data_emissao ? new Date(fat.data_emissao + 'T00:00:00').toLocaleDateString('pt-BR') : 'data não informada'}
+                            </p>
                             <p className="text-xs text-gray-500">
-                              {fat.data_emissao ? new Date(fat.data_emissao + 'T00:00:00').toLocaleDateString('pt-BR') : '-'} • {formatCurrency(fat.valor_total)}
+                              {formatCurrency(fat.valor_total)}
+                              {notasDoFaturamento(fat).length > 1 && ` • ${notasDoFaturamento(fat).length} notas`}
                             </p>
                             {fat.transportadora && (
                               <p className="text-xs text-gray-500 mt-1">
@@ -3095,27 +3225,107 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                               </p>
                             )}
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Badge className={
-                              fat.status === 'entregue' ? 'bg-green-100 text-green-700' :
-                              fat.status === 'enviado' ? 'bg-orange-100 text-orange-700' :
-                              'bg-indigo-100 text-indigo-700'
-                            }>
-                              {fat.status === 'entregue' ? 'Entregue' : fat.status === 'enviado' ? 'Enviado' : 'Faturado'}
-                            </Badge>
-                            {notasDoFaturamento(fat).map((nota, i, arr) => (
+                          <Badge className={
+                            fat.status === 'entregue' ? 'bg-green-100 text-green-700' :
+                            fat.status === 'enviado' ? 'bg-orange-100 text-orange-700' :
+                            'bg-indigo-100 text-indigo-700'
+                          }>
+                            {fat.status === 'entregue' ? 'Entregue' : fat.status === 'enviado' ? 'Enviado' : 'Faturado'}
+                          </Badge>
+                        </div>
+
+                        {/* Uma linha por nota: com duas notas na mesma remessa,
+                            "Baixar NF 1 / Baixar NF 2" nao diz qual e qual. */}
+                        <div className="space-y-1.5">
+                          {notasDoFaturamento(fat).map((nota, i) => (
+                            <div key={i} className="flex items-center justify-between gap-2 bg-gray-50 rounded px-2 py-1.5">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-gray-800">
+                                  NF #{nota.numero || '—'}
+                                </p>
+                                <p className="text-xs text-gray-500 truncate">
+                                  {dataBR(nota.data_emissao) || 'sem data'}
+                                  {nota.nome ? ` • ${nota.nome}` : ''}
+                                </p>
+                              </div>
                               <Button
-                                key={i}
                                 variant="outline"
                                 size="sm"
                                 title={nota.nome || 'Nota fiscal'}
                                 onClick={() => window.open(nota.url, '_blank')}
                               >
                                 <Download className="w-4 h-4 mr-1" />
-                                {arr.length > 1 ? `Baixar NF ${i + 1}` : 'Baixar NF'}
+                                Baixar
                               </Button>
-                            ))}
-                          </div>
+                            </div>
+                          ))}
+
+                          {canUpload && (notaFatId === fat.id ? (
+                            <div className="bg-indigo-50 border border-indigo-200 rounded p-3 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <p className="text-sm font-semibold text-indigo-900">Anexar outra nota a esta remessa</p>
+                                <Button variant="ghost" size="sm" className="text-xs text-gray-500" onClick={() => setNotaFatId(null)}>
+                                  <ChevronUp className="w-4 h-4 mr-1" /> Fechar
+                                </Button>
+                              </div>
+                              <p className="text-xs text-indigo-800">
+                                A nota entra somada às que já estão aqui. Os itens e o valor do
+                                faturamento não mudam — use isto para nota complementar ou para a
+                                segunda nota da mesma remessa.
+                              </p>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <Label className="text-xs">Número da NF *</Label>
+                                  <Input
+                                    type="text"
+                                    placeholder="Ex: 117200"
+                                    value={notaNumero}
+                                    onChange={(e) => setNotaNumero(e.target.value)}
+                                    className="h-9"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-xs">Data de emissão</Label>
+                                  <Input
+                                    type="date"
+                                    value={notaData}
+                                    onChange={(e) => setNotaData(e.target.value)}
+                                    className="h-9"
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <Label className="text-xs">Arquivo da NF *</Label>
+                                <Input
+                                  type="file"
+                                  accept=".xml,.pdf,.jpg,.jpeg,.png,.crm"
+                                  onChange={(e) => handleNotaFileChange(e.target.files[0])}
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                  XML, PDF, JPG, PNG ou CRM. O XML preenche número e data.
+                                </p>
+                              </div>
+                              <Button
+                                size="sm"
+                                className="w-full bg-indigo-600 hover:bg-indigo-700"
+                                disabled={salvandoNota || !notaFile || !notaNumero}
+                                onClick={() => handleAnexarNota(fat)}
+                              >
+                                <Upload className="w-4 h-4 mr-2" />
+                                {salvandoNota ? 'Anexando...' : 'Anexar nota'}
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full text-indigo-700 border-indigo-300 hover:bg-indigo-100"
+                              onClick={() => abrirFormNota(fat.id)}
+                            >
+                              <Plus className="w-4 h-4 mr-2" />
+                              Anexar outra nota
+                            </Button>
+                          ))}
                         </div>
 
                         {/* Boleto info for this faturamento */}
