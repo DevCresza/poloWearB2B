@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { Pedido } from '@/api/entities';
+import { Pedido, PedidoResumo } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { User } from '@/api/entities';
 import { Carteira } from '@/api/entities';
@@ -39,8 +39,9 @@ export default function MeusPedidos() {
   // produto_id -> data_prevista_entrega / acao, dos produtos que aparecem nos
   // pedidos deste cliente. Alimenta o Extrato Detalhado e o modal do pedido,
   // pra o cliente ver o MESMO mes de entrega que o admin ve.
-  const [produtoEntregaMap, setProdutoEntregaMap] = useState(null);
-  const [produtoAcaoMap, setProdutoAcaoMap] = useState({});
+  // Sem estado de mapa de produtos: a lista nao carrega mais o itens, entao
+  // nao ha de onde tirar os produto_ids. Quem precisa monta o seu --
+  // carregarParaExport para os exports, o proprio modal para o pedido aberto.
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedPedido, setSelectedPedido] = useState(null);
@@ -74,6 +75,64 @@ export default function MeusPedidos() {
     loadData();
   }, [lojaSelecionada?.id, lojasLoading]);
 
+  // Esta e a tela que a loja abre no celular, e ela baixava a linha inteira de
+  // cada pedido -- com o itens jsonb junto. Para o maior cliente eram 8,3 MB,
+  // 6,2 MB so de itens que a lista nunca mostra.
+  //
+  // O filtro de mes, que era o que prendia o itens aqui, le hoje
+  // meses_entrega_efetivos (migration 20261109000004).
+  const COLUNAS_LISTA = [
+    'id', 'comprador_user_id', 'fornecedor_id', 'loja_id',
+    'status', 'status_pagamento', 'metodo_pagamento',
+    'valor_total', 'valor_final', 'qtd_pecas',
+    'created_date', 'data_prevista_entrega', 'meses_entrega_efetivos',
+    'transportadora', 'codigo_rastreio', 'link_rastreio',
+    'nf_url', 'nf_numero', 'nf_data_upload', 'boleto_url',
+    'cliente_confirmou_nf', 'cliente_confirmou_boleto', 'cliente_confirmou_recebimento',
+    'data_confirmacao_nf', 'data_confirmacao_boleto', 'data_confirmacao_recebimento',
+    'observacao_recebimento',
+  ].join(',');
+
+  // O itens vem so quando precisa: ao abrir um pedido e ao exportar.
+  const carregarPedidoCompleto = async (pedido) => {
+    try {
+      const completo = await Pedido.get(pedido.id);
+      return { ...pedido, ...completo };
+    } catch (e) {
+      console.warn('Falha ao carregar os itens do pedido; abrindo com o resumo.', e);
+      return pedido;
+    }
+  };
+
+  // Para os exports, que descem ao nivel do item. Alem dos itens, devolve o
+  // mapa de entrega dos produtos citados -- a lista nao o monta mais.
+  const carregarParaExport = async (lista) => {
+    if (!Array.isArray(lista) || lista.length === 0) return { pedidos: [], entregaMap: {}, acaoMap: {} };
+    try {
+      const completos = await Pedido.listByIds(lista.map(x => x.id));
+      const porId = new Map(completos.map(c => [c.id, c]));
+      const pedidos = lista.map(x => ({ ...x, ...(porId.get(x.id) || {}) }));
+
+      const produtoIds = [...new Set(
+        pedidos.flatMap(x => (Array.isArray(x.itens) ? x.itens : []).map(i => i?.produto_id))
+      )].filter(Boolean);
+      const entregaMap = {};
+      const acaoMap = {};
+      if (produtoIds.length > 0) {
+        const produtosList = await Produto.listByIds(produtoIds);
+        (produtosList || []).forEach(pr => {
+          if (pr.data_prevista_entrega) entregaMap[pr.id] = pr.data_prevista_entrega;
+          if (pr.acao) acaoMap[pr.id] = pr.acao;
+        });
+      }
+      return { pedidos, entregaMap, acaoMap };
+    } catch (e) {
+      console.error('Falha ao carregar os itens para o export:', e);
+      toast.error('Não consegui carregar os itens dos pedidos para esta exportação.');
+      return null;
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -88,7 +147,7 @@ export default function MeusPedidos() {
       }
 
       const [pedidosList, fornecedoresList, carteiraList] = await Promise.all([
-        Pedido.filter(pedidoFilter, '-created_date'),
+        PedidoResumo.list({ filters: pedidoFilter, sort: '-created_date', columns: COLUNAS_LISTA }),
         Fornecedor.list(),
         Carteira.filter(carteiraFilter)
       ]);
@@ -111,25 +170,11 @@ export default function MeusPedidos() {
       setFornecedores(fornecedoresList || []);
       setCarteira(carteiraList || []);
 
-      // Busca so os produtos citados nos pedidos do cliente (nao a tabela toda).
-      const produtoIds = [...new Set(
-        pedidosFiltrados.flatMap(p => (Array.isArray(p.itens) ? p.itens : []).map(i => i?.produto_id))
-      )].filter(Boolean);
-      if (produtoIds.length > 0) {
-        try {
-          const produtosList = await Produto.listByIds(produtoIds);
-          const entregaMap = {};
-          const acaoMap = {};
-          (produtosList || []).forEach(p => {
-            if (p.data_prevista_entrega) entregaMap[p.id] = p.data_prevista_entrega;
-            if (p.acao) acaoMap[p.id] = p.acao;
-          });
-          setProdutoEntregaMap(entregaMap);
-          setProdutoAcaoMap(acaoMap);
-        } catch (e) {
-          console.warn('Erro ao carregar produtos dos pedidos:', e);
-        }
-      }
+      // O mapa de entrega dos produtos saiu daqui: ele era montado a partir do
+      // itens de todos os pedidos, e a lista nao carrega mais o itens. Quem
+      // precisa dele e o export (que o monta em carregarParaExport) e o modal
+      // de detalhes (que monta o proprio, para os produtos daquele pedido).
+      // O filtro de mes nao depende mais dele -- le meses_entrega_efetivos.
     } catch (error) {
       // Falha silenciosa aqui deixava a tela com "nenhum pedido", que o cliente
       // le como "meus pedidos sumiram".
@@ -361,8 +406,15 @@ export default function MeusPedidos() {
     return fornecedor ? (fornecedor.razao_social || fornecedor.nome_fantasia || fornecedor.nome_marca) : 'N/A';
   };
 
-  const handleExportCSV = () => {
-    const exportData = filteredPedidos.map(pedido => {
+  const handleExportCSV = async () => {
+    // totalItens soma a QUANTIDADE dos itens, que nao e a mesma conta de
+    // qtd_pecas (essa multiplica a grade), entao aqui o itens e necessario.
+    toast.info('Preparando exportação…');
+    const carregado = await carregarParaExport(filteredPedidos);
+    if (!carregado) return;
+    const { pedidos: pedidosExport, entregaMap } = carregado;
+
+    const exportData = pedidosExport.map(pedido => {
       const statusInfo = getStatusInfo(pedido.status);
       const paymentInfo = getPaymentStatusInfo(pedido.status_pagamento);
       const itens = Array.isArray(pedido.itens) ? pedido.itens : JSON.parse(pedido.itens || '[]');
@@ -374,7 +426,7 @@ export default function MeusPedidos() {
         fornecedor: getFornecedorNome(pedido.fornecedor_id),
         loja: lojaName,
         data_pedido: formatDate(pedido.created_date),
-        mes_faturamento: formatMesesEntrega(getMesesFaturamentoPedido(pedido, produtoEntregaMap || {})).join(' / '),
+        mes_faturamento: formatMesesEntrega(getMesesFaturamentoPedido(pedido, entregaMap)).join(' / '),
         data_faturamento: pedido.nf_data_upload ? formatDate(pedido.nf_data_upload) : '',
         nf_numero: pedido.nf_numero || '',
         status: statusInfo.label,
@@ -414,8 +466,13 @@ export default function MeusPedidos() {
   // Extrato Detalhado: uma linha por ITEM, com mes de faturamento e acao —
   // mesma regra da extracao do admin, restrita aos pedidos deste cliente.
   // O CSV de pedidos e por PEDIDO e nao mostra nem produto nem mes.
-  const handleExportExtratoItens = () => {
+  const handleExportExtratoItens = async () => {
     try {
+      toast.info('Preparando extrato de itens…');
+      const carregado = await carregarParaExport(filteredPedidos);
+      if (!carregado) return;
+      const { pedidos: pedidosExport, entregaMap, acaoMap } = carregado;
+
       const pgLabels = {
         pix: 'PIX',
         cartao_credito: 'Cartão de Crédito',
@@ -425,7 +482,7 @@ export default function MeusPedidos() {
       };
 
       const linhas = [];
-      for (const pedido of filteredPedidos) {
+      for (const pedido of pedidosExport) {
         let itens = pedido.itens || [];
         if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch { itens = []; } }
         if (!Array.isArray(itens) || itens.length === 0) continue;
@@ -454,8 +511,8 @@ export default function MeusPedidos() {
             loja: (pedido.loja_id && lojasMap[pedido.loja_id]) || '',
             fornecedor: getFornecedorNome(pedido.fornecedor_id),
             forma_pagamento: formaPgComPrazo,
-            mes_faturamento: getMesFaturamentoItem(pedido, it, produtoEntregaMap || {}),
-            acao: (it.produto_id && produtoAcaoMap[it.produto_id]) || '',
+            mes_faturamento: getMesFaturamentoItem(pedido, it, entregaMap),
+            acao: (it.produto_id && acaoMap[it.produto_id]) || '',
             tipo_pedido: isGrade ? 'PGM' : 'PE',
             nome_item: it.nome || '',
             ref_fornecedor: it.referencia_fornecedor || it.referencia || '',
@@ -507,8 +564,13 @@ export default function MeusPedidos() {
     }
   };
 
-  const handleExportPDF = () => {
-    const exportData = filteredPedidos.map(pedido => {
+  const handleExportPDF = async () => {
+    toast.info('Preparando exportação…');
+    const carregado = await carregarParaExport(filteredPedidos);
+    if (!carregado) return;
+    const { pedidos: pedidosExport, entregaMap } = carregado;
+
+    const exportData = pedidosExport.map(pedido => {
       const statusInfo = getStatusInfo(pedido.status);
       const paymentInfo = getPaymentStatusInfo(pedido.status_pagamento);
       const itens = Array.isArray(pedido.itens) ? pedido.itens : JSON.parse(pedido.itens || '[]');
@@ -520,7 +582,7 @@ export default function MeusPedidos() {
         fornecedor: getFornecedorNome(pedido.fornecedor_id),
         loja: lojaName,
         data_pedido: formatDate(pedido.created_date),
-        mes_faturamento: formatMesesEntrega(getMesesFaturamentoPedido(pedido, produtoEntregaMap || {})).join(' / '),
+        mes_faturamento: formatMesesEntrega(getMesesFaturamentoPedido(pedido, entregaMap)).join(' / '),
         data_faturamento: pedido.nf_data_upload ? formatDate(pedido.nf_data_upload) : '-',
         nf_numero: pedido.nf_numero || '-',
         status: statusInfo.label,
@@ -623,7 +685,7 @@ export default function MeusPedidos() {
     // Filtro por MÊS de faturamento (NF, senão mês da cápsula/entrega).
     let matchesMesFat = true;
     if (filtroMesFaturamento !== 'todos') {
-      matchesMesFat = getMesesFaturamentoPedido(pedido, produtoEntregaMap || {}).includes(filtroMesFaturamento);
+      matchesMesFat = getMesesFaturamentoPedido(pedido).includes(filtroMesFaturamento);
     }
 
     return matchesSearch && matchesStatus && matchesEmissao && matchesFaturamento && matchesVencimento && matchesMesFat;
@@ -631,7 +693,7 @@ export default function MeusPedidos() {
 
   // Meses de faturamento disponíveis (de TODOS os pedidos), mais recente primeiro.
   const mesesFaturamentoDisponiveis = [...new Set(
-    pedidos.flatMap(p => getMesesFaturamentoPedido(p, produtoEntregaMap || {}))
+    pedidos.flatMap(p => getMesesFaturamentoPedido(p))
   )].sort().reverse();
 
   // Calcular totais financeiros
@@ -1021,8 +1083,9 @@ export default function MeusPedidos() {
                     {/* Ações */}
                     <div className="flex flex-col gap-2 lg:w-48">
                       <Button
-                        onClick={() => {
-                          setSelectedPedido(pedido);
+                        onClick={async () => {
+                          // A lista traz o resumo; o modal mostra os itens.
+                          setSelectedPedido(await carregarPedidoCompleto(pedido));
                           setShowDetailsModal(true);
                         }}
                         className="w-full rounded-xl bg-blue-600 hover:bg-blue-700"
@@ -1036,8 +1099,8 @@ export default function MeusPedidos() {
                         <>
                           <Button
                             variant="outline"
-                            onClick={() => {
-                              setSelectedPedido(pedido);
+                            onClick={async () => {
+                              setSelectedPedido(await carregarPedidoCompleto(pedido));
                               setShowItensEditModal(true);
                             }}
                             className="w-full rounded-xl border-blue-300 text-blue-700 hover:bg-blue-50"
@@ -1113,7 +1176,8 @@ export default function MeusPedidos() {
             });
           }}
           currentUser={user}
-          produtoEntregaMap={produtoEntregaMap}
+          /* null de proposito: o modal busca os produtos deste pedido sozinho. */
+          produtoEntregaMap={null}
           userMap={user ? new Map([[user.id, user.empresa || user.full_name || user.email]]) : undefined}
           fornecedorMap={new Map(fornecedores.map(f => [f.id, f.razao_social || f.nome_fantasia || f.nome_marca]))}
         />
