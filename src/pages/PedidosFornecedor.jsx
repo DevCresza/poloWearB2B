@@ -1824,16 +1824,20 @@ export default function PedidosFornecedor() {
                                 <CheckCircle className="w-4 h-4 mr-2" />
                                 Aprovar Pedido
                               </Button>
-                              <Button
-                                variant="destructive"
-                                onClick={async () => {
-                                  setSelectedPedido(await carregarPedidoCompleto(pedido));
-                                  setShowRejectModal(true);
-                                }}
-                              >
-                                <XCircle className="w-4 h-4 mr-2" />
-                                Recusar
-                              </Button>
+                              {/* Pedido emitido em lote pela administracao: fornecedor
+                                  nao pode recusar/cancelar — so a administracao. */}
+                              {!pedido.emitido_por_admin_user_id && (
+                                <Button
+                                  variant="destructive"
+                                  onClick={async () => {
+                                    setSelectedPedido(await carregarPedidoCompleto(pedido));
+                                    setShowRejectModal(true);
+                                  }}
+                                >
+                                  <XCircle className="w-4 h-4 mr-2" />
+                                  Recusar
+                                </Button>
+                              )}
                             </>
                           )}
 
@@ -1962,8 +1966,9 @@ export default function PedidosFornecedor() {
                         </Button>
                       )}
 
-                      {/* Botão para cancelar pedido - não aparece em novo_pedido (usar Recusar), cancelado ou finalizado */}
-                      {!['novo_pedido', 'cancelado', 'finalizado'].includes(pedido.status) && (
+                      {/* Botão para cancelar pedido - não aparece em novo_pedido (usar Recusar), cancelado ou finalizado.
+                          Pedido emitido em lote pela administracao: so a administracao cancela. */}
+                      {!['novo_pedido', 'cancelado', 'finalizado'].includes(pedido.status) && !pedido.emitido_por_admin_user_id && (
                         <Button
                           variant="outline"
                           className="border-red-300 text-red-700 hover:bg-red-50"
@@ -1975,6 +1980,13 @@ export default function PedidosFornecedor() {
                           <XCircle className="w-4 h-4 mr-2" />
                           Cancelar Pedido
                         </Button>
+                      )}
+
+                      {/* Aviso: pedido de lote da administracao nao e cancelavel pelo fornecedor */}
+                      {pedido.emitido_por_admin_user_id && pedido.status !== 'cancelado' && pedido.status !== 'finalizado' && (
+                        <p className="text-xs text-gray-500 italic">
+                          Pedido emitido pela administração — cancelamento somente pela administração.
+                        </p>
                       )}
                     </div>
                   </div>

@@ -1108,23 +1108,26 @@ export default function MeusPedidos() {
                             <Edit className="w-4 h-4 mr-2" />
                             Editar Pedido
                           </Button>
-                          <Button
-                            variant="outline"
-                            onClick={async () => {
-                              if (!confirm(`Tem certeza que deseja cancelar o pedido #${pedido.id.slice(-8).toUpperCase()}?\n\nEsta ação não pode ser desfeita.`)) return;
-                              try {
-                                await Pedido.update(pedido.id, { status: 'cancelado' });
-                                toast.success('Pedido cancelado com sucesso.');
-                                loadData();
-                              } catch (err) {
-                                toast.error('Erro ao cancelar pedido. Tente novamente.');
-                              }
-                            }}
-                            className="w-full rounded-xl border-red-300 text-red-700 hover:bg-red-50"
-                          >
-                            <Ban className="w-4 h-4 mr-2" />
-                            Cancelar Pedido
-                          </Button>
+                          {/* Pedido emitido em lote pela administracao: cliente nao cancela. */}
+                          {!pedido.emitido_por_admin_user_id && (
+                            <Button
+                              variant="outline"
+                              onClick={async () => {
+                                if (!confirm(`Tem certeza que deseja cancelar o pedido #${pedido.id.slice(-8).toUpperCase()}?\n\nEsta ação não pode ser desfeita.`)) return;
+                                try {
+                                  await Pedido.update(pedido.id, { status: 'cancelado' });
+                                  toast.success('Pedido cancelado com sucesso.');
+                                  loadData();
+                                } catch (err) {
+                                  toast.error('Erro ao cancelar pedido. Tente novamente.');
+                                }
+                              }}
+                              className="w-full rounded-xl border-red-300 text-red-700 hover:bg-red-50"
+                            >
+                              <Ban className="w-4 h-4 mr-2" />
+                              Cancelar Pedido
+                            </Button>
+                          )}
                         </>
                       )}
                       
