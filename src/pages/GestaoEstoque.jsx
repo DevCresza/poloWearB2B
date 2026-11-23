@@ -26,6 +26,15 @@ import {
 import MovimentacaoEstoqueForm from '../components/estoque/MovimentacaoEstoqueForm';
 import { formatCurrency } from '@/utils/exportUtils';
 
+// So o que a tela e o MovimentacaoEstoqueForm leem. Sem fotos, descricao e o
+// resto do cadastro: produtos.* pesava 2,7 MB, e fotos sozinho era um terco.
+const COLUNAS_PRODUTO_ESTOQUE = [
+  'id', 'nome', 'referencia_polo', 'referencia_fornecedor', 'fornecedor_id', 'controla_estoque',
+  'estoque_atual_grades', 'estoque_minimo_grades', 'estoque_por_tamanho', 'grade_configuracao',
+  'tem_variantes_cor', 'variantes_cor', 'venda_por_tamanho', 'custo_por_peca', 'disponibilidade',
+  'total_pecas_grade', 'created_at'
+].join(',');
+
 export default function GestaoEstoque() {
   const [produtos, setProdutos] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
@@ -72,8 +81,9 @@ export default function GestaoEstoque() {
 
         if (fornecedor) {
           // Fornecedor vê apenas seus produtos
-          produtosList = await Produto.filter({
-            fornecedor_id: fornecedorId
+          produtosList = await Produto.list({
+            filters: { fornecedor_id: fornecedorId },
+            columns: COLUNAS_PRODUTO_ESTOQUE
           });
           fornecedoresList = [fornecedor]; // Apenas seu próprio fornecedor
 
@@ -94,7 +104,7 @@ export default function GestaoEstoque() {
         }
       } else if (currentUser.role === 'admin') {
         // Admin vê todos os produtos (removido filtro controla_estoque)
-        produtosList = await Produto.list({ sort: '-created_at' });
+        produtosList = await Produto.list({ sort: '-created_at', columns: COLUNAS_PRODUTO_ESTOQUE });
         fornecedoresList = await Fornecedor.list();
         movimentacoesList = await MovimentacaoEstoque.list({ sort: '-created_at', limit: 100 });
       }

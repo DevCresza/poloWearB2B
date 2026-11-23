@@ -27,6 +27,8 @@ import MultiSelectFilter from '@/components/MultiSelectFilter';
 import { useLojaContext } from '@/contexts/LojaContext';
 import { Store } from 'lucide-react';
 import { thumb, usarOriginalSeFalhar } from '@/utils/thumb';
+import { supabase } from '@/lib/supabase';
+import { dataLocalISO, corteVencimentoDashboard } from '@/api/kpis';
 
 export default function CarteiraFinanceira() {
   const { lojaSelecionada, lojas, loading: lojasLoading } = useLojaContext();
@@ -35,7 +37,13 @@ export default function CarteiraFinanceira() {
   const [conferencia, setConferencia] = useState([]);
   const [titulos, setTitulos] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
-  const [clientesMap, setClientesMap] = useState({});
+  // Quem ve o que (cliente / fornecedor / admin), definido no loadData. A
+  // lista, os filtros e a paginacao rodam no servidor sobre este recorte.
+  const [recorte, setRecorte] = useState(null);
+  const [totalFiltrado, setTotalFiltrado] = useState(0);
+  const [pagina, setPagina] = useState(0);
+  const [carregandoLista, setCarregandoLista] = useState(false);
+  const [recarga, setRecarga] = useState(0);
   const [loading, setLoading] = useState(true);
   const [filtrosStatus, setFiltrosStatus] = useState([]); // Array para múltipla seleção
   const [filtrosFornecedor, setFiltrosFornecedor] = useState([]); // Array para múltipla seleção
@@ -60,9 +68,11 @@ export default function CarteiraFinanceira() {
     totalAberto: 0,
     totalVencido: 0,
     proximosVencimentos: 0,
-    totalPago: 0
+    totalPago: 0,
+    totalTitulos: 0
   });
-  const [pedidosMap, setPedidosMap] = useState({});
+  // Parcelas do pedido aberto no modal de detalhes (buscadas ao abrir).
+  const [titulosPedidoSelecionado, setTitulosPedidoSelecionado] = useState([]);
 
   // Estado para pesquisa por número de pedido
   const [pesquisaPedido, setPesquisaPedido] = useState('');
@@ -87,39 +97,28 @@ export default function CarteiraFinanceira() {
   // daqui: a tela ve so os titulos da loja selecionada e gravaria o total de
   // uma loja no campo do usuario inteiro.
 
+  // Antes: a carteira inteira (8,5 MB no admin) + um Pedido.get com itens por
+  // titulo (7.577 requisicoes, ~79 MB) + um User.get por cliente, e os filtros
+  // rodando aqui. Agora a view carteira_com_pedido ja traz o resumo do pedido,
+  // o nome do cliente e a parcela X de Y; a tela pede uma pagina por vez, com
+  // os filtros aplicados no servidor, e os cards vem de carteira_resumo.
   const loadData = async () => {
     setLoading(true);
     try {
       const currentUser = await User.me();
       setUser(currentUser);
 
-      let titulosList = [];
-      let fornecedoresList = [];
+      let novoRecorte = null;
 
       if (currentUser.tipo_negocio === 'multimarca' || currentUser.tipo_negocio === 'franqueado') {
-        // Cliente vê títulos associados a ele, exceto de pedidos ainda não aprovados
-        const carteiraFilter = { cliente_user_id: currentUser.id };
-        if (lojaSelecionada) {
-          carteiraFilter.loja_id = lojaSelecionada.id;
-        }
-        const todosOsTitulos = await Carteira.filter(carteiraFilter, '-data_vencimento') || [];
-
-        // Filtrar:
-        // 1. Remover placeholders (sem parcela_numero) - criados pelo Carrinho antes do fornecedor preencher dados de pagamento
-        // 2. Remover títulos de pedidos ainda não aprovados (novo_pedido)
-        const titulosComParcela = todosOsTitulos.filter(t => t.parcela_numero);
-
-        const pedidoIds = [...new Set(titulosComParcela.map(t => t.pedido_id).filter(Boolean))];
-        if (pedidoIds.length > 0) {
-          const pedidosPromises = pedidoIds.map(id => Pedido.get(id).catch(() => null));
-          const pedidosResults = await Promise.all(pedidosPromises);
-          const pedidosExcluidos = new Set(
-            pedidosResults.filter(p => p && (p.status === 'novo_pedido' || p.status === 'cancelado')).map(p => p.id)
-          );
-          titulosList = titulosComParcela.filter(t => !t.pedido_id || !pedidosExcluidos.has(t.pedido_id));
-        } else {
-          titulosList = titulosComParcela;
-        }
+        // Cliente vê títulos associados a ele, exceto os provisorios (sem
+        // parcela_numero, criados pelo Carrinho antes do fornecedor preencher
+        // o pagamento) e os de pedidos ainda não aprovados ou cancelados.
+        novoRecorte = {
+          tipo: 'cliente',
+          clienteId: currentUser.id,
+          lojaId: lojaSelecionada?.id || null
+        };
       } else if (currentUser.tipo_negocio === 'fornecedor') {
         // Usar fornecedor_id do usuário diretamente (se disponível)
         // ou buscar fornecedor pelo responsavel_user_id (fallback para usuários antigos)
@@ -127,10 +126,8 @@ export default function CarteiraFinanceira() {
         let fornecedor = null;
 
         if (fornecedorId) {
-          // Buscar dados do fornecedor pelo ID
           fornecedor = await Fornecedor.get(fornecedorId);
         } else {
-          // Fallback: buscar fornecedor pelo responsavel_user_id
           const fornecedoresListTemp = await Fornecedor.filter({ responsavel_user_id: currentUser.id });
           fornecedor = fornecedoresListTemp[0];
           if (fornecedor) {
@@ -138,49 +135,28 @@ export default function CarteiraFinanceira() {
           }
         }
 
-        if (fornecedor) {
-          // Fornecedor vê títulos dos seus pedidos
-          titulosList = await Carteira.filter({
-            fornecedor_id: fornecedorId
-          }, '-data_vencimento');
-        } else {
-          titulosList = [];
-        }
+        // Fornecedor vê títulos dos seus pedidos
+        novoRecorte = fornecedor ? { tipo: 'fornecedor', fornecedorId } : null;
       } else if (currentUser.role === 'admin') {
         // Admin vê tudo
-        titulosList = await Carteira.list({ sort: '-data_vencimento' });
+        novoRecorte = { tipo: 'admin' };
       }
 
-      fornecedoresList = await Fornecedor.list();
-
-      setTitulos(titulosList || []);
+      const [fornecedoresList, resumo] = await Promise.all([
+        Fornecedor.list(),
+        novoRecorte ? carregarResumo(novoRecorte) : Promise.resolve(null)
+      ]);
       setFornecedores(fornecedoresList || []);
+      setRecorte(novoRecorte);
+      setRecarga(r => r + 1);
 
-      // Carregar nomes dos clientes para fornecedor/admin
-      if (currentUser.tipo_negocio === 'fornecedor' || currentUser.role === 'admin') {
-        const clienteIds = [...new Set((titulosList || []).map(t => t.cliente_user_id).filter(Boolean))];
-        if (clienteIds.length > 0) {
-          const clientesPromises = clienteIds.map(id => User.get(id).catch(() => null));
-          const clientesResults = await Promise.all(clientesPromises);
-          const map = {};
-          clientesResults.forEach(c => {
-            if (c) map[c.id] = c.empresa || c.razao_social || c.nome_marca || c.full_name || 'Cliente';
-          });
-          setClientesMap(map);
-        }
-      }
-
-      // Carregar pedidos relacionados para mostrar comprovantes
-      if (titulosList && titulosList.length > 0) {
-        const pedidoIds = [...new Set(titulosList.map(t => t.pedido_id).filter(Boolean))];
-        const pedidosPromises = pedidoIds.map(id => Pedido.get(id).catch(() => null));
-        const pedidosResults = await Promise.all(pedidosPromises);
-        const pedidosMapTemp = {};
-        pedidosResults.forEach(p => {
-          if (p) pedidosMapTemp[p.id] = p;
-        });
-        setPedidosMap(pedidosMapTemp);
-      }
+      setStats({
+        totalAberto: Number(resumo?.total_aberto) || 0,
+        totalVencido: Number(resumo?.total_vencido) || 0,
+        proximosVencimentos: Number(resumo?.proximos) || 0,
+        totalPago: Number(resumo?.total_pago) || 0,
+        totalTitulos: Number(resumo?.total_titulos) || 0
+      });
 
       // Conferencia NF x titulos: so para quem pode agir (equipe e fornecedor).
       // O cliente nao resolve divergencia de lancamento e so ficaria assustado.
@@ -193,53 +169,160 @@ export default function CarteiraFinanceira() {
           console.warn('Erro ao carregar conferencia NF x titulos:', e);
         }
       }
-
-      calculateStats(titulosList);
     } catch (_error) {
     } finally {
       setLoading(false);
     }
   };
 
-  const calculateStats = (titulosList) => {
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-    const proximos7Dias = new Date(hoje);
-    proximos7Dias.setDate(hoje.getDate() + 7);
-
-    // Helper: converte 'YYYY-MM-DD' pra Date local sem escorregar de fuso
-    const parseDataVenc = (s) => (s ? new Date(s + 'T00:00:00') : null);
-
-    const totalAberto = titulosList
-      .filter(t => t.status === 'pendente')
-      .reduce((sum, t) => sum + (t.valor || 0), 0);
-
-    const totalVencido = titulosList
-      .filter(t => {
-        if (t.status !== 'pendente') return false;
-        const vencimento = parseDataVenc(t.data_vencimento);
-        return vencimento && vencimento < hoje;
-      })
-      .reduce((sum, t) => sum + (t.valor || 0), 0);
-
-    const proximosVencimentos = titulosList
-      .filter(t => {
-        if (t.status !== 'pendente') return false;
-        const vencimento = parseDataVenc(t.data_vencimento);
-        return vencimento && vencimento >= hoje && vencimento <= proximos7Dias;
-      })
-      .length;
-
-    const totalPago = titulosList
-      .filter(t => t.status === 'pago')
-      .reduce((sum, t) => sum + (t.valor || 0), 0);
-
-    setStats({
-      totalAberto,
-      totalVencido,
-      proximosVencimentos,
-      totalPago
+  // Cards sobre o recorte inteiro (nao so a pagina): em aberto, vencido, vence
+  // em 7 dias, pago. Mesma conta de antes: a data de vencimento lida como data
+  // local (parseDataVenc), vencido = antes de hoje.
+  const carregarResumo = async (r) => {
+    const { data, error } = await supabase.rpc('carteira_resumo', {
+      p_hoje: dataLocalISO(),
+      p_cliente_user_id: r.tipo === 'cliente' ? r.clienteId : null,
+      p_loja_id: r.tipo === 'cliente' ? r.lojaId : null,
+      p_fornecedor_id: r.tipo === 'fornecedor' ? r.fornecedorId : null,
+      p_somente_cobraveis: r.tipo === 'cliente'
     });
+    if (error) throw error;
+    return data;
+  };
+
+  const POR_PAGINA = 50;
+  const COLUNAS_TITULO = [
+    'id', 'pedido_id', 'cliente_user_id', 'fornecedor_id', 'loja_id', 'parcela_numero', 'tipo',
+    'descricao', 'valor', 'status', 'data_vencimento', 'data_pagamento', 'data_pagamento_informada',
+    'observacoes', 'comprovante_url', 'comprovante_analisado', 'comprovante_aprovado',
+    'motivo_recusa_comprovante', 'pedido_encontrado_id', 'pedido_fornecedor_id', 'cliente_nome',
+    'parcela_ordem', 'parcela_total', 'parcela_ordem_cobraveis', 'parcela_total_cobraveis'
+  ].join(',');
+
+  // Valor seguro dentro de um filtro logico do PostgREST (or/and): entre
+  // aspas, com \ e " escapados. No ilike, % e _ digitados viram literais, como
+  // no includes() de antes.
+  const aspas = (v) => `"${String(v).replace(/[\\"]/g, c => '\\' + c)}"`;
+  const contem = (texto) => aspas(`*${String(texto).replace(/[\\%_]/g, c => '\\' + c)}*`);
+
+  // O nome do cliente so aparecia (e so entrava na busca) para fornecedor e admin.
+  const podeVerNomeCliente = () => user?.tipo_negocio === 'fornecedor' || user?.role === 'admin';
+
+  // Consulta da lista com o recorte do papel e os filtros da tela. Mesmas
+  // regras do filtro que rodava aqui (ver os comentarios de cada um).
+  const montarConsultaTitulos = (r, { contar = false } = {}) => {
+    let q = supabase
+      .from('carteira_com_pedido')
+      .select(COLUNAS_TITULO, contar ? { count: 'exact' } : undefined);
+
+    if (r.tipo === 'cliente') {
+      q = q.eq('cliente_user_id', r.clienteId).eq('cobravel_cliente', true);
+      if (r.lojaId) q = q.eq('loja_id', r.lojaId);
+    } else if (r.tipo === 'fornecedor') {
+      q = q.eq('fornecedor_id', r.fornecedorId);
+    }
+
+    // Fornecedor (múltipla seleção)
+    if (filtrosFornecedor.length > 0) q = q.in('fornecedor_id', filtrosFornecedor);
+
+    // Emissão e faturamento do pedido (sem pedido ou sem NF: fica de fora)
+    if (filtroEmissaoDe) q = q.gte('pedido_emissao', filtroEmissaoDe);
+    if (filtroEmissaoAte) q = q.lte('pedido_emissao', filtroEmissaoAte);
+    if (filtroFaturamentoDe) q = q.gte('pedido_faturamento', filtroFaturamentoDe);
+    if (filtroFaturamentoAte) q = q.lte('pedido_faturamento', filtroFaturamentoAte);
+
+    // Os filtros com OU vao todos numa arvore so: or=(and(...)).
+    const grupos = [];
+
+    // Pesquisa: número curto do pedido, id do pedido ou nome do cliente.
+    if (pesquisaPedido) {
+      const termos = [
+        `numero_pedido.ilike.${contem(pesquisaPedido.toUpperCase())}`,
+        `pedido_id_texto.ilike.${contem(pesquisaPedido.toLowerCase())}`
+      ];
+      if (podeVerNomeCliente()) termos.push(`cliente_nome.ilike.${contem(pesquisaPedido)}`);
+      grupos.push(`or(${termos.join(',')})`);
+    }
+
+    // Vencimento: a comparacao antiga era de texto, e titulo sem data passava.
+    if (filtroVencimentoDe || filtroVencimentoAte) {
+      const faixa = [
+        filtroVencimentoDe && `data_vencimento.gte.${filtroVencimentoDe}`,
+        filtroVencimentoAte && `data_vencimento.lte.${filtroVencimentoAte}`
+      ].filter(Boolean);
+      grupos.push(`or(data_vencimento.is.null,and(${faixa.join(',')}))`);
+    }
+
+    // Status (múltipla seleção). "vencidos" nao e status real: pendente com
+    // new Date(data) < hoje -- a mesma comparacao em UTC dos dashboards, por
+    // isso o mesmo corte (o que vence hoje ja conta, e sem data tambem).
+    if (filtrosStatus.length > 0) {
+      const opcoes = [];
+      const reais = filtrosStatus.filter(f => f !== 'vencidos');
+      if (reais.length > 0) opcoes.push(`status.in.(${reais.map(aspas).join(',')})`);
+      if (filtrosStatus.includes('vencidos')) {
+        opcoes.push(`and(status.eq.pendente,or(data_vencimento.is.null,data_vencimento.lte.${corteVencimentoDashboard()}))`);
+      }
+      grupos.push(`or(${opcoes.join(',')})`);
+    }
+
+    if (grupos.length > 0) q = q.or(`and(${grupos.join(',')})`);
+
+    return q.order('data_vencimento', { ascending: false }).order('id', { ascending: true });
+  };
+
+  // Uma pagina da lista (com a contagem do filtro).
+  useEffect(() => {
+    if (!recorte) {
+      setTitulos([]);
+      setTotalFiltrado(0);
+      return;
+    }
+    let cancelado = false;
+    const t = setTimeout(async () => {
+      setCarregandoLista(true);
+      try {
+        const inicio = pagina * POR_PAGINA;
+        const { data, count, error } = await montarConsultaTitulos(recorte, { contar: true })
+          .range(inicio, inicio + POR_PAGINA - 1);
+        if (error) throw error;
+        if (!cancelado) {
+          setTitulos(data || []);
+          setTotalFiltrado(count || 0);
+        }
+      } catch (e) {
+        if (!cancelado) {
+          console.error('Erro ao carregar titulos:', e);
+          toast.error('Erro ao carregar os títulos');
+        }
+      } finally {
+        if (!cancelado) setCarregandoLista(false);
+      }
+    }, pesquisaPedido ? 300 : 0);
+    return () => { cancelado = true; clearTimeout(t); };
+    // montarConsultaTitulos le exatamente os estados listados abaixo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recorte, recarga, pagina, filtrosStatus, filtrosFornecedor, pesquisaPedido,
+      filtroVencimentoDe, filtroVencimentoAte, filtroEmissaoDe, filtroEmissaoAte,
+      filtroFaturamentoDe, filtroFaturamentoAte]);
+
+  // Filtro novo volta para a primeira pagina.
+  useEffect(() => {
+    setPagina(0);
+  }, [filtrosStatus, filtrosFornecedor, pesquisaPedido, filtroVencimentoDe, filtroVencimentoAte,
+      filtroEmissaoDe, filtroEmissaoAte, filtroFaturamentoDe, filtroFaturamentoAte]);
+
+  // Todas as linhas do filtro atual (para exportar), em blocos de 1000.
+  const carregarTodosFiltrados = async () => {
+    if (!recorte) return [];
+    const BLOCO = 1000;
+    let todos = [];
+    for (let inicio = 0; ; inicio += BLOCO) {
+      const { data, error } = await montarConsultaTitulos(recorte).range(inicio, inicio + BLOCO - 1);
+      if (error) throw error;
+      todos = todos.concat(data || []);
+      if (!data || data.length < BLOCO) return todos;
+    }
   };
 
   const handleUploadComprovante = async () => {
@@ -497,28 +580,46 @@ export default function CarteiraFinanceira() {
     return { label: 'Pendente', color: 'bg-blue-100 text-blue-800', icon: Clock };
   };
 
-  // Função para calcular número da parcela (X de Y)
+  // Função para calcular número da parcela (X de Y). A ordem vem da view (por
+  // vencimento, entre os titulos do mesmo pedido): a pagina nao tem mais todos
+  // os titulos na memoria. O cliente nunca via os provisorios sem
+  // parcela_numero, entao a conta dele e so entre os cobraveis.
   const getParcelaInfo = (titulo) => {
     if (!titulo.pedido_id) return null;
-
-    // Buscar todos os títulos do mesmo pedido
-    const titulosDoPedido = titulos
-      .filter(t => t.pedido_id === titulo.pedido_id)
-      .sort((a, b) => new Date(a.data_vencimento) - new Date(b.data_vencimento));
-
-    const totalParcelas = titulosDoPedido.length;
-    const numeroParcela = titulosDoPedido.findIndex(t => t.id === titulo.id) + 1;
-
-    return { numeroParcela, totalParcelas };
+    if (recorte?.tipo === 'cliente') {
+      return {
+        numeroParcela: Number(titulo.parcela_ordem_cobraveis) || 0,
+        totalParcelas: Number(titulo.parcela_total_cobraveis) || 0
+      };
+    }
+    return {
+      numeroParcela: Number(titulo.parcela_ordem) || 0,
+      totalParcelas: Number(titulo.parcela_total) || 0
+    };
   };
 
-  // Função para abrir modal de detalhes do pedido
-  const handleVerDetalhesPedido = (titulo) => {
-    const pedido = pedidosMap[titulo.pedido_id];
-    if (pedido) {
+  // Função para abrir modal de detalhes do pedido: o pedido completo e as
+  // parcelas dele so agora, sob demanda (antes vinham todos na abertura).
+  const handleVerDetalhesPedido = async (titulo) => {
+    try {
+      let q = supabase
+        .from('carteira_com_pedido')
+        .select('id,pedido_id,status,valor,data_vencimento,comprovante_url,comprovante_analisado')
+        .eq('pedido_id', titulo.pedido_id);
+      if (recorte?.tipo === 'cliente') {
+        q = q.eq('cliente_user_id', recorte.clienteId).eq('cobravel_cliente', true);
+        if (recorte.lojaId) q = q.eq('loja_id', recorte.lojaId);
+      } else if (recorte?.tipo === 'fornecedor') {
+        q = q.eq('fornecedor_id', recorte.fornecedorId);
+      }
+      const [pedido, parcelas] = await Promise.all([
+        Pedido.get(titulo.pedido_id),
+        q.then(({ data, error }) => { if (error) throw error; return data || []; })
+      ]);
+      setTitulosPedidoSelecionado(parcelas);
       setPedidoSelecionado(pedido);
       setShowDetalhesModal(true);
-    } else {
+    } catch (_e) {
       toast.error('Pedido não encontrado');
     }
   };
@@ -532,8 +633,8 @@ export default function CarteiraFinanceira() {
       }
     }
     // Se não encontrou, tenta pelo pedido associado
-    if (titulo.pedido_id && pedidosMap[titulo.pedido_id]?.fornecedor_id) {
-      const fornecedor = fornecedores.find(f => f.id === pedidosMap[titulo.pedido_id].fornecedor_id);
+    if (titulo.pedido_id && titulo.pedido_fornecedor_id) {
+      const fornecedor = fornecedores.find(f => f.id === titulo.pedido_fornecedor_id);
       if (fornecedor) {
         return fornecedor.razao_social || fornecedor.nome_fantasia || fornecedor.nome_marca;
       }
@@ -541,9 +642,13 @@ export default function CarteiraFinanceira() {
     return 'Polo Wear';
   };
 
-  const handleExport = (format) => {
+  // Nome do cliente como a tela mostrava: so para fornecedor e admin.
+  const nomeCliente = (titulo) => (podeVerNomeCliente() ? titulo.cliente_nome || null : null);
+
+  const handleExport = async (format) => {
     try {
-      const filteredData = filteredTitulos;
+      // A lista e paginada; o export continua levando TODOS os do filtro.
+      const filteredData = await carregarTodosFiltrados();
 
       if (!filteredData || filteredData.length === 0) {
         toast.info('Não há dados para exportar');
@@ -566,8 +671,8 @@ export default function CarteiraFinanceira() {
           : titulo.tipo || '-';
 
         // Nome do cliente
-        const clienteNome = titulo.cliente_user_id && clientesMap[titulo.cliente_user_id]
-          ? clientesMap[titulo.cliente_user_id]
+        const clienteNome = titulo.cliente_user_id && nomeCliente(titulo)
+          ? nomeCliente(titulo)
           : (user?.tipo_negocio === 'multimarca' || user?.tipo_negocio === 'franqueado')
             ? (user.empresa || user.razao_social || user.full_name || '-')
             : '-';
@@ -652,76 +757,9 @@ export default function CarteiraFinanceira() {
     setFiltroFaturamentoAte('');
   };
 
-  const filteredTitulos = titulos.filter(titulo => {
-    // Filtro por fornecedor (múltipla seleção)
-    const matchesFornecedor = filtrosFornecedor.length === 0 || filtrosFornecedor.includes(titulo.fornecedor_id);
-
-    // Filtro por número de pedido (cliente pode pesquisar pelo código)
-    const numeroPedido = titulo.pedido_id ? titulo.pedido_id.slice(-8).toUpperCase() : '';
-    const clienteNome = clientesMap[titulo.cliente_user_id] || '';
-    const matchesPesquisa = !pesquisaPedido ||
-      numeroPedido.includes(pesquisaPedido.toUpperCase()) ||
-      titulo.pedido_id?.toLowerCase().includes(pesquisaPedido.toLowerCase()) ||
-      clienteNome.toLowerCase().includes(pesquisaPedido.toLowerCase());
-
-    // Filtro por data de vencimento
-    let matchesVencimento = true;
-    if (filtroVencimentoDe && titulo.data_vencimento < filtroVencimentoDe) matchesVencimento = false;
-    if (filtroVencimentoAte && titulo.data_vencimento > filtroVencimentoAte) matchesVencimento = false;
-
-    // Filtro por data de emissão do pedido
-    let matchesEmissao = true;
-    if (filtroEmissaoDe || filtroEmissaoAte) {
-      const pedido = titulo.pedido_id ? pedidosMap[titulo.pedido_id] : null;
-      const dataEmissao = pedido?.created_date?.split('T')[0];
-      if (!dataEmissao) {
-        matchesEmissao = false;
-      } else {
-        if (filtroEmissaoDe && dataEmissao < filtroEmissaoDe) matchesEmissao = false;
-        if (filtroEmissaoAte && dataEmissao > filtroEmissaoAte) matchesEmissao = false;
-      }
-    }
-
-    // Filtro por data de faturamento do pedido
-    let matchesFaturamento = true;
-    if (filtroFaturamentoDe || filtroFaturamentoAte) {
-      const pedido = titulo.pedido_id ? pedidosMap[titulo.pedido_id] : null;
-      const dataFat = pedido?.nf_data_upload?.split('T')[0];
-      if (!dataFat) {
-        matchesFaturamento = false;
-      } else {
-        if (filtroFaturamentoDe && dataFat < filtroFaturamentoDe) matchesFaturamento = false;
-        if (filtroFaturamentoAte && dataFat > filtroFaturamentoAte) matchesFaturamento = false;
-      }
-    }
-
-    // Filtro por status (múltipla seleção)
-    if (filtrosStatus.length === 0) {
-      return matchesFornecedor && matchesPesquisa && matchesVencimento && matchesEmissao && matchesFaturamento;
-    }
-
-    // Verificar se algum dos filtros de status selecionados corresponde
-    let matchesStatus = false;
-
-    for (const filtro of filtrosStatus) {
-      if (filtro === 'vencidos') {
-        // Tratamento especial para "vencidos" - não é um status real, é calculado
-        const vencimento = new Date(titulo.data_vencimento);
-        const hoje = new Date();
-        hoje.setHours(0, 0, 0, 0);
-        const isVencido = vencimento < hoje && titulo.status === 'pendente';
-        if (isVencido) {
-          matchesStatus = true;
-          break;
-        }
-      } else if (titulo.status === filtro) {
-        matchesStatus = true;
-        break;
-      }
-    }
-
-    return matchesStatus && matchesFornecedor && matchesPesquisa && matchesVencimento && matchesEmissao && matchesFaturamento;
-  });
+  // A filtragem roda no servidor (montarConsultaTitulos): aqui ja e a pagina.
+  const filteredTitulos = titulos;
+  const totalPaginas = Math.max(1, Math.ceil(totalFiltrado / POR_PAGINA));
 
   if (loading) {
     return (
@@ -1001,7 +1039,7 @@ export default function CarteiraFinanceira() {
           {/* Indicador de filtros ativos */}
           {(filtrosStatus.length > 0 || filtrosFornecedor.length > 0 || filtroVencimentoDe || filtroVencimentoAte || filtroEmissaoDe || filtroEmissaoAte || filtroFaturamentoDe || filtroFaturamentoAte) && (
             <div className="text-sm text-gray-500">
-              Mostrando {filteredTitulos.length} de {titulos.length} títulos
+              Mostrando {totalFiltrado} de {stats.totalTitulos} títulos
             </div>
           )}
         </CardContent>
@@ -1010,7 +1048,10 @@ export default function CarteiraFinanceira() {
       {/* Lista de Títulos */}
       <Card className="bg-slate-100 rounded-2xl shadow-neumorphic">
         <CardHeader>
-          <CardTitle>Títulos ({filteredTitulos.length})</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            Títulos ({totalFiltrado})
+            {carregandoLista && <span className="text-xs font-normal text-gray-500">carregando…</span>}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -1043,9 +1084,9 @@ export default function CarteiraFinanceira() {
                           <StatusIcon className="w-4 h-4 mr-1" />
                           {statusInfo.label}
                         </Badge>
-                        {(user?.tipo_negocio === 'fornecedor' || user?.role === 'admin') && titulo.cliente_user_id && clientesMap[titulo.cliente_user_id] && (
+                        {(user?.tipo_negocio === 'fornecedor' || user?.role === 'admin') && titulo.cliente_user_id && nomeCliente(titulo) && (
                           <Badge variant="outline" className="bg-blue-50">
-                            {clientesMap[titulo.cliente_user_id]}
+                            {nomeCliente(titulo)}
                           </Badge>
                         )}
                         <Badge variant="outline">
@@ -1113,7 +1154,7 @@ export default function CarteiraFinanceira() {
 
                     <div className="flex flex-wrap gap-2">
                       {/* Botão Ver Detalhes do Pedido */}
-                      {titulo.pedido_id && pedidosMap[titulo.pedido_id] && (
+                      {titulo.pedido_id && titulo.pedido_encontrado_id && (
                         <Button
                           onClick={() => handleVerDetalhesPedido(titulo)}
                           size="sm"
@@ -1182,13 +1223,40 @@ export default function CarteiraFinanceira() {
               );
             })}
 
-            {filteredTitulos.length === 0 && (
+            {filteredTitulos.length === 0 && !carregandoLista && (
               <div className="text-center py-12">
                 <DollarSign className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600">Nenhum título encontrado</p>
               </div>
             )}
           </div>
+
+          {totalFiltrado > POR_PAGINA && (
+            <div className="flex items-center justify-between mt-6 text-sm text-gray-600">
+              <span>
+                {pagina * POR_PAGINA + 1}–{Math.min((pagina + 1) * POR_PAGINA, totalFiltrado)} de {totalFiltrado}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={pagina === 0 || carregandoLista}
+                  onClick={() => setPagina(p => Math.max(0, p - 1))}
+                >
+                  Anterior
+                </Button>
+                <span className="self-center">Página {pagina + 1} de {totalPaginas}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={pagina + 1 >= totalPaginas || carregandoLista}
+                  onClick={() => setPagina(p => p + 1)}
+                >
+                  Próxima
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1473,7 +1541,7 @@ export default function CarteiraFinanceira() {
               <div className="border-t pt-4">
                 <h4 className="font-medium mb-3">Parcelas deste Pedido</h4>
                 <div className="space-y-2">
-                  {titulos
+                  {titulosPedidoSelecionado
                     .filter(t => t.pedido_id === pedidoSelecionado.id)
                     .sort((a, b) => new Date(a.data_vencimento) - new Date(b.data_vencimento))
                     .map((titulo, index, arr) => {

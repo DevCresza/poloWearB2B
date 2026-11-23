@@ -30,6 +30,39 @@ import BannerCarousel from '@/components/BannerCarousel';
 import CampoQuantidade from '@/components/CampoQuantidade';
 import { thumb, usarOriginalSeFalhar } from '@/utils/thumb';
 
+// produto_ids da capsula, que pode vir como array ou como texto JSON.
+const idsDaCapsula = (capsula) => {
+  const v = capsula?.produto_ids;
+  if (Array.isArray(v)) return v.filter(Boolean);
+  if (typeof v === 'string') {
+    try {
+      const arr = JSON.parse(v);
+      return Array.isArray(arr) ? arr.filter(Boolean) : [];
+    } catch (_e) {
+      return [];
+    }
+  }
+  return [];
+};
+
+// Produtos com ativo diferente de false (o filtro da vitrine e
+// `p.ativo !== false`, entao ativo nulo conta), em blocos de 1000.
+const carregarProdutosNaoInativos = async () => {
+  const BLOCO = 1000;
+  let todos = [];
+  for (let inicio = 0; ; inicio += BLOCO) {
+    const { data, error } = await supabase
+      .from('produtos')
+      .select('*')
+      .not('ativo', 'is', false)
+      .order('id')
+      .range(inicio, inicio + BLOCO - 1);
+    if (error) throw error;
+    todos = todos.concat(data || []);
+    if (!data || data.length < BLOCO) return todos;
+  }
+};
+
 export default function Catalogo() {
   const { carrinhoKey } = useLojaContext();
   const { isVendedor, clienteAlvo } = useRepresentacao();
@@ -105,12 +138,22 @@ export default function Catalogo() {
       // no Layout explica o que fazer.
       const sujeito = ehVendedor(currentUser) ? clienteAlvo : currentUser;
 
-      const [produtosList, fornecedoresList, capsulasList, vendasResult] = await Promise.all([
-        Produto.list(),
+      // Produtos: so os nao-inativos (a vitrine) + os que as capsulas citam
+      // (podem estar inativos ou arquivados e a capsula ainda os mostra ou
+      // precisa saber que sairam). Antes era produtos.* inteiro: 853 linhas,
+      // 2,7 MB, para uma vitrine de ~80.
+      const [ativosList, fornecedoresList, capsulasList, vendasResult] = await Promise.all([
+        carregarProdutosNaoInativos(),
         Fornecedor.list(),
         Capsula.list(),
         supabase.rpc('get_produtos_mais_vendidos')
       ]);
+      const idsJaCarregados = new Set(ativosList.map(p => p.id));
+      const idsDasCapsulas = new Set();
+      (capsulasList || []).forEach(c => idsDaCapsula(c).forEach(id => idsDasCapsulas.add(id)));
+      const faltando = [...idsDasCapsulas].filter(id => !idsJaCarregados.has(id));
+      const extras = faltando.length > 0 ? await Produto.listByIds(faltando) : [];
+      const produtosList = ativosList.concat(extras);
 
       // Ranking de mais vendidos (total de peças vendidas por produto)
       // Agregado no servidor — não expõe dados sensíveis dos pedidos ao cliente

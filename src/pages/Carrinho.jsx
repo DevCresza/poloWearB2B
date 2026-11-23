@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { User } from '@/api/entities';
 import { Pedido } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
@@ -50,6 +50,11 @@ export default function Carrinho() {
   const [carrinho, setCarrinho] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
   const [produtos, setProdutos] = useState([]);
+  // Produtos de todos os ids do carrinho ja buscados (achados ou nao). Sem
+  // isso, um carrinho so com produto excluido ficaria com `produtos` vazio e
+  // getItensIndisponiveis nao marcaria nada.
+  const [produtosProntos, setProdutosProntos] = useState(false);
+  const idsBuscados = useRef(new Set());
   const [loading, setLoading] = useState(true);
   const [finalizando, setFinalizando] = useState({});
   const [metodoPagamento, setMetodoPagamento] = useState({});
@@ -78,13 +83,8 @@ export default function Carrinho() {
       const currentUser = await User.me();
       setUsuarioLogado(currentUser);
 
-      const [fornecedoresList, produtosList] = await Promise.all([
-        Fornecedor.list(),
-        Produto.list()
-      ]);
-
+      const fornecedoresList = await Fornecedor.list();
       setFornecedores(fornecedoresList || []);
-      setProdutos(produtosList || []);
 
       // Bloqueio automático por atraso DESLIGADO (decisão manual do admin).
       // O carrinho não bloqueia mais o cliente ao abrir por causa de boleto
@@ -96,6 +96,46 @@ export default function Carrinho() {
       setLoading(false);
     }
   };
+
+  // So os produtos que estao no carrinho (itens soltos e os de dentro das
+  // capsulas). Antes era produtos.* inteiro, 2,7 MB, para achar meia duzia.
+  // Roda a cada mudanca do carrinho e busca so os ids que ainda nao vieram.
+  useEffect(() => {
+    const ids = new Set();
+    (carrinho || []).forEach(item => {
+      if (item.tipo === 'capsula') {
+        (Array.isArray(item.produto_ids) ? item.produto_ids : []).forEach(id => ids.add(id));
+        Object.keys(item.produtos_quantidades || {}).forEach(id => ids.add(id));
+        (item.detalhes_produtos || []).forEach(d => d?.id && ids.add(d.id));
+      } else {
+        if (item.id) ids.add(item.id);
+        if (item.produto_id) ids.add(item.produto_id);
+      }
+    });
+    const faltando = [...ids].filter(id => id && !idsBuscados.current.has(id));
+    if (faltando.length === 0) {
+      setProdutosProntos(true);
+      return;
+    }
+    let cancelado = false;
+    setProdutosProntos(false);
+    Produto.listByIds(faltando)
+      .then(novos => {
+        if (cancelado) return;
+        faltando.forEach(id => idsBuscados.current.add(id));
+        setProdutos(prev => {
+          const vistos = new Set(prev.map(p => p.id));
+          return prev.concat((novos || []).filter(p => !vistos.has(p.id)));
+        });
+        setProdutosProntos(true);
+      })
+      .catch(() => {
+        // Mesmo comportamento de antes quando a lista falhava: segue sem
+        // marcar item como indisponivel.
+        if (!cancelado) setProdutosProntos(true);
+      });
+    return () => { cancelado = true; };
+  }, [carrinho]);
 
   const loadCarrinho = () => {
     const carrinhoSalvo = localStorage.getItem(carrinhoKey);
@@ -333,7 +373,7 @@ export default function Carrinho() {
 
   // Verificar quais itens do carrinho estão indisponíveis (produto excluído ou desativado)
   const getItensIndisponiveis = () => {
-    if (produtos.length === 0) return new Set();
+    if (!produtosProntos || idsBuscados.current.size === 0) return new Set();
     const indisponiveis = new Set();
     carrinho.forEach(item => {
       if (item.tipo === 'capsula') return; // cápsulas tratadas separadamente
@@ -928,7 +968,7 @@ export default function Carrinho() {
     }
   };
 
-  if (loading) {
+  if (loading || !produtosProntos) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { User, Capsula, Produto, Loja, Pedido, Carteira, Fornecedor } from '@/api/entities';
+import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +15,26 @@ import { toast } from 'sonner';
 import { AlertTriangle, Store, Package, Search, Send, CheckCircle, XCircle, Filter } from 'lucide-react';
 import { getPrecoGrade, getPrecoPeca } from '@/utils/precoCliente';
 import { formatCurrency } from '@/utils/exportUtils';
+
+// Pedidos não cancelados que já têm algum item desta cápsula -- só comprador
+// e loja. O filtro jsonb (@>) roda no servidor; a paginação é porque o
+// PostgREST corta em 1000 linhas por requisição.
+async function pedidosComItemDaCapsula(capsulaId) {
+  const PAGINA = 1000;
+  let todos = [];
+  for (let inicio = 0; ; inicio += PAGINA) {
+    const { data, error } = await supabase
+      .from('pedidos')
+      .select('comprador_user_id,loja_id')
+      .neq('status', 'cancelado')
+      .contains('itens', JSON.stringify([{ origem_capsula: capsulaId }]))
+      .order('id')
+      .range(inicio, inicio + PAGINA - 1);
+    if (error) throw error;
+    todos = todos.concat(data || []);
+    if (!data || data.length < PAGINA) return todos;
+  }
+}
 
 // Expande a capsula em itens de pedido, respeitando o tipo_negocio do
 // user destinatario (franqueado vs multimarca). Preco vem de getPrecoGrade
@@ -154,13 +175,14 @@ export default function EmissaoLote() {
     (async () => {
       if (!capsulaId) { setPedidosExistentes(new Set()); return; }
       try {
-        const pedidos = await Pedido.list({ sort: '-created_date' });
+        // Antes baixava pedidos.* inteiro (~78 MB, com o itens) a cada cápsula
+        // escolhida, para olhar o itens aqui. Agora o banco filtra (itens
+        // contém um item com esta origem_capsula, status não cancelado) e
+        // devolve só as duas colunas da chave.
+        const pedidos = await pedidosComItemDaCapsula(capsulaId);
         const set = new Set();
         (pedidos || []).forEach(p => {
-          const temItemDaCapsula = Array.isArray(p.itens) && p.itens.some(it => it.origem_capsula === capsulaId);
-          if (temItemDaCapsula && p.status !== 'cancelado') {
-            set.add(`${p.comprador_user_id}::${p.loja_id || ''}`);
-          }
+          set.add(`${p.comprador_user_id}::${p.loja_id || ''}`);
         });
         setPedidosExistentes(set);
       } catch { setPedidosExistentes(new Set()); }

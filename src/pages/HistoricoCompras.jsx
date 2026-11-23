@@ -89,7 +89,8 @@ export default function HistoricoCompras() {
 
       const [pedidosList, produtosList, fornecedoresList, carteiraList] = await Promise.all([
         Pedido.filter(pedidoFilter, '-created_date'),
-        Produto.list(),
+        // So a categoria (para "categorias mais compradas"): era produtos.*, 2,7 MB.
+        Produto.list({ columns: 'id,categoria' }),
         Fornecedor.list(),
         Carteira.filter(carteiraFilter)
       ]);
