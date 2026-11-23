@@ -73,7 +73,7 @@ export default function Login() {
         <Card className="shadow-xl">
           <CardHeader className="space-y-1">
             <div className="flex justify-center mb-4">
-              <img src="/logoPolo.png" alt="Polo Wear" className="h-20 w-auto object-contain" />
+              <img src="/logoPolo.webp" alt="Polo Wear" width={160} height={80} {...{ fetchpriority: 'high' }} className="h-20 w-auto object-contain" />
             </div>
             <CardTitle className="text-xl text-center text-gray-700">Portal B2B</CardTitle>
             <CardDescription className="text-center">

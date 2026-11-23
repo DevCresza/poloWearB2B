@@ -5,6 +5,11 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!-- Abre a conexao com o Supabase (API e fotos) enquanto o JS ainda baixa.
+         O Vite troca %VITE_SUPABASE_URL% pela URL do ambiente no build. -->
+    <link rel="preconnect" href="%VITE_SUPABASE_URL%" crossorigin />
+    <link rel="dns-prefetch" href="%VITE_SUPABASE_URL%" />
+
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json" />
 

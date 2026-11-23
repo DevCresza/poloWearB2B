@@ -28,8 +28,7 @@ import { conferirDivisao, parcelar, valorInformado, ehBoleto, rotuloMetodo, METO
 import { validarVencimentos } from '@/utils/vencimentoUtils';
 import { autorDaLinha, resumoDaLinha, detalhesDaLinha } from '@/utils/historicoPedido';
 import { Store } from 'lucide-react';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { thumb, usarOriginalSeFalhar } from '@/utils/thumb';
 
 // Notas de um faturamento. nf_arquivos e a lista; nf_url (campo antigo) vale
 // como item unico para faturamento gravado antes da migration 20260922000001.
@@ -1278,6 +1277,11 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   const gerarPdfPedido = async () => {
     setGerandoPdf(true);
     try {
+      // jspdf so e baixado quando o PDF e pedido (fora do bundle inicial).
+      const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+      ]);
       const doc = new jsPDF();
       const numPedido = pedido.id.slice(-8).toUpperCase();
 
@@ -1624,8 +1628,13 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                 <div key={index} className="flex gap-4 p-4 bg-gray-50 rounded-lg">
                   {fotoUrl && (
                     <img
-                      src={fotoUrl}
+                      src={thumb(fotoUrl, 96)}
                       alt={item.nome}
+                      width={96}
+                      height={96}
+                      loading="lazy"
+                      decoding="async"
+                      onError={usarOriginalSeFalhar(fotoUrl)}
                       className="w-24 h-24 object-cover rounded-lg"
                     />
                   )}

@@ -1,6 +1,7 @@
 import { toast } from 'sonner';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// jspdf (+ html2canvas, que ele puxa) e jspdf-autotable pesam ~400 kB: sao
+// carregados so quando alguem exporta um PDF, e nao no bundle inicial de todas
+// as telas (este arquivo e importado por ~20 paginas por causa do formatCurrency).
 
 // Utilitários para exportação de dados para CSV e PDF
 
@@ -87,13 +88,17 @@ export const exportToCSV = (data, columns, filename = 'export.csv') => {
  * @param {string} title - Título do relatório
  * @param {string} filename - Nome do arquivo
  */
-export const exportToPDF = (data, columns, title = 'Relatório', filename = 'export.pdf', options = {}) => {
+export const exportToPDF = async (data, columns, title = 'Relatório', filename = 'export.pdf', options = {}) => {
   if (!data || data.length === 0) {
     toast.info('Não há dados para exportar');
     return;
   }
 
   try {
+    const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ]);
     const doc = new jsPDF({ orientation: options.orientation || 'portrait' });
 
     // Adicionar título

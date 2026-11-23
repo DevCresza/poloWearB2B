@@ -7,9 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Upload, X, GripVertical } from 'lucide-react';
 import { uploadImage } from '@/lib/storageHelpers';
 import ImageEditor from '@/components/ImageEditor';
+import { arquivoDoBlob } from '@/utils/imagemUpload';
 import ColorPicker from '@/components/ColorPicker';
 import { toast } from 'sonner';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { thumb, usarOriginalSeFalhar } from '@/utils/thumb';
 
 export default function ProductVariantsManager({ variantes = [], onChange, gradeConfig, disponibilidade, onPhotoAdded }) {
   const [uploadingImages, setUploadingImages] = useState({});
@@ -87,9 +89,7 @@ export default function ProductVariantsManager({ variantes = [], onChange, grade
     setUploadingImages(prev => ({ ...prev, [currentVarianteId]: true }));
     try {
       // Converter Blob para File
-      const file = new File([croppedImageBlob], `variante-${Date.now()}.jpg`, {
-        type: 'image/jpeg'
-      });
+      const file = arquivoDoBlob(croppedImageBlob, 'variante');
 
       // Upload da imagem editada
       const result = await uploadImage(file, 'produtos');
@@ -299,8 +299,13 @@ export default function ProductVariantsManager({ variantes = [], onChange, grade
                                   >
                                     <div className="aspect-[4/5] bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200">
                                       <img
-                                        src={url}
+                                        src={thumb(url, 160)}
                                         alt={`${variante.cor_nome} ${idx + 1}`}
+                                        width={160}
+                                        height={200}
+                                        loading="lazy"
+                                        decoding="async"
+                                        onError={usarOriginalSeFalhar(url)}
                                         className="w-full h-full object-cover transition-transform group-hover:scale-110"
                                       />
                                     </div>

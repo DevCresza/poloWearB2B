@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { thumb, usarOriginalSeFalhar } from '@/utils/thumb';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -723,8 +724,13 @@ export default function CapsulaForm({ capsula, currentUser, onSuccess, onCancel 
                           <div className="w-12 h-12 rounded-md bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
                             {getPrimeiraFoto(produto) ? (
                               <img
-                                src={getPrimeiraFoto(produto)}
+                                src={thumb(getPrimeiraFoto(produto), 48)}
                                 alt={produto.nome}
+                                width={48}
+                                height={48}
+                                loading="lazy"
+                                decoding="async"
+                                onError={usarOriginalSeFalhar(getPrimeiraFoto(produto))}
                                 className="w-full h-full object-cover"
                               />
                             ) : (

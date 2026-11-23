@@ -1,36 +1,44 @@
 import Layout from "./Layout.jsx";
 
-import Home from "./Home";
-import UserManagement from "./UserManagement";
-import PortalDashboard from "./PortalDashboard";
-import PedidosAdmin from "./PedidosAdmin";
-import CadastroCompra from "./CadastroCompra";
-import Catalogo from "./Catalogo";
-import MeusPedidos from "./MeusPedidos";
-import Recursos from "./Recursos";
-import Admin from "./Admin";
-import GestaoProdutos from "./GestaoProdutos";
-import GestaoFornecedores from "./GestaoFornecedores";
-import CrmDashboard from "./CrmDashboard";
-import GestaoClientes from "./GestaoClientes";
-import GestaoCapsulas from "./GestaoCapsulas";
-import EmissaoLote from "./EmissaoLote";
-import GestaoEstoque from "./GestaoEstoque";
-import Carrinho from "./Carrinho";
-import PedidosFornecedor from "./PedidosFornecedor";
-import DashboardAdmin from "./DashboardAdmin";
-import GestaoMetas from "./GestaoMetas";
-import HistoricoCompras from "./HistoricoCompras";
-import CarteiraFinanceira from "./CarteiraFinanceira";
-import ConfigWhatsApp from "./ConfigWhatsApp";
-import MeuPerfil from "./MeuPerfil";
-import Login from "./Login";
-import ResetPassword from "./ResetPassword";
-import HistoricoEmails from "./HistoricoEmails";
+import { Suspense } from 'react';
 
+// Home e Login ficam no bundle inicial: sao as portas de entrada e a imagem
+// delas e o LCP. As demais 25 paginas viram um chunk cada (React.lazy) e so
+// sao baixadas quando a rota abre. Antes tudo ia num chunk unico de 2,36 MB.
+import Home from "./Home";
+import Login from "./Login";
+import { lazyComRecarga } from "@/utils/lazyComRecarga";
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import { AuthProvider } from '@/contexts/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
+
+const UserManagement = lazyComRecarga(() => import("./UserManagement"));
+const PortalDashboard = lazyComRecarga(() => import("./PortalDashboard"));
+const PedidosAdmin = lazyComRecarga(() => import("./PedidosAdmin"));
+const CadastroCompra = lazyComRecarga(() => import("./CadastroCompra"));
+const Catalogo = lazyComRecarga(() => import("./Catalogo"));
+const MeusPedidos = lazyComRecarga(() => import("./MeusPedidos"));
+const Recursos = lazyComRecarga(() => import("./Recursos"));
+const Admin = lazyComRecarga(() => import("./Admin"));
+const GestaoProdutos = lazyComRecarga(() => import("./GestaoProdutos"));
+const GestaoFornecedores = lazyComRecarga(() => import("./GestaoFornecedores"));
+const CrmDashboard = lazyComRecarga(() => import("./CrmDashboard"));
+const GestaoClientes = lazyComRecarga(() => import("./GestaoClientes"));
+const GestaoCapsulas = lazyComRecarga(() => import("./GestaoCapsulas"));
+const EmissaoLote = lazyComRecarga(() => import("./EmissaoLote"));
+const GestaoEstoque = lazyComRecarga(() => import("./GestaoEstoque"));
+const Carrinho = lazyComRecarga(() => import("./Carrinho"));
+const PedidosFornecedor = lazyComRecarga(() => import("./PedidosFornecedor"));
+const DashboardAdmin = lazyComRecarga(() => import("./DashboardAdmin"));
+const GestaoMetas = lazyComRecarga(() => import("./GestaoMetas"));
+const HistoricoCompras = lazyComRecarga(() => import("./HistoricoCompras"));
+const CarteiraFinanceira = lazyComRecarga(() => import("./CarteiraFinanceira"));
+const ConfigWhatsApp = lazyComRecarga(() => import("./ConfigWhatsApp"));
+const MeuPerfil = lazyComRecarga(() => import("./MeuPerfil"));
+const ResetPassword = lazyComRecarga(() => import("./ResetPassword"));
+const HistoricoEmails = lazyComRecarga(() => import("./HistoricoEmails"));
+
 
 const PAGES = {
 
@@ -110,6 +118,16 @@ const protegida = (pagina, Componente) => (
     </ProtectedRoute>
 );
 
+// Enquanto o chunk da pagina chega. Simples de proposito: sem layout que salte.
+function CarregandoPagina() {
+    return (
+        <div className="flex items-center justify-center min-h-[50vh]" role="status" aria-live="polite">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            <span className="sr-only">Carregando…</span>
+        </div>
+    );
+}
+
 // Create a wrapper component that uses useLocation inside the Router context
 function PagesContent() {
     const location = useLocation();
@@ -117,6 +135,7 @@ function PagesContent() {
 
     return (
         <Layout currentPageName={currentPage}>
+            <Suspense fallback={<CarregandoPagina />}>
             <Routes>
 
                 {/* Publicas */}
@@ -156,6 +175,7 @@ function PagesContent() {
                 <Route path="/ConfigWhatsApp" element={protegida('ConfigWhatsApp', ConfigWhatsApp)} />
 
             </Routes>
+            </Suspense>
         </Layout>
     );
 }

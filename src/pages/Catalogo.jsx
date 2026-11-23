@@ -28,6 +28,7 @@ import { isVendedor as ehVendedor } from '@/utils/roles';
 import { getPrecoPeca, getPrecoGrade, isProdutoVisivelParaCliente, isCapsulaVisivelParaCliente } from '@/utils/precoCliente';
 import BannerCarousel from '@/components/BannerCarousel';
 import CampoQuantidade from '@/components/CampoQuantidade';
+import { thumb, usarOriginalSeFalhar } from '@/utils/thumb';
 
 export default function Catalogo() {
   const { carrinhoKey } = useLojaContext();
@@ -983,12 +984,16 @@ export default function Catalogo() {
               return fotoAtual ? (
                 <>
                   <img
-                    src={fotoAtual}
+                    src={thumb(fotoAtual, 320)}
                     alt={produto.nome}
+                    width={320}
+                    height={400}
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    onError={(e) => {
-                      e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23f0f0f0" width="200" height="200"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="14" fill="%23999"%3ESem imagem%3C/text%3E%3C/svg%3E';
-                    }}
+                    onError={usarOriginalSeFalhar(fotoAtual, (e) => {
+                      e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23f0f0f0" width="200" height="200"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="14" fill="%23999"%3ESem imagem%3C/text%3E%3C/svg%3E';
+                    })}
                   />
                   {/* Setas de navegação — só aparece se tiver mais de 1 foto */}
                   {fotos.length > 1 && (
@@ -1279,7 +1284,7 @@ export default function Catalogo() {
                   onClick={() => openProductDetails(produto)}
                 >
                   {fotoAtual ? (
-                    <img src={fotoAtual} alt={produto.nome} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    <img src={thumb(fotoAtual, 320)} alt={produto.nome} width={320} height={400} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   ) : (
                     <div className="flex items-center justify-center h-full"><Package className="w-16 h-16 text-gray-300" /></div>
                   )}
@@ -1379,7 +1384,7 @@ export default function Catalogo() {
                       >
                         <div className="relative aspect-square rounded-xl overflow-hidden bg-gradient-to-br from-pink-100 to-purple-100 mb-2">
                           {capsula.imagem_capa_url ? (
-                            <img src={capsula.imagem_capa_url} alt={capsula.nome} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                            <img src={thumb(capsula.imagem_capa_url, 192)} alt={capsula.nome} width={192} height={192} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
                               <Sparkles className="w-10 h-10 text-purple-400" />
@@ -1502,8 +1507,11 @@ export default function Catalogo() {
                         <div className="aspect-square bg-gray-100 rounded-xl overflow-hidden relative group">
                           {fotoAtualIndex < fotosParaMostrar.length ? (
                             <img
-                              src={getFotoUrl(fotosParaMostrar[fotoAtualIndex] || fotosParaMostrar[0])}
+                              src={thumb(getFotoUrl(fotosParaMostrar[fotoAtualIndex] || fotosParaMostrar[0]), 640)}
                               alt={selectedProduto.nome}
+                              width={640}
+                              height={640}
+                              decoding="async"
                               className="w-full h-full object-cover"
                             />
                           ) : youtubeVideoId ? (
@@ -1560,8 +1568,12 @@ export default function Catalogo() {
                                 }`}
                               >
                                 <img
-                                  src={getFotoUrl(foto)}
+                                  src={thumb(getFotoUrl(foto), 96)}
                                   alt={`${selectedProduto.nome} ${index + 1}`}
+                                  width={96}
+                                  height={96}
+                                  loading="lazy"
+                                  decoding="async"
                                   className="w-full h-full object-cover"
                                 />
                               </button>
@@ -1579,6 +1591,10 @@ export default function Catalogo() {
                                   <img
                                     src={`https://img.youtube.com/vi/${youtubeVideoId}/mqdefault.jpg`}
                                     alt="Vídeo do Produto"
+                                    width={96}
+                                    height={96}
+                                    loading="lazy"
+                                    decoding="async"
                                     className="w-full h-full object-cover"
                                   />
                                 ) : (
@@ -2342,8 +2358,11 @@ export default function Catalogo() {
                   <div className="relative w-full max-w-md mx-auto">
                     <div className="aspect-[4/5] rounded-lg overflow-hidden bg-gray-100">
                       <img
-                        src={capsulaFotos[capsulaFotoIndex]?.url}
+                        src={thumb(capsulaFotos[capsulaFotoIndex]?.url, 448)}
                         alt={capsulaFotos[capsulaFotoIndex]?.produtoNome || selectedCapsula.nome}
+                        width={448}
+                        height={560}
+                        decoding="async"
                         onClick={() => capsulaFotos[capsulaFotoIndex]?.url && setZoomImg({
                           url: capsulaFotos[capsulaFotoIndex].url,
                           nome: capsulaFotos[capsulaFotoIndex]?.produtoNome || selectedCapsula.nome,
@@ -2413,8 +2432,11 @@ export default function Catalogo() {
               {capsulaFotos.length === 0 && selectedCapsula.imagem_capa_url && (
                 <div className="w-full max-w-md mx-auto aspect-[4/5] rounded-lg overflow-hidden">
                   <img
-                    src={selectedCapsula.imagem_capa_url}
+                    src={thumb(selectedCapsula.imagem_capa_url, 448)}
                     alt={selectedCapsula.nome}
+                    width={448}
+                    height={560}
+                    decoding="async"
                     className="w-full h-full object-cover"
                   />
                 </div>
@@ -2452,8 +2474,12 @@ export default function Catalogo() {
                           <div className="w-20 h-20 rounded-md bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
                             {primeiraFoto ? (
                               <img
-                                src={primeiraFoto}
+                                src={thumb(primeiraFoto, 80)}
                                 alt={produto.nome}
+                                width={80}
+                                height={80}
+                                loading="lazy"
+                                decoding="async"
                                 onClick={() => setZoomImg({ url: primeiraFoto, nome: produto.nome })}
                                 className="w-full h-full rounded-md object-cover cursor-zoom-in transition-transform duration-200 hover:scale-125"
                                 title="Clique para ampliar"

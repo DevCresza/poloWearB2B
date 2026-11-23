@@ -7,6 +7,7 @@ import CapsulaForm from '../components/admin/CapsulaForm';
 import { toast } from 'sonner';
 import { can, PERM } from '@/utils/permissoes';
 import { isFornecedor } from '@/utils/roles';
+import { thumb } from '@/utils/thumb';
 
 export default function GestaoCapsulas() {
   const [capsulas, setCapsulas] = useState([]);
@@ -161,8 +162,12 @@ export default function GestaoCapsulas() {
                     <div className="rounded-lg aspect-video overflow-hidden bg-gradient-to-br from-purple-100 to-pink-100">
                       {capsula.imagem_capa_url ? (
                         <img
-                          src={capsula.imagem_capa_url}
+                          src={thumb(capsula.imagem_capa_url, 360)}
                           alt={capsula.nome}
+                          width={360}
+                          height={203}
+                          loading="lazy"
+                          decoding="async"
                           className="w-full h-full object-cover"
                           onError={(e) => {
                             e.target.style.display = 'none';

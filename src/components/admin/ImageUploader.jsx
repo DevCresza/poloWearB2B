@@ -1,9 +1,11 @@
 import { useState, useRef } from 'react';
+import { thumb, usarOriginalSeFalhar } from '@/utils/thumb';
 import { Button } from '@/components/ui/button';
 import { Upload, X, GripVertical } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { uploadImage } from '@/lib/storageHelpers';
 import ImageEditor from '@/components/ImageEditor';
+import { arquivoDoBlob } from '@/utils/imagemUpload';
 import { toast } from 'sonner';
 
 export default function ImageUploader({ images = [], onImagesChange, maxImages = 4 }) {
@@ -49,9 +51,7 @@ export default function ImageUploader({ images = [], onImagesChange, maxImages =
     setUploading(true);
     try {
       // Converter Blob para File
-      const file = new File([croppedImageBlob], `produto-${Date.now()}.jpg`, {
-        type: 'image/jpeg'
-      });
+      const file = arquivoDoBlob(croppedImageBlob, 'produto');
 
       // Upload da imagem editada
       const result = await uploadImage(file, 'produtos');
@@ -152,8 +152,13 @@ export default function ImageUploader({ images = [], onImagesChange, maxImages =
                       >
                         <div className="aspect-[4/5] bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200">
                           <img
-                            src={imageUrl}
+                            src={thumb(imageUrl, 160)}
                             alt={`Produto ${index + 1}`}
+                            width={160}
+                            height={200}
+                            loading="lazy"
+                            decoding="async"
+                            onError={usarOriginalSeFalhar(imageUrl)}
                             className="w-full h-full object-cover transition-transform group-hover:scale-110"
                           />
                         </div>
