@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { abrirUrlSegura } from '@/utils/urlSegura';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -1755,7 +1756,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                               variant="ghost"
                               size="sm"
                               title={nota.nome || 'Nota fiscal'}
-                              onClick={() => window.open(nota.url, '_blank')}
+                              onClick={() => abrirUrlSegura(nota.url)}
                             >
                               <Download className="w-4 h-4" />
                               {notasDoFaturamento(fat).length > 1 && (
@@ -2060,7 +2061,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                           variant="outline"
                           size="sm"
                           className="mt-2"
-                          onClick={() => window.open(pedido.link_rastreio, '_blank')}
+                          onClick={() => abrirUrlSegura(pedido.link_rastreio)}
                         >
                           Rastrear Pedido
                         </Button>
@@ -2298,7 +2299,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => window.open(parcela.comprovante_url, '_blank')}
+                                    onClick={() => abrirUrlSegura(parcela.comprovante_url)}
                                   >
                                     <FileText className="w-4 h-4 mr-1" />
                                     Ver Comprovante
@@ -2589,7 +2590,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                       )}
                     </div>
                     <Button
-                      onClick={() => window.open(pedido.comprovante_pagamento_url, '_blank')}
+                      onClick={() => abrirUrlSegura(pedido.comprovante_pagamento_url)}
                       className="bg-purple-600 hover:bg-purple-700"
                     >
                       <Download className="w-4 h-4 mr-2" />
@@ -2646,7 +2647,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => window.open(pedido.cartao_link_pagamento.trim(), '_blank')}
+                            onClick={() => abrirUrlSegura(pedido.cartao_link_pagamento.trim())}
                           >
                             Abrir link de pagamento
                           </Button>
@@ -2747,7 +2748,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
-                        onClick={() => window.open(pedido.boleto_url, '_blank')}
+                        onClick={() => abrirUrlSegura(pedido.boleto_url)}
                       >
                         <Download className="w-4 h-4 mr-2" />
                         Baixar
@@ -3002,7 +3003,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
-                        onClick={() => window.open(pedido.nf_url, '_blank')}
+                        onClick={() => abrirUrlSegura(pedido.nf_url)}
                       >
                         <Download className="w-4 h-4 mr-2" />
                         Baixar
@@ -3197,7 +3198,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                     </div>
                     <Button
                       variant="outline"
-                      onClick={() => window.open(pedido.comprovante_pagamento_url, '_blank')}
+                      onClick={() => abrirUrlSegura(pedido.comprovante_pagamento_url)}
                     >
                       <Download className="w-4 h-4 mr-2" />
                       Ver Comprovante
@@ -3261,7 +3262,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                                 variant="outline"
                                 size="sm"
                                 title={nota.nome || 'Nota fiscal'}
-                                onClick={() => window.open(nota.url, '_blank')}
+                                onClick={() => abrirUrlSegura(nota.url)}
                               >
                                 <Download className="w-4 h-4 mr-1" />
                                 Baixar
@@ -3352,7 +3353,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                                   <span className="ml-2">• {fat.qtd_parcelas} parcela(s)</span>
                                 )}
                               </div>
-                              <Button variant="outline" size="sm" onClick={() => window.open(fat.boleto_url, '_blank')}>
+                              <Button variant="outline" size="sm" onClick={() => abrirUrlSegura(fat.boleto_url)}>
                                 <Download className="w-3 h-3 mr-1" />
                                 Boleto
                               </Button>
@@ -3637,7 +3638,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                 )}
                 {parcelaParaAprovar.comprovante_url && (
                   <div className="mt-3 pt-3 border-t">
-                    <Button variant="outline" size="sm" className="w-full" onClick={() => window.open(parcelaParaAprovar.comprovante_url, '_blank')}>
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => abrirUrlSegura(parcelaParaAprovar.comprovante_url)}>
                       <FileText className="w-4 h-4 mr-2" />
                       Visualizar Comprovante
                     </Button>
@@ -3690,7 +3691,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                 </div>
                 {parcelaParaRecusar.comprovante_url && (
                   <div className="mt-3 pt-3 border-t">
-                    <Button variant="outline" size="sm" className="w-full" onClick={() => window.open(parcelaParaRecusar.comprovante_url, '_blank')}>
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => abrirUrlSegura(parcelaParaRecusar.comprovante_url)}>
                       <FileText className="w-4 h-4 mr-2" />
                       Visualizar Comprovante
                     </Button>

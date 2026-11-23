@@ -374,8 +374,8 @@ export default function HistoricoCompras() {
         { key: 'entidade', label: entityLabel },
         { key: 'status', label: 'Status' },
         { key: 'status_pagamento', label: 'Pagamento' },
-        { key: 'valor_total', label: 'Valor Total' },
-        { key: 'valor_final', label: 'Valor Final' },
+        { key: 'valor_total', label: 'Valor Total', type: 'money' },
+        { key: 'valor_final', label: 'Valor Final', type: 'money' },
         { key: 'metodo_pagamento', label: 'Método Pagamento' }
       ];
 

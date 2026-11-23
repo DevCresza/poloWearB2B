@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { abrirUrlSegura } from '@/utils/urlSegura';
 import { User } from '@/api/entities';
 import { Carteira } from '@/api/entities';
 import { ConferenciaCobranca } from '@/api/entities';
@@ -595,7 +596,7 @@ export default function CarteiraFinanceira() {
         { key: 'fornecedor', label: 'Fornecedor' },
         { key: 'descricao', label: 'Descrição' },
         { key: 'tipo', label: 'Tipo' },
-        { key: 'valor', label: 'Valor (R$)' },
+        { key: 'valor', label: 'Valor (R$)', type: 'money' },
         { key: 'vencimento', label: 'Vencimento' },
         { key: 'pagamento', label: 'Pagamento' },
         { key: 'status', label: 'Status' },
@@ -1093,7 +1094,7 @@ export default function CarteiraFinanceira() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => window.open(titulo.comprovante_url, '_blank')}
+                            onClick={() => abrirUrlSegura(titulo.comprovante_url)}
                           >
                             <FileText className="w-4 h-4 mr-1" />
                             Ver Comprovante
@@ -1298,7 +1299,7 @@ export default function CarteiraFinanceira() {
                       variant="outline"
                       size="sm"
                       className="w-full"
-                      onClick={() => window.open(tituloParaAprovar.comprovante_url, '_blank')}
+                      onClick={() => abrirUrlSegura(tituloParaAprovar.comprovante_url)}
                     >
                       <FileText className="w-4 h-4 mr-2" />
                       Visualizar Comprovante
@@ -1370,7 +1371,7 @@ export default function CarteiraFinanceira() {
                       variant="outline"
                       size="sm"
                       className="w-full"
-                      onClick={() => window.open(tituloParaRecusar.comprovante_url, '_blank')}
+                      onClick={() => abrirUrlSegura(tituloParaRecusar.comprovante_url)}
                     >
                       <FileText className="w-4 h-4 mr-2" />
                       Visualizar Comprovante Enviado
@@ -1555,7 +1556,7 @@ export default function CarteiraFinanceira() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => window.open(pedidoSelecionado.link_rastreio, '_blank')}
+                        onClick={() => abrirUrlSegura(pedidoSelecionado.link_rastreio)}
                         className="w-full"
                       >
                         Rastrear Pedido

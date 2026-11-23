@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from 'react';
+import { abrirUrlSegura } from '@/utils/urlSegura';
 import { useNavigate } from 'react-router-dom';
 import { Pedido, PedidoResumo } from '@/api/entities';
 import { toast } from 'sonner';
@@ -767,8 +768,8 @@ export default function PedidosFornecedor() {
       { key: 'loja', label: 'Loja' },
       { key: 'status', label: 'Status' },
       { key: 'qtd_pecas', label: 'Qtd. Peças' },
-      { key: 'valor_formatado', label: 'Valor Total' },
-      { key: 'valor_faturado', label: 'Valor Faturado' },
+      { key: 'valor_total', label: 'Valor Total', type: 'money' },
+      { key: 'valor_faturado', label: 'Valor Faturado', type: 'money' },
       { key: 'mes_faturamento', label: 'Mês de Faturamento' },
       { key: 'data_formatada', label: 'Data Pedido' },
       { key: 'data_prevista', label: 'Previsão Entrega' },
@@ -791,8 +792,8 @@ export default function PedidosFornecedor() {
         loja: loja?.nome_fantasia || loja?.nome || '-',
         status: p.status?.charAt(0).toUpperCase() + p.status?.slice(1) || 'N/A',
         qtd_pecas: qtdPecas,
-        valor_formatado: formatCurrency(p.valor_total),
-        valor_faturado: formatCurrency(p.valor_faturado || 0),
+        valor_total: Number(p.valor_total) || 0,
+        valor_faturado: Number(p.valor_faturado) || 0,
         mes_faturamento: formatMesesEntrega(getMesesFaturamentoPedido(p, produtoEntregaMap)).join(' / '),
         data_formatada: formatDate(p.created_date),
         data_prevista: p.data_prevista_entrega ? formatDate(p.data_prevista_entrega) : '-',
@@ -918,10 +919,10 @@ export default function PedidosFornecedor() {
         { key: 'ref_linx', label: 'REF LINX' },
         { key: 'cor', label: 'COR' },
         { key: 'tamanho', label: 'TAMANHO' },
-        { key: 'preco_unitario', label: 'PREÇO UNITÁRIO' },
+        { key: 'preco_unitario', label: 'PREÇO UNITÁRIO', type: 'money' },
         { key: 'total_itens', label: 'TOTAL DE ITENS' },
         { key: 'grades', label: 'GRADES' },
-        { key: 'preco_total', label: 'PREÇO TOTAL' },
+        { key: 'preco_total', label: 'PREÇO TOTAL', type: 'money' },
         { key: 'status_pedido', label: 'STATUS DO PEDIDO' }
       ];
 
@@ -1029,18 +1030,13 @@ export default function PedidosFornecedor() {
       { key: 'referencia_fornecedor', label: 'Ref. Fornecedor' },
       { key: 'referencia_linx', label: 'Ref. Linx' },
       { key: 'cor', label: 'Cor / Variante' },
-      { key: 'preco_unitario_fmt', label: 'Preço Unit.' },
+      { key: 'preco_unitario', label: 'Preço Unit.', type: 'money' },
       { key: 'mes_entrega', label: 'Mês Entrega' },
       { key: 'qtd_total_pecas', label: 'Qtd. Total Peças' },
       { key: 'qtd_grades', label: 'Qtd. Grades' }
     ];
 
-    const dataFormatted = data.map(r => ({
-      ...r,
-      preco_unitario_fmt: formatCurrency(r.preco_unitario)
-    }));
-
-    exportToCSV(dataFormatted, columns, `relatorio-producao-${new Date().toISOString().split('T')[0]}.csv`);
+    exportToCSV(data, columns, `relatorio-producao-${new Date().toISOString().split('T')[0]}.csv`);
     toast.success(`Relatório gerado com ${data.length} produto(s)`);
   };
 
@@ -1931,7 +1927,7 @@ export default function PedidosFornecedor() {
                       {pedido.comprovante_pagamento_url && (
                         <Button
                           variant="outline"
-                          onClick={() => window.open(pedido.comprovante_pagamento_url, '_blank')}
+                          onClick={() => abrirUrlSegura(pedido.comprovante_pagamento_url)}
                           className="border-blue-300 text-blue-700"
                         >
                           <Eye className="w-4 h-4 mr-2" />
@@ -2474,7 +2470,7 @@ export default function PedidosFornecedor() {
                   <Button
                     variant="link"
                     className="p-0 h-auto ml-2"
-                    onClick={() => window.open(selectedPedido.boleto_url, '_blank')}
+                    onClick={() => abrirUrlSegura(selectedPedido.boleto_url)}
                   >
                     Ver boleto atual
                   </Button>
@@ -2594,7 +2590,7 @@ export default function PedidosFornecedor() {
                   <Button
                     variant="link"
                     className="p-0 h-auto ml-2"
-                    onClick={() => window.open(selectedPedido.nf_url, '_blank')}
+                    onClick={() => abrirUrlSegura(selectedPedido.nf_url)}
                   >
                     Ver NF atual
                   </Button>

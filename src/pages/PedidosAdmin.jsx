@@ -226,8 +226,8 @@ export default function PedidosAdmin() {
         { key: 'status_pagamento', label: 'Pagamento' },
         { key: 'mes_faturamento', label: 'Mês de Faturamento' },
         { key: 'qtd_pecas', label: 'Qtd. Peças' },
-        { key: 'valor_total', label: 'Valor Total' },
-        { key: 'valor_final', label: 'Valor Final' },
+        { key: 'valor_total', label: 'Valor Total', type: 'money' },
+        { key: 'valor_final', label: 'Valor Final', type: 'money' },
         { key: 'metodo_pagamento', label: 'Método Pagamento' }
       ];
 
@@ -376,10 +376,10 @@ export default function PedidosAdmin() {
         { key: 'ref_linx', label: 'REF LINX' },
         { key: 'cor', label: 'COR' },
         { key: 'tamanho', label: 'TAMANHO' },
-        { key: 'preco_unitario', label: 'PREÇO UNITÁRIO' },
+        { key: 'preco_unitario', label: 'PREÇO UNITÁRIO', type: 'money' },
         { key: 'total_itens', label: 'TOTAL DE ITENS' },
         { key: 'grades', label: 'GRADES' },
-        { key: 'preco_total', label: 'PREÇO TOTAL' },
+        { key: 'preco_total', label: 'PREÇO TOTAL', type: 'money' },
         { key: 'status_pedido', label: 'STATUS DO PEDIDO' }
       ];
 
@@ -470,13 +470,13 @@ export default function PedidosAdmin() {
       { key: 'referencia_fornecedor', label: 'Ref. Fornecedor' },
       { key: 'referencia_linx', label: 'Ref. Linx' },
       { key: 'cor', label: 'Cor / Variante' },
-      { key: 'preco_unitario_fmt', label: 'Preço Unit.' },
+      { key: 'preco_unitario', label: 'Preço Unit.', type: 'money' },
       { key: 'mes_entrega', label: 'Mês Entrega' },
       { key: 'qtd_total_pecas', label: 'Qtd. Total Peças' },
       { key: 'qtd_grades', label: 'Qtd. Grades' }
     ];
 
-    exportToCSV(data.map(r => ({ ...r, preco_unitario_fmt: formatCurrency(r.preco_unitario) })), columns, `relatorio-producao-${new Date().toISOString().split('T')[0]}.csv`);
+    exportToCSV(data, columns, `relatorio-producao-${new Date().toISOString().split('T')[0]}.csv`);
     toast.success(`Relatório gerado com ${data.length} produto(s)`);
   };
 

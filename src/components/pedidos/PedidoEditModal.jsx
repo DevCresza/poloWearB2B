@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { abrirUrlSegura } from '@/utils/urlSegura';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -266,7 +267,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => window.open(pedido.nf_url, '_blank')}
+                      onClick={() => abrirUrlSegura(pedido.nf_url)}
                     >
                       Ver NF
                     </Button>
@@ -315,7 +316,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => window.open(pedido.boleto_url, '_blank')}
+                      onClick={() => abrirUrlSegura(pedido.boleto_url)}
                     >
                       Ver Boleto
                     </Button>
