@@ -30,6 +30,8 @@ export default function CadastroCompra() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [formData, setFormData] = useState({
+    // Honeypot anti-robo: campo escondido, gente nao preenche.
+    website: '',
     // Dados da Loja
     nome_loja: '',
     cnpj: '',
@@ -285,50 +287,36 @@ Data do Cadastro: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_
         console.error('Erro ao salvar lead no CRM:', contatoError);
       }
 
-      // Enviar email
+      // Aviso de lead para a equipe: modelo fixo da Edge Function sendEmail.
+      // Destinatario, assunto e remetente sao decididos no servidor; este fluxo
+      // roda sem login no formulario de franqueado.
       try {
         await SendEmail({
-          to: 'roberto@polomultimarca.com.br',
-          subject: isRegisterView ? 'Novo Lead - Cadastro de Lojista POLO Wear' : 'Nova Solicitação - Cadastro Franqueado POLO Wear',
-          body: `${isRegisterView ? 'Novo lead de lojista interessado em revender POLO Wear' : 'Nova solicitação de cadastro de franqueado POLO Wear'}:
-
-DADOS DA LOJA:
-Nome da Loja: ${formData.nome_loja}
-CNPJ: ${formData.cnpj}
-Inscrição Estadual: ${formData.inscricao_estadual || 'Não informado'}
-
-RESPONSÁVEL:
-Nome: ${formData.nome_responsavel}
-CPF: ${formData.cpf_responsavel || 'Não informado'}
-Email: ${formData.email_responsavel}
-Telefone: ${formData.telefone_responsavel}
-WhatsApp: ${formData.whatsapp_responsavel || formData.telefone_responsavel}
-
-ENDEREÇO:
-${enderecoCompleto}
-CEP: ${formData.endereco_cep}
-
-ENTREGA:
-${formData.entrega_mesmo_endereco === 'sim' ? 'Mesmo endereço da loja' : enderecoEntregaCompleto}
-
-CONTATO FINANCEIRO:
-Nome: ${formData.contato_financeiro_nome || 'Não informado'}
-Email: ${formData.contato_financeiro_email || 'Não informado'}
-Telefone: ${formData.contato_financeiro_telefone || 'Não informado'}
-
-CONTATO COMERCIAL:
-Nome: ${formData.contato_comercial_nome || 'Não informado'}
-Email: ${formData.contato_comercial_email || 'Não informado'}
-Telefone: ${formData.contato_comercial_telefone || 'Não informado'}
-
-INFORMAÇÕES COMERCIAIS:
-Tempo de Atuação: ${formData.tempo_atuacao || 'Não informado'}
-Funcionários: ${formData.numero_funcionarios || 'Não informado'}
-
-Observações: ${formData.observacoes || 'Nenhuma'}
-
-Origem: Formulário Site
-Data: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`
+          template: 'lead_franqueado',
+          tipo: isRegisterView ? 'lojista' : 'franqueado',
+          lead: {
+            nome_loja: formData.nome_loja,
+            cnpj: formData.cnpj,
+            inscricao_estadual: formData.inscricao_estadual,
+            nome_responsavel: formData.nome_responsavel,
+            cpf_responsavel: formData.cpf_responsavel,
+            email_responsavel: formData.email_responsavel,
+            telefone_responsavel: formData.telefone_responsavel,
+            whatsapp_responsavel: formData.whatsapp_responsavel || formData.telefone_responsavel,
+            endereco: enderecoCompleto,
+            cep: formData.endereco_cep,
+            entrega: formData.entrega_mesmo_endereco === 'sim' ? 'Mesmo endereço da loja' : enderecoEntregaCompleto,
+            contato_financeiro_nome: formData.contato_financeiro_nome,
+            contato_financeiro_email: formData.contato_financeiro_email,
+            contato_financeiro_telefone: formData.contato_financeiro_telefone,
+            contato_comercial_nome: formData.contato_comercial_nome,
+            contato_comercial_email: formData.contato_comercial_email,
+            contato_comercial_telefone: formData.contato_comercial_telefone,
+            tempo_atuacao: formData.tempo_atuacao,
+            numero_funcionarios: formData.numero_funcionarios,
+            observacoes: formData.observacoes,
+            website: formData.website,
+          }
         });
       } catch (emailError) {
       }
@@ -390,6 +378,19 @@ Data: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`
 
           <CardContent className="p-8">
             <form onSubmit={handleSubmit} className="space-y-8">
+              {/* Honeypot anti-robo: escondido de quem ve a tela e de leitor de tela. */}
+              <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', width: 1, height: 1, overflow: 'hidden' }}>
+                <label htmlFor="website">Website</label>
+                <input
+                  id="website"
+                  name="website"
+                  type="text"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={formData.website}
+                  onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
+                />
+              </div>
               {/* Dados da Loja */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 mb-4">

@@ -20,11 +20,18 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //      Fora disso: 403. Nunca destinatario arbitrario.
 //   3. from_name livre so para staff; os demais saem como "POLO B2B".
 //   4. CORS so para os dominios do portal.
+//   5. Unica chamada aceita SEM login: o modelo fixo `lead_franqueado` (formulario
+//      publico do CadastroCompra). Destinatario vem da configuracao do servidor
+//      (LEAD_EMAIL_TO ou EQUIPE), assunto e remetente fixos, campos do lead
+//      escapados como texto e com tamanho maximo, honeypot `website` e limite de
+//      5 envios por hora por IP. Qualquer outra chamada sem login: 401.
 
 const ALLOWED_ORIGINS = [
   'https://www.portalpolowear.com.br',
   'https://portalpolowear.com.br',
   'https://polo-wear-b2-b.vercel.app',
+  // App antigo: sai da lista quando for redirecionado (tarefa T20).
+  'https://polo-wear.vercel.app',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   'http://localhost:4173',
@@ -80,6 +87,157 @@ async function destinatariosPermitidosFornecedor(admin: any, fornecedorId: strin
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// Modelo fixo `lead_franqueado` (aceito sem login).
+// ---------------------------------------------------------------------------
+
+const LEAD_TIPOS: Record<string, { assunto: string; titulo: string }> = {
+  franqueado: {
+    assunto: 'Nova Solicitação - Cadastro Franqueado POLO Wear',
+    titulo: 'Nova solicitação de cadastro de franqueado POLO Wear',
+  },
+  lojista: {
+    assunto: 'Novo Lead - Cadastro de Lojista POLO Wear',
+    titulo: 'Novo lead de lojista interessado em revender POLO Wear',
+  },
+};
+
+// [campo, rotulo, tamanho maximo]. Qualquer outro campo enviado e ignorado.
+const LEAD_SECOES: [string, [string, string, number][]][] = [
+  ['DADOS DA LOJA', [
+    ['nome_loja', 'Nome da Loja', 200],
+    ['cnpj', 'CNPJ', 30],
+    ['inscricao_estadual', 'Inscrição Estadual', 40],
+  ]],
+  ['RESPONSÁVEL', [
+    ['nome_responsavel', 'Nome', 200],
+    ['cpf_responsavel', 'CPF', 20],
+    ['email_responsavel', 'Email', 200],
+    ['telefone_responsavel', 'Telefone', 40],
+    ['whatsapp_responsavel', 'WhatsApp', 40],
+  ]],
+  ['ENDEREÇO', [
+    ['endereco', 'Endereço', 400],
+    ['cep', 'CEP', 20],
+    ['entrega', 'Entrega', 400],
+  ]],
+  ['CONTATO FINANCEIRO', [
+    ['contato_financeiro_nome', 'Nome', 200],
+    ['contato_financeiro_email', 'Email', 200],
+    ['contato_financeiro_telefone', 'Telefone', 40],
+  ]],
+  ['CONTATO COMERCIAL', [
+    ['contato_comercial_nome', 'Nome', 200],
+    ['contato_comercial_email', 'Email', 200],
+    ['contato_comercial_telefone', 'Telefone', 40],
+  ]],
+  ['INFORMAÇÕES COMERCIAIS', [
+    ['tempo_atuacao', 'Tempo de Atuação', 100],
+    ['numero_funcionarios', 'Funcionários', 50],
+    ['observacoes', 'Observações', 2000],
+  ]],
+];
+
+const LEAD_LIMITE_POR_IP = 5;
+const LEAD_JANELA_MS = 60 * 60 * 1000;
+// Em memoria, por instancia da funcao: barreira simples contra rajada, nao contador global.
+const leadEnviosPorIp = new Map<string, number[]>();
+
+function leadDentroDoLimite(ip: string): boolean {
+  const agora = Date.now();
+  const recentes = (leadEnviosPorIp.get(ip) ?? []).filter((t) => agora - t < LEAD_JANELA_MS);
+  if (recentes.length >= LEAD_LIMITE_POR_IP) {
+    leadEnviosPorIp.set(ip, recentes);
+    return false;
+  }
+  recentes.push(agora);
+  leadEnviosPorIp.set(ip, recentes);
+  if (leadEnviosPorIp.size > 5000) leadEnviosPorIp.clear();
+  return true;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+}
+
+function campoTexto(v: unknown, max: number): string {
+  if (v === null || v === undefined) return '';
+  return String(v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max);
+}
+
+function destinatariosLead(): string[] {
+  const env = (Deno.env.get('LEAD_EMAIL_TO') ?? '').split(',').map(norm).filter(Boolean);
+  return env.length > 0 ? env : EQUIPE;
+}
+
+function ipDe(req: Request): string {
+  return req.headers.get('cf-connecting-ip')
+    ?? req.headers.get('x-real-ip')
+    ?? (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim()
+    ?? 'desconhecido';
+}
+
+// deno-lint-ignore no-explicit-any
+async function enviarLead(req: Request, payload: any): Promise<Response> {
+  const lead = (payload?.lead && typeof payload.lead === 'object') ? payload.lead : {};
+  const tipo = LEAD_TIPOS[String(payload?.tipo ?? 'franqueado')] ? String(payload?.tipo ?? 'franqueado') : null;
+  if (!tipo) {
+    return json({ success: false, error: 'Modelo invalido' }, 400);
+  }
+
+  // Honeypot: campo escondido no formulario; gente nao preenche, robo sim.
+  // Responde como se tivesse enviado, para o robo nao aprender.
+  if (campoTexto(lead.website, 200)) {
+    console.warn('sendEmail lead: honeypot preenchido, descartado');
+    return json({ success: true, status: 'sent' }, 200);
+  }
+
+  if (!campoTexto(lead.nome_loja, 200) || !campoTexto(lead.nome_responsavel, 200) || !campoTexto(lead.email_responsavel, 200)) {
+    return json({ success: false, error: 'Campos obrigatorios do lead ausentes' }, 400);
+  }
+
+  if (!leadDentroDoLimite(ipDe(req))) {
+    console.warn('sendEmail lead: limite por IP atingido');
+    return json({ success: false, error: 'Muitas solicitacoes. Tente novamente mais tarde.' }, 429);
+  }
+
+  const { assunto, titulo } = LEAD_TIPOS[tipo];
+  const data = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const secoes = LEAD_SECOES.map(([nomeSecao, campos]) => {
+    const linhas = campos.map(([campo, rotulo, max]) => {
+      const valor = campoTexto(lead[campo], max) || 'Não informado';
+      return `${escapeHtml(rotulo)}: ${escapeHtml(valor).replace(/\n/g, '<br>')}`;
+    });
+    return `<p><strong>${escapeHtml(nomeSecao)}</strong><br>${linhas.join('<br>')}</p>`;
+  }).join('');
+  const html = `<div style="font-family: Arial, sans-serif;"><p>${escapeHtml(titulo)}:</p>${secoes}`
+    + `<p>Origem: Formulário Site<br>Data: ${escapeHtml(data)}</p></div>`;
+
+  const resendApiKey = Deno.env.get('RESEND_API_KEY');
+  if (!resendApiKey) {
+    console.error('RESEND_API_KEY não configurada');
+    return json({ success: false, error: 'Serviço de email não configurado' }, 500);
+  }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: `${FROM_NAME_PADRAO} <${FROM_EMAIL}>`,
+      to: destinatariosLead(),
+      subject: assunto,
+      html,
+    }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    console.error('Erro Resend (lead):', response.status, result);
+    return json({ success: false, error: 'Erro ao enviar email' }, response.status === 429 ? 429 : 502);
+  }
+  console.log('Lead enviado:', result.id, 'tipo', tipo);
+  return json({ success: true, message_id: result.id, status: 'sent', sent_at: new Date().toISOString() }, 200);
+}
+
 async function handler(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') {
     return new Response('ok');
@@ -89,6 +247,19 @@ async function handler(req: Request): Promise<Response> {
   }
 
   try {
+    // deno-lint-ignore no-explicit-any
+    let payload: any;
+    try {
+      payload = await req.json();
+    } catch {
+      return json({ success: false, error: 'JSON invalido' }, 400);
+    }
+
+    // Modelo fixo, com ou sem login: destinatario, assunto e remetente do servidor.
+    if (payload?.template === 'lead_franqueado') {
+      return await enviarLead(req, payload);
+    }
+
     const authHeader = req.headers.get('Authorization') ?? '';
     const token = authHeader.replace(/^Bearer\s+/i, '');
     if (!token) {
@@ -116,7 +287,7 @@ async function handler(req: Request): Promise<Response> {
       return json({ success: false, error: 'Usuario sem permissao para enviar e-mail' }, 403);
     }
 
-    const { to, subject, body, html, from_name } = await req.json();
+    const { to, subject, body, html, from_name } = payload ?? {};
 
     if (!to || !subject || (!body && !html)) {
       return json({ success: false, error: 'Campos obrigatórios: to, subject, body ou html' }, 400);
