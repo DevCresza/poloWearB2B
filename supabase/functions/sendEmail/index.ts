@@ -11,7 +11,7 @@ const corsHeaders = {
 //
 // Ficou em noreply@polomultimarca.com.br ate 02/09/2026, dominio que deixou de
 // ser verificado quando a operacao migrou para portalpolowear.com.br. O
-// notify-pedido acompanhou a migracao, este nao -- e como as 7 chamadas do app
+// notify-pedido acompanhou a migracao, este nao — e como as 7 chamadas do app
 // engolem a falha, parou de sair e-mail de credencial de acesso e de lead novo
 // sem ninguem perceber. Mesmo dominio do notify-pedido.
 const FROM_EMAIL = 'nao-responda@info.portalpolowear.com.br';
