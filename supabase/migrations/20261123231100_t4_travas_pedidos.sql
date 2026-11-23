@@ -102,9 +102,11 @@ end;
 $$;
 
 revoke execute on function public.pedidos_guard_insert() from anon, public;
+-- Funcoes de trigger nao precisam de EXECUTE para disparar; tira do /rpc.
+revoke execute on function public.pedidos_guard_insert(), public.lojas_guard_colunas()
+  from authenticated;
 
-drop trigger if exists trg_pedidos_guard_insert on public.pedidos;
-create trigger trg_pedidos_guard_insert
+create or replace trigger trg_pedidos_guard_insert
   before insert on public.pedidos
   for each row execute function public.pedidos_guard_insert();
 

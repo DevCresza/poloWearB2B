@@ -181,8 +181,7 @@ $$;
 
 revoke execute on function public.lojas_guard_colunas() from anon, public;
 
-drop trigger if exists trg_lojas_guard_colunas on public.lojas;
-create trigger trg_lojas_guard_colunas
+create or replace trigger trg_lojas_guard_colunas
   before insert or update on public.lojas
   for each row execute function public.lojas_guard_colunas();
 
