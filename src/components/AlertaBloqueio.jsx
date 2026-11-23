@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { User } from '@/api/entities';
-import { Loja } from '@/api/entities';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -14,50 +13,21 @@ export default function AlertaBloqueio() {
   const [showModal, setShowModal] = useState(false);
   const [alertType, setAlertType] = useState(null); // 'global' | 'loja'
   const navigate = useNavigate();
-  const { lojaSelecionada, isLojaBloqueada, loadLojas } = useLojaContext();
+  const { lojaSelecionada, isLojaBloqueada } = useLojaContext();
 
   useEffect(() => {
     checkUser();
   }, []);
 
-  // Re-check when loja changes
-  useEffect(() => {
-    if (user && lojaSelecionada) {
-      checkLojaBloqueio();
-    }
-  }, [lojaSelecionada?.id]);
-
   const checkUser = async () => {
     try {
       const currentUser = await User.me();
 
-      // Bloqueio automático por atraso DESLIGADO: passou a ser decisão manual
-      // do admin (na Carteira, com "Registrar como pago" para conciliar boleto).
-      // O boleto não é conciliado sozinho no sistema, então o vencimento por si
-      // só bloqueava indevidamente quem já tinha pago. Aqui apenas LIMPAMOS
-      // bloqueios automáticos antigos — bloqueio MANUAL do admin (motivo
-      // diferente de "Bloqueio automático") permanece.
-      if (
-        currentUser.tipo_negocio === 'multimarca' &&
-        currentUser.bloqueado &&
-        currentUser.motivo_bloqueio?.startsWith('Bloqueio automático')
-      ) {
-        try {
-          // total_vencido nao entra aqui: e derivado da carteira pelo banco
-          // (trg_carteira_sync_totais). Zerar na mao mascarava atraso real.
-          await User.update(currentUser.id, {
-            bloqueado: false,
-            motivo_bloqueio: null,
-            data_bloqueio: null
-          });
-          currentUser.bloqueado = false;
-          currentUser.motivo_bloqueio = null;
-          sessionStorage.removeItem('bloqueio_visto');
-        } catch (e) {
-          console.warn('Erro ao limpar bloqueio automático:', e);
-        }
-      }
-
+      // Bloqueio e desbloqueio sao do admin (e do banco): o cliente nao grava
+      // mais nada aqui. A antiga limpeza de "Bloqueio automático" saiu porque
+      // o bloqueio automatico foi desligado e nao ha mais nenhum no banco; e o
+      // banco agora recusa o cliente mexendo no proprio bloqueio
+      // (users_guard_privilegios / lojas_guard_colunas).
       setUser(currentUser);
 
       // Mostrar modal se bloqueado globalmente e primeira vez que vê
@@ -67,30 +37,6 @@ export default function AlertaBloqueio() {
         sessionStorage.setItem('bloqueio_visto', 'true');
       }
     } catch (_error) {
-    }
-  };
-
-  const checkLojaBloqueio = async () => {
-    if (!lojaSelecionada) return;
-    if (user?.tipo_negocio !== 'multimarca') return;
-
-    try {
-      // Bloqueio automático por atraso DESLIGADO também no nível da loja
-      // (igual ao checkUser): só limpamos bloqueios automáticos antigos.
-      // Bloqueio MANUAL do admin permanece. Ver AlertaBloqueio.checkUser.
-      if (
-        lojaSelecionada.bloqueada &&
-        lojaSelecionada.motivo_bloqueio?.startsWith('Bloqueio automático')
-      ) {
-        await Loja.update(lojaSelecionada.id, {
-          bloqueada: false,
-          motivo_bloqueio: null,
-          data_bloqueio: null
-        });
-        loadLojas(); // Recarregar lojas no contexto
-      }
-    } catch (e) {
-      console.warn('Erro ao limpar bloqueio automático da loja:', e);
     }
   };
 

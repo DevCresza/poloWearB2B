@@ -211,24 +211,6 @@ export default function PedidoItensEditModal({ pedido, onClose, onUpdate, curren
         }
       });
 
-      // 3) Aplica ajuste de estoque (só se o pedido já teve baixa anterior)
-      if (pedido.estoque_baixado) {
-        if (itensParaDevolver.length > 0) {
-          try {
-            await devolverEstoque(itensParaDevolver);
-          } catch (e) {
-            console.error('Erro ao devolver estoque:', e);
-          }
-        }
-        if (itensParaBaixar.length > 0) {
-          try {
-            await darBaixaEstoque(itensParaBaixar);
-          } catch (e) {
-            console.error('Erro ao dar baixa adicional no estoque:', e);
-          }
-        }
-      }
-
       // 4) Audit log
       const agora = new Date();
       const dataStr = agora.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
@@ -266,6 +248,26 @@ Valor: ${formatCurrency(valorAtual)} → ${formatCurrency(novoValorTotal)}`;
         observacoes_internas: novasObservacoesInternas,
         itens_revisados_em: agora.toISOString()
       });
+
+      // 3) Ajuste de estoque, só depois que o pedido foi gravado: se o banco
+      //    recusar o update, o estoque não pode ter sido mexido (antes o ajuste
+      //    vinha primeiro e ficava órfão). Só se o pedido já teve baixa anterior.
+      if (pedido.estoque_baixado) {
+        if (itensParaDevolver.length > 0) {
+          try {
+            await devolverEstoque(itensParaDevolver);
+          } catch (e) {
+            console.error('Erro ao devolver estoque:', e);
+          }
+        }
+        if (itensParaBaixar.length > 0) {
+          try {
+            await darBaixaEstoque(itensParaBaixar);
+          } catch (e) {
+            console.error('Erro ao dar baixa adicional no estoque:', e);
+          }
+        }
+      }
 
       // 6) Carteira: redistribui valor pelos títulos pendentes
       try {

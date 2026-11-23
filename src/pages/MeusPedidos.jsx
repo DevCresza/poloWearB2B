@@ -24,8 +24,7 @@ import {
 import { formatCurrency, exportToCSV, exportToPDF, formatDate, toBrasiliaDateString, getMesFaturamentoItem, getMesesFaturamentoPedido, formatMesesEntrega, formatMesAno } from '@/utils/exportUtils';
 import { Produto } from '@/api/entities';
 import PedidoDetailsModal from '@/components/pedidos/PedidoDetailsModal';
-import PedidoItensEditModal from '@/components/pedidos/PedidoItensEditModal';
-import { Edit, Ban } from 'lucide-react';
+import { Ban } from 'lucide-react';
 import MultiSelectFilter from '@/components/MultiSelectFilter';
 import { useLojaContext } from '@/contexts/LojaContext';
 import { Loja } from '@/api/entities';
@@ -47,7 +46,6 @@ export default function MeusPedidos() {
   const [loading, setLoading] = useState(true);
   const [selectedPedido, setSelectedPedido] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [showItensEditModal, setShowItensEditModal] = useState(false);
   const [showFinanceiroModal, setShowFinanceiroModal] = useState(false);
   const [showComprovanteModal, setShowComprovanteModal] = useState(false);
   const [selectedTitulo, setSelectedTitulo] = useState(null);
@@ -1095,20 +1093,15 @@ export default function MeusPedidos() {
                         Ver Detalhes
                       </Button>
 
-                      {/* Cliente pode editar/cancelar enquanto fornecedor nao recebeu */}
+                      {/* Cliente pode cancelar enquanto fornecedor nao recebeu. Alterar
+                          itens e com o fornecedor ou a equipe: o banco recusa o
+                          cliente mexendo em itens e valores (pedidos_guard_colunas).
+                          A reducao segura pelo proprio cliente fica para a T9. */}
                       {pedido.status === 'novo_pedido' && (
                         <>
-                          <Button
-                            variant="outline"
-                            onClick={async () => {
-                              setSelectedPedido(await carregarPedidoCompleto(pedido));
-                              setShowItensEditModal(true);
-                            }}
-                            className="w-full rounded-xl border-blue-300 text-blue-700 hover:bg-blue-50"
-                          >
-                            <Edit className="w-4 h-4 mr-2" />
-                            Editar Pedido
-                          </Button>
+                          <p className="text-xs text-gray-500 text-center">
+                            Para alterar este pedido, fale com o fornecedor ou com a equipe Polo Wear.
+                          </p>
                           {/* Pedido emitido em lote pela administracao: cliente nao cancela. */}
                           {!pedido.emitido_por_admin_user_id && (
                             <Button
@@ -1184,24 +1177,6 @@ export default function MeusPedidos() {
           produtoEntregaMap={null}
           userMap={user ? new Map([[user.id, user.empresa || user.full_name || user.email]]) : undefined}
           fornecedorMap={new Map(fornecedores.map(f => [f.id, f.razao_social || f.nome_fantasia || f.nome_marca]))}
-        />
-      )}
-
-      {/* Modal de Editar Itens (cliente, enquanto status = novo_pedido) */}
-      {showItensEditModal && selectedPedido && (
-        <PedidoItensEditModal
-          pedido={selectedPedido}
-          currentUser={user}
-          fornecedor={fornecedores.find(f => f.id === selectedPedido.fornecedor_id)}
-          onClose={() => {
-            setShowItensEditModal(false);
-            setSelectedPedido(null);
-          }}
-          onUpdate={() => {
-            loadData();
-            setShowItensEditModal(false);
-            setSelectedPedido(null);
-          }}
         />
       )}
 
