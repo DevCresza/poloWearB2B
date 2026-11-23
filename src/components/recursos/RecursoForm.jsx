@@ -11,6 +11,7 @@ import { UploadFile } from '@/api/integrations';
 import { Save, X, Upload, Plus, Trash2, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import ImageEditor from '@/components/ImageEditor';
+import { arquivoDoBlob } from '@/utils/imagemUpload';
 
 export default function RecursoForm({ recurso, onClose, onSuccess }) {
   const [formData, setFormData] = useState(recurso || {
@@ -370,7 +371,7 @@ export default function RecursoForm({ recurso, onClose, onSuccess }) {
               onSave={async (blob) => {
                 setUploadingThumb(true);
                 try {
-                  const file = new File([blob], `capa-${Date.now()}.jpg`, { type: 'image/jpeg' });
+                  const file = arquivoDoBlob(blob, 'capa');
                   const result = await UploadFile({ file });
                   const url = result.url || result.file_url;
                   setFormData(prev => ({ ...prev, thumbnail_url: url }));

@@ -1,4 +1,5 @@
 import { User } from 'lucide-react';
+import { thumb, usarOriginalSeFalhar } from '@/utils/thumb';
 
 /**
  * Componente Avatar reutilizável
@@ -31,6 +32,8 @@ export default function Avatar({ src, name, size = 'md', className = '', onClick
   };
 
   const initials = getInitials(name);
+  // Lado em px de cada tamanho, para pedir a miniatura certa ao Storage.
+  const pixels = { sm: 32, md: 40, lg: 64, xl: 96 }[size] || 40;
   const sizeClasses = sizes[size] || sizes.md;
 
   return (
@@ -41,13 +44,16 @@ export default function Avatar({ src, name, size = 'md', className = '', onClick
     >
       {src ? (
         <img
-          src={src}
+          src={thumb(src, pixels)}
           alt={name || 'Avatar'}
+          width={pixels}
+          height={pixels}
+          decoding="async"
           className="w-full h-full object-cover"
-          onError={(e) => {
+          onError={usarOriginalSeFalhar(src, (e) => {
             // Se a imagem falhar ao carregar, esconder e mostrar iniciais
-            e.target.style.display = 'none';
-          }}
+            e.currentTarget.style.display = 'none';
+          })}
         />
       ) : (
         <span>{initials}</span>

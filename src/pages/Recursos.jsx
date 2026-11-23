@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import RecursoDetailsModal from '../components/recursos/RecursoDetailsModal';
 import RecursoForm from '../components/recursos/RecursoForm';
+import { thumb, usarOriginalSeFalhar } from '@/utils/thumb';
 
 export default function Recursos() {
   const [recursos, setRecursos] = useState([]);
@@ -398,8 +399,13 @@ function ContentRow({ title, recursos, onSelect, getTipoIcon }) {
               <div className="relative aspect-video bg-gray-800">
                 {recurso.thumbnail_url ? (
                   <img
-                    src={recurso.thumbnail_url}
+                    src={thumb(recurso.thumbnail_url, 400)}
                     alt={recurso.titulo}
+                    width={400}
+                    height={225}
+                    loading="lazy"
+                    decoding="async"
+                    onError={usarOriginalSeFalhar(recurso.thumbnail_url)}
                     className="w-full h-full object-cover"
                   />
                 ) : (

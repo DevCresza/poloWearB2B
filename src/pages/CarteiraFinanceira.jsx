@@ -25,6 +25,7 @@ import { exportToCSV, exportToPDF, formatCurrency, formatDate } from '@/utils/ex
 import MultiSelectFilter from '@/components/MultiSelectFilter';
 import { useLojaContext } from '@/contexts/LojaContext';
 import { Store } from 'lucide-react';
+import { thumb, usarOriginalSeFalhar } from '@/utils/thumb';
 
 export default function CarteiraFinanceira() {
   const { lojaSelecionada, lojas, loading: lojasLoading } = useLojaContext();
@@ -1509,7 +1510,7 @@ export default function CarteiraFinanceira() {
                       <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg text-sm">
                         <div className="flex items-center gap-2">
                           {item.imagem && (
-                            <img src={item.imagem} alt={item.nome} className="w-10 h-10 object-cover rounded" />
+                            <img src={thumb(item.imagem, 40)} alt={item.nome} width={40} height={40} loading="lazy" decoding="async" onError={usarOriginalSeFalhar(item.imagem)} className="w-10 h-10 object-cover rounded" />
                           )}
                           <div>
                             <p className="font-medium">{item.nome || item.produto_nome}</p>

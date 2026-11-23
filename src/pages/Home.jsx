@@ -12,9 +12,17 @@ export default function Home() {
       <div className="max-w-2xl w-full">
         {/* Logo */}
         <div className="text-center mb-12">
-          <img 
-            src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68f7cbd8537575fa5229f1e6/e064af0f6_image.png"
+          {/* Imagem do LCP: servida do proprio site (antes vinha do Supabase
+              antigo do Base44, outro dominio), em WebP e com prioridade alta. */}
+          <img
+            src="/logo-polowear.webp"
             alt="Polo Wear"
+            width={192}
+            height={192}
+            // React 18 nao conhece fetchPriority (avisa no console); o atributo
+            // HTML minusculo passa direto. Via spread para o lint aceitar.
+            {...{ fetchpriority: 'high' }}
+            decoding="async"
             className="w-48 h-48 mx-auto mb-8"
           />
           <div className="h-1 w-32 bg-gradient-to-r from-blue-500 to-red-500 mx-auto mb-6"></div>

@@ -17,6 +17,7 @@ import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { can, PERM } from '@/utils/permissoes';
 import { isAdmin as ehAdmin } from '@/utils/roles';
+import { thumb, usarOriginalSeFalhar } from '@/utils/thumb';
 
 export default function GestaoProdutos() {
   const [user, setUser] = useState(null);
@@ -500,7 +501,7 @@ export default function GestaoProdutos() {
                       >
                         <div className="relative aspect-[4/5] bg-white overflow-hidden">
                           {foto ? (
-                            <img src={foto} alt={produto.nome} className="w-full h-full object-contain group-hover:scale-105 transition-transform" />
+                            <img src={thumb(foto, 240)} alt={produto.nome} width={240} height={300} loading="lazy" decoding="async" onError={usarOriginalSeFalhar(foto)} className="w-full h-full object-contain group-hover:scale-105 transition-transform" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
                               <Package className="w-8 h-8 text-gray-300" />
@@ -641,12 +642,16 @@ export default function GestaoProdutos() {
                               )}
                               {getPrimeiraFoto(produto) ? (
                                 <img
-                                  src={getPrimeiraFoto(produto)}
+                                  src={thumb(getPrimeiraFoto(produto), 48)}
                                   className="w-12 h-12 object-cover rounded-md"
                                   alt={produto.nome}
-                                  onError={(e) => {
-                                    e.target.style.display = 'none';
-                                  }}
+                                  width={48}
+                                  height={48}
+                                  loading="lazy"
+                                  decoding="async"
+                                  onError={usarOriginalSeFalhar(getPrimeiraFoto(produto), (e) => {
+                                    e.currentTarget.style.display = 'none';
+                                  })}
                                 />
                               ) : (
                                 <div className="w-12 h-12 bg-gray-200 rounded-md flex items-center justify-center">

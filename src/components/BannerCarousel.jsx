@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import ImageEditor from '@/components/ImageEditor';
+import { arquivoDoBlob } from '@/utils/imagemUpload';
 
 export default function BannerCarousel({ isAdmin = false }) {
   const [banners, setBanners] = useState([]);
@@ -60,7 +61,7 @@ export default function BannerCarousel({ isAdmin = false }) {
   const handleSaveCrop = async (blob) => {
     setUploading(true);
     try {
-      const file = new File([blob], `banner-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      const file = arquivoDoBlob(blob, 'banner');
       const result = await UploadFile({ file });
       const url = result.url || result.file_url;
       if (editingBanner) {
@@ -228,7 +229,7 @@ function ManagerDialog({ open, onClose, banners, onUpload, onEdit, onDelete, onS
                 return (
                   <div key={b.id} className="border rounded-lg p-3 space-y-2">
                     <div className="flex gap-3 items-start">
-                      <img src={b.imagem_url} alt={b.titulo} className="w-32 aspect-[16/6] object-cover rounded shrink-0" />
+                      <img src={b.imagem_url} alt={b.titulo} width={128} height={48} loading="lazy" decoding="async" className="w-32 aspect-[16/6] object-cover rounded shrink-0" />
                       <div className="flex-1 space-y-2">
                         <Input
                           placeholder="Título (opcional)"

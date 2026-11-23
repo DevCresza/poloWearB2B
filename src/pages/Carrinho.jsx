@@ -30,6 +30,7 @@ import { getPrecoPeca, getPrecoGrade } from '@/utils/precoCliente';
 import { Store } from 'lucide-react';
 import { Loja } from '@/api/entities';
 import ReplicarPedidoModal from '@/components/pedidos/ReplicarPedidoModal';
+import { thumb, usarOriginalSeFalhar } from '@/utils/thumb';
 
 export default function Carrinho() {
   const navigate = useNavigate();
@@ -1080,12 +1081,16 @@ export default function Carrinho() {
                               <div className="flex flex-col sm:flex-row gap-4">
                                 {item.imagem_capa_url ? (
                                   <img
-                                    src={item.imagem_capa_url}
+                                    src={thumb(item.imagem_capa_url, 400)}
                                     alt={item.nome}
+                                    width={400}
+                                    height={192}
+                                    loading="lazy"
+                                    decoding="async"
                                     className="w-full sm:w-24 h-48 sm:h-24 object-cover rounded-md"
-                                    onError={(e) => {
-                                      e.target.style.display = 'none';
-                                    }}
+                                    onError={usarOriginalSeFalhar(item.imagem_capa_url, (e) => {
+                                      e.currentTarget.style.display = 'none';
+                                    })}
                                   />
                                 ) : (
                                   <div className="w-full sm:w-24 h-48 sm:h-24 bg-gray-200 rounded-md flex items-center justify-center">
@@ -1161,7 +1166,7 @@ export default function Carrinho() {
                                           return (
                                             <div key={dIdx} className="flex items-center gap-3 p-3">
                                               {fotoUrl ? (
-                                                <img src={fotoUrl} alt={detalhe.nome} className="w-12 h-12 object-cover rounded flex-shrink-0" onError={e => e.target.style.display = 'none'} />
+                                                <img src={thumb(fotoUrl, 48)} alt={detalhe.nome} width={48} height={48} loading="lazy" decoding="async" className="w-12 h-12 object-cover rounded flex-shrink-0" onError={usarOriginalSeFalhar(fotoUrl, e => { e.currentTarget.style.display = 'none'; })} />
                                               ) : (
                                                 <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center flex-shrink-0">
                                                   <Package className="w-5 h-5 text-gray-400" />
@@ -1393,12 +1398,16 @@ export default function Carrinho() {
                             )}
                             {getPrimeiraFoto(item) ? (
                               <img
-                                src={getPrimeiraFoto(item)}
+                                src={thumb(getPrimeiraFoto(item), 400)}
                                 alt={item.nome}
+                                width={400}
+                                height={192}
+                                loading="lazy"
+                                decoding="async"
                                 className="w-full sm:w-24 h-48 sm:h-24 object-cover rounded-md"
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                }}
+                                onError={usarOriginalSeFalhar(getPrimeiraFoto(item), (e) => {
+                                  e.currentTarget.style.display = 'none';
+                                })}
                               />
                             ) : (
                               <div className="w-full sm:w-24 h-48 sm:h-24 bg-gray-200 rounded-md flex items-center justify-center">

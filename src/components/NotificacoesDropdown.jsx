@@ -1,5 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
-import { Notificacao, Carteira, Pedido, Produto } from '@/api/entities';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Notificacao } from '@/api/entities';
+import { supabase } from '@/lib/supabase';
+import { linkInternoSeguro } from '@/utils/linkSeguro';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -18,6 +21,32 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+
+// O sino era a consulta mais cara do banco (65% do tempo): pedidos.* inteiro a
+// cada 60 s, montado duas vezes no Layout. Agora: uma instancia so, colunas
+// enxutas de pedidos_resumo (que respeita a RLS), 5 min de intervalo e pausa com
+// a aba escondida.
+const INTERVALO_MS = 5 * 60 * 1000;
+
+// Colunas que o sino usa. Nada de itens/variantes: sao essas colunas jsonb que
+// faziam cada chamada ler 128 MB.
+const COLS_PEDIDO = 'id,status,created_date,updated_at,nf_url,nf_data_upload,boleto_url,boleto_data_upload,cliente_confirmou_nf,cliente_confirmou_boleto,cliente_confirmou_recebimento';
+const COLS_TITULO = 'id,valor,data_vencimento,status,updated_at,comprovante_analisado,comprovante_aprovado,motivo_recusa_comprovante,comprovante_data_upload,pedido_id';
+
+const STATUS_NOTIFICAVEIS = {
+  em_producao: { tipo: 'info', titulo: 'Pedido em Produção', icone: 'pedido', mensagem: (id) => `Seu pedido #${id} está em produção` },
+  faturado: { tipo: 'info', titulo: 'Pedido Faturado', icone: 'dinheiro', mensagem: (id) => `Seu pedido #${id} foi faturado` },
+  em_transporte: { tipo: 'aviso', titulo: 'Pedido em Transporte', icone: 'pedido', mensagem: (id) => `Seu pedido #${id} está a caminho!` },
+  pendente_pagamento: { tipo: 'aviso', titulo: 'Pedido Entregue', icone: 'dinheiro', mensagem: (id) => `Seu pedido #${id} foi entregue! Aguardando confirmação de pagamento.` },
+  finalizado: { tipo: 'sucesso', titulo: 'Pedido Finalizado', icone: 'sucesso', mensagem: (id) => `Seu pedido #${id} foi finalizado!` },
+  cancelado: { tipo: 'alerta', titulo: 'Pedido Cancelado', icone: 'alerta', mensagem: (id) => `Seu pedido #${id} foi cancelado` }
+};
+
+// Lanca o erro do supabase-js (que vem no retorno, nao como excecao).
+const dados = ({ data, error }) => {
+  if (error) throw error;
+  return data || [];
+};
 
 // Supabase retorna timestamps sem timezone (ex: "2026-02-12 10:00:00")
 // JS interpreta como local time, mas na verdade é UTC. Precisamos normalizar.
@@ -77,208 +106,151 @@ const dismissMultipleNotifIds = (userId, notifIds) => {
   }
 };
 
-export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio, userFornecedorId }) {
-  const [notificacoes, setNotificacoes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef(null);
+// Notificacoes calculadas a partir dos dados (nao ficam gravadas no banco).
+async function gerarNotificacoesAutomaticas({ userId, userRole, userTipoNegocio, userFornecedorId }) {
+  const notificacoesAuto = [];
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const seteDiasAtras = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const idCurto = (id) => id.slice(-8).toUpperCase();
 
-  // Fechar dropdown ao clicar fora
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    };
+  const isCliente = userTipoNegocio === 'multimarca' || userTipoNegocio === 'franqueado';
+  const isAdmin = userRole === 'admin';
+  const isFornecedor = userTipoNegocio === 'fornecedor';
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  // Cada bloco e independente: se um falhar, os outros ainda aparecem.
+  const tarefas = [];
 
-  // Carregar notificações
-  useEffect(() => {
-    if (userId) {
-      loadNotificacoes();
-      // Atualizar a cada 60 segundos
-      const interval = setInterval(loadNotificacoes, 60000);
-      return () => clearInterval(interval);
-    }
-  }, [userId]);
+  if (isCliente) {
+    // Boletos vencidos ou vencendo em ate 3 dias
+    tarefas.push(
+      supabase.from('carteira').select(COLS_TITULO)
+        .eq('cliente_user_id', userId).eq('status', 'pendente')
+        .then(dados)
+        .then((titulos) => {
+          titulos.forEach(titulo => {
+            const vencimento = new Date(titulo.data_vencimento + 'T00:00:00');
+            const diffDias = Math.ceil((vencimento - hoje) / (1000 * 60 * 60 * 24));
 
-  const loadNotificacoes = async () => {
-    try {
-      setLoading(true);
-
-      // Buscar notificações do usuário
-      let notificacoesUsuario = [];
-      try {
-        notificacoesUsuario = await Notificacao.filter({ usuario_id: userId }, '-created_at', 50);
-      } catch (e) {
-        // Se a tabela não existir, continua com array vazio
-        console.log('Tabela notificacoes ainda não existe ou está vazia');
-      }
-
-      // Gerar notificações automáticas baseadas em eventos do sistema
-      const notificacoesAutomaticas = await gerarNotificacoesAutomaticas();
-
-      // Filtrar auto-geradas que já foram dispensadas (persistido no localStorage)
-      const dismissed = getDismissedIds(userId);
-      const autoFiltradas = notificacoesAutomaticas.filter(n => !dismissed[n.id]);
-
-      // Combinar e ordenar por data
-      const todasNotificacoes = [...notificacoesUsuario, ...autoFiltradas]
-        .sort((a, b) => parseAsUTC(b.created_at || b.data) - parseAsUTC(a.created_at || a.data));
-
-      setNotificacoes(todasNotificacoes);
-    } catch (error) {
-      console.error('Erro ao carregar notificações:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Gerar notificações automáticas baseadas em dados do sistema
-  const gerarNotificacoesAutomaticas = async () => {
-    const notificacoesAuto = [];
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-
-    try {
-      // Para clientes (multimarca e franqueado): verificar boletos e pedidos
-      const isCliente = userTipoNegocio === 'multimarca' || userTipoNegocio === 'franqueado';
-      if (isCliente) {
-        // Verificar boletos vencendo
-        const titulos = await Carteira.filter({ cliente_user_id: userId, status: 'pendente' });
-
-        titulos.forEach(titulo => {
-          const vencimento = new Date(titulo.data_vencimento + 'T00:00:00');
-          const diffDias = Math.ceil((vencimento - hoje) / (1000 * 60 * 60 * 24));
-
-          if (diffDias < 0) {
-            notificacoesAuto.push({
-              id: `vencido-${titulo.id}`,
-              tipo: 'alerta',
-              titulo: 'Boleto Vencido',
-              mensagem: `Você tem um boleto vencido há ${Math.abs(diffDias)} dia(s) no valor de R$ ${titulo.valor?.toFixed(2)}`,
-              icone: 'alerta',
-              lida: false,
-              data: titulo.data_vencimento,
-              link: '/CarteiraFinanceira',
-              autogerada: true
-            });
-          } else if (diffDias <= 3 && diffDias >= 0) {
-            notificacoesAuto.push({
-              id: `vencendo-${titulo.id}`,
-              tipo: 'aviso',
-              titulo: diffDias === 0 ? 'Boleto Vence Hoje!' : `Boleto Vence em ${diffDias} dia(s)`,
-              mensagem: `Boleto no valor de R$ ${titulo.valor?.toFixed(2)} vence ${diffDias === 0 ? 'hoje' : `em ${diffDias} dia(s)`}`,
-              icone: 'dinheiro',
-              lida: false,
-              data: new Date().toISOString(),
-              link: '/CarteiraFinanceira',
-              autogerada: true
-            });
-          }
-        });
-
-        // Verificar pedidos do cliente com atualizações recentes (todos os status relevantes)
-        const seteDiasAtras = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-        const statusNotificaveis = [
-          { status: 'em_producao', tipo: 'info', titulo: 'Pedido em Produção', icone: 'pedido', mensagem: (id) => `Seu pedido #${id} está em produção` },
-          { status: 'faturado', tipo: 'info', titulo: 'Pedido Faturado', icone: 'dinheiro', mensagem: (id) => `Seu pedido #${id} foi faturado` },
-          { status: 'em_transporte', tipo: 'aviso', titulo: 'Pedido em Transporte', icone: 'pedido', mensagem: (id) => `Seu pedido #${id} está a caminho!` },
-          { status: 'pendente_pagamento', tipo: 'aviso', titulo: 'Pedido Entregue', icone: 'dinheiro', mensagem: (id) => `Seu pedido #${id} foi entregue! Aguardando confirmação de pagamento.` },
-          { status: 'finalizado', tipo: 'sucesso', titulo: 'Pedido Finalizado', icone: 'sucesso', mensagem: (id) => `Seu pedido #${id} foi finalizado!` },
-          { status: 'cancelado', tipo: 'alerta', titulo: 'Pedido Cancelado', icone: 'alerta', mensagem: (id) => `Seu pedido #${id} foi cancelado` }
-        ];
-
-        for (const statusInfo of statusNotificaveis) {
-          try {
-            const pedidos = await Pedido.filter({ comprador_user_id: userId, status: statusInfo.status }, '-updated_at', 5);
-            pedidos.forEach(pedido => {
-              const dataAtualizacao = new Date(pedido.updated_at || pedido.created_date);
-              if (dataAtualizacao >= seteDiasAtras) {
-                notificacoesAuto.push({
-                  id: `pedido-${statusInfo.status}-${pedido.id}`,
-                  tipo: statusInfo.tipo,
-                  titulo: statusInfo.titulo,
-                  mensagem: statusInfo.mensagem(pedido.id.slice(-8).toUpperCase()),
-                  icone: statusInfo.icone,
-                  lida: false,
-                  data: pedido.updated_at || pedido.created_date,
-                  link: '/MeusPedidos',
-                  autogerada: true
-                });
-              }
-            });
-          } catch (e) {
-            // Ignora erro de pedidos específicos
-          }
-        }
-
-        // Notificação de NF e Boleto disponíveis/atualizados
-        // ID inclui data de upload para que re-uploads gerem novas notificações
-        try {
-          const pedidosCliente = await Pedido.filter({ comprador_user_id: userId }, '-updated_at', 20);
-          const seteDiasAtrasDoc = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-          pedidosCliente.forEach(pedido => {
-            const idPedido = pedido.id.slice(-8).toUpperCase();
-
-            // NF disponível ou atualizada
-            if (pedido.nf_url && pedido.nf_data_upload) {
-              const nfUploadDate = new Date(pedido.nf_data_upload);
-              if (nfUploadDate >= seteDiasAtrasDoc) {
-                const uploadKey = pedido.nf_data_upload.slice(0, 16); // YYYY-MM-DDTHH:MM
-                notificacoesAuto.push({
-                  id: `nf-disponivel-${pedido.id}-${uploadKey}`,
-                  tipo: 'aviso',
-                  titulo: pedido.cliente_confirmou_nf ? 'Nota Fiscal Atualizada' : 'Nota Fiscal Disponível',
-                  mensagem: pedido.cliente_confirmou_nf
-                    ? `A NF do pedido #${idPedido} foi atualizada pelo fornecedor.`
-                    : `A NF do pedido #${idPedido} foi emitida. Confirme o recebimento.`,
-                  icone: 'dinheiro',
-                  lida: false,
-                  data: pedido.nf_data_upload,
-                  link: '/MeusPedidos',
-                  autogerada: true
-                });
-              }
-            }
-
-            // Boleto disponível ou atualizado
-            if (pedido.boleto_url && pedido.boleto_data_upload) {
-              const boletoUploadDate = new Date(pedido.boleto_data_upload);
-              if (boletoUploadDate >= seteDiasAtrasDoc) {
-                const uploadKey = pedido.boleto_data_upload.slice(0, 16);
-                notificacoesAuto.push({
-                  id: `boleto-disponivel-${pedido.id}-${uploadKey}`,
-                  tipo: 'aviso',
-                  titulo: pedido.cliente_confirmou_boleto ? 'Boleto Atualizado' : 'Boleto Disponível',
-                  mensagem: pedido.cliente_confirmou_boleto
-                    ? `O boleto do pedido #${idPedido} foi atualizado pelo fornecedor.`
-                    : `O boleto do pedido #${idPedido} foi emitido. Confirme o recebimento.`,
-                  icone: 'dinheiro',
-                  lida: false,
-                  data: pedido.boleto_data_upload,
-                  link: '/MeusPedidos',
-                  autogerada: true
-                });
-              }
+            if (diffDias < 0) {
+              notificacoesAuto.push({
+                id: `vencido-${titulo.id}`,
+                tipo: 'alerta',
+                titulo: 'Boleto Vencido',
+                mensagem: `Você tem um boleto vencido há ${Math.abs(diffDias)} dia(s) no valor de R$ ${titulo.valor?.toFixed(2)}`,
+                icone: 'alerta',
+                lida: false,
+                data: titulo.data_vencimento,
+                link: '/CarteiraFinanceira',
+                autogerada: true
+              });
+            } else if (diffDias <= 3) {
+              notificacoesAuto.push({
+                id: `vencendo-${titulo.id}`,
+                tipo: 'aviso',
+                titulo: diffDias === 0 ? 'Boleto Vence Hoje!' : `Boleto Vence em ${diffDias} dia(s)`,
+                mensagem: `Boleto no valor de R$ ${titulo.valor?.toFixed(2)} vence ${diffDias === 0 ? 'hoje' : `em ${diffDias} dia(s)`}`,
+                icone: 'dinheiro',
+                lida: false,
+                data: new Date().toISOString(),
+                link: '/CarteiraFinanceira',
+                autogerada: true
+              });
             }
           });
-        } catch (e) {
-          // Ignora erro
-        }
+        })
+    );
 
-        // Notificação de comprovante aprovado ou recusado
-        try {
-          const titulosCliente = await Carteira.filter({ cliente_user_id: userId }, '-created_at', 20);
+    // Mudancas de status dos ultimos 7 dias: UMA consulta com .in('status'),
+    // no lugar das 6 (uma por status) de antes. Mantem ate 5 por status.
+    tarefas.push(
+      supabase.from('pedidos_resumo').select(COLS_PEDIDO)
+        .eq('comprador_user_id', userId)
+        .in('status', Object.keys(STATUS_NOTIFICAVEIS))
+        .gte('updated_at', seteDiasAtras.toISOString())
+        .order('updated_at', { ascending: false })
+        .limit(30)
+        .then(dados)
+        .then((pedidos) => {
+          const porStatus = {};
+          pedidos.forEach(pedido => {
+            porStatus[pedido.status] = (porStatus[pedido.status] || 0) + 1;
+            if (porStatus[pedido.status] > 5) return;
+            const info = STATUS_NOTIFICAVEIS[pedido.status];
+            notificacoesAuto.push({
+              id: `pedido-${pedido.status}-${pedido.id}`,
+              tipo: info.tipo,
+              titulo: info.titulo,
+              mensagem: info.mensagem(idCurto(pedido.id)),
+              icone: info.icone,
+              lida: false,
+              data: pedido.updated_at || pedido.created_date,
+              link: '/MeusPedidos',
+              autogerada: true
+            });
+          });
+        })
+    );
 
+    // NF e boleto disponiveis/atualizados.
+    // ID inclui data de upload para que re-uploads gerem novas notificações
+    tarefas.push(
+      supabase.from('pedidos_resumo').select(COLS_PEDIDO)
+        .eq('comprador_user_id', userId)
+        .order('updated_at', { ascending: false })
+        .limit(20)
+        .then(dados)
+        .then((pedidosCliente) => {
+          pedidosCliente.forEach(pedido => {
+            const idPedido = idCurto(pedido.id);
+
+            if (pedido.nf_url && pedido.nf_data_upload && new Date(pedido.nf_data_upload) >= seteDiasAtras) {
+              const uploadKey = pedido.nf_data_upload.slice(0, 16); // YYYY-MM-DDTHH:MM
+              notificacoesAuto.push({
+                id: `nf-disponivel-${pedido.id}-${uploadKey}`,
+                tipo: 'aviso',
+                titulo: pedido.cliente_confirmou_nf ? 'Nota Fiscal Atualizada' : 'Nota Fiscal Disponível',
+                mensagem: pedido.cliente_confirmou_nf
+                  ? `A NF do pedido #${idPedido} foi atualizada pelo fornecedor.`
+                  : `A NF do pedido #${idPedido} foi emitida. Confirme o recebimento.`,
+                icone: 'dinheiro',
+                lida: false,
+                data: pedido.nf_data_upload,
+                link: '/MeusPedidos',
+                autogerada: true
+              });
+            }
+
+            if (pedido.boleto_url && pedido.boleto_data_upload && new Date(pedido.boleto_data_upload) >= seteDiasAtras) {
+              const uploadKey = pedido.boleto_data_upload.slice(0, 16);
+              notificacoesAuto.push({
+                id: `boleto-disponivel-${pedido.id}-${uploadKey}`,
+                tipo: 'aviso',
+                titulo: pedido.cliente_confirmou_boleto ? 'Boleto Atualizado' : 'Boleto Disponível',
+                mensagem: pedido.cliente_confirmou_boleto
+                  ? `O boleto do pedido #${idPedido} foi atualizado pelo fornecedor.`
+                  : `O boleto do pedido #${idPedido} foi emitido. Confirme o recebimento.`,
+                icone: 'dinheiro',
+                lida: false,
+                data: pedido.boleto_data_upload,
+                link: '/MeusPedidos',
+                autogerada: true
+              });
+            }
+          });
+        })
+    );
+
+    // Comprovante aprovado ou recusado
+    tarefas.push(
+      supabase.from('carteira').select(COLS_TITULO)
+        .eq('cliente_user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(20)
+        .then(dados)
+        .then((titulosCliente) => {
           titulosCliente.forEach(titulo => {
             if (!titulo.comprovante_analisado) return;
-
             if (titulo.comprovante_aprovado) {
               notificacoesAuto.push({
                 id: `comprovante-aprovado-${titulo.id}`,
@@ -305,53 +277,56 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
               });
             }
           });
-        } catch (e) {
-          // Ignora erro
-        }
-      }
+        })
+    );
+  }
 
-      // Para fornecedores: verificar novos pedidos
-      if (userTipoNegocio === 'fornecedor' || userRole === 'admin') {
-        // Buscar pedidos novos das últimas 24h (filtrar por fornecedor se não for admin)
-        const filtroNovos = { status: 'novo_pedido' };
-        if (userTipoNegocio === 'fornecedor' && userFornecedorId) {
-          filtroNovos.fornecedor_id = userFornecedorId;
-        }
-        const pedidosNovos = await Pedido.filter(filtroNovos, '-created_date', 10);
-        const umDiaAtras = new Date(hoje.getTime() - 24 * 60 * 60 * 1000);
+  // Fornecedor sem fornecedor_id nao tem pedido para ver: nao consulta nada
+  // (sem o filtro, a RLS faria varrer a tabela inteira para devolver vazio).
+  const fornecedorOk = isFornecedor && !!userFornecedorId;
 
-        pedidosNovos.forEach(pedido => {
-          const dataCriacao = new Date(pedido.created_date);
-          if (dataCriacao >= umDiaAtras) {
+  if (isAdmin || fornecedorOk) {
+    const doFornecedor = (q) => (fornecedorOk ? q.eq('fornecedor_id', userFornecedorId) : q);
+    const umDiaAtras = new Date(hoje.getTime() - 24 * 60 * 60 * 1000);
+
+    // Pedidos novos das ultimas 24h
+    tarefas.push(
+      doFornecedor(supabase.from('pedidos_resumo').select(COLS_PEDIDO).eq('status', 'novo_pedido'))
+        .gte('created_date', umDiaAtras.toISOString())
+        .order('created_date', { ascending: false })
+        .limit(10)
+        .then(dados)
+        .then((pedidosNovos) => {
+          pedidosNovos.forEach(pedido => {
             notificacoesAuto.push({
               id: `novo-pedido-${pedido.id}`,
               tipo: 'info',
               titulo: 'Novo Pedido Recebido',
-              mensagem: `Pedido #${pedido.id.slice(-8).toUpperCase()} aguardando análise`,
+              mensagem: `Pedido #${idCurto(pedido.id)} aguardando análise`,
               icone: 'carrinho',
               lida: false,
               data: pedido.created_date,
               link: '/PedidosFornecedor',
               autogerada: true
             });
-          }
-        });
+          });
+        })
+    );
 
-        // Verificar confirmações do cliente (NF, boleto, recebimento de produto)
-        try {
-          const seteDiasAtras = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
-          const filtros = userFornecedorId
-            ? { fornecedor_id: userFornecedorId }
-            : {};
-
-          // Buscar pedidos recentes que podem ter confirmações
-          const pedidosRecentes = await Pedido.filter(filtros, '-updated_at', 20);
-
+    // Confirmacoes do cliente (NF, boleto, recebimento) nos pedidos recentes.
+    // Era esta a consulta nº 1 do banco (pedidos.* ordenado por updated_at).
+    tarefas.push(
+      doFornecedor(supabase.from('pedidos_resumo').select(COLS_PEDIDO))
+        .order('updated_at', { ascending: false })
+        .limit(20)
+        .then(dados)
+        .then((pedidosRecentes) => {
           pedidosRecentes.forEach(pedido => {
             const dataAtualizacao = new Date(pedido.updated_at || pedido.created_date);
             if (dataAtualizacao < seteDiasAtras) return;
 
-            const idPedido = pedido.id.slice(-8).toUpperCase();
+            const idPedido = idCurto(pedido.id);
+            const data = pedido.updated_at || pedido.created_date;
 
             if (pedido.cliente_confirmou_nf) {
               notificacoesAuto.push({
@@ -361,7 +336,7 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
                 mensagem: `Cliente confirmou recebimento da NF do pedido #${idPedido}`,
                 icone: 'sucesso',
                 lida: false,
-                data: pedido.updated_at || pedido.created_date,
+                data,
                 link: '/PedidosFornecedor',
                 autogerada: true
               });
@@ -375,7 +350,7 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
                 mensagem: `Cliente confirmou recebimento do boleto do pedido #${idPedido}`,
                 icone: 'dinheiro',
                 lida: false,
-                data: pedido.updated_at || pedido.created_date,
+                data,
                 link: '/PedidosFornecedor',
                 autogerada: true
               });
@@ -389,75 +364,26 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
                 mensagem: `Cliente confirmou recebimento do pedido #${idPedido}`,
                 icone: 'pedido',
                 lida: false,
-                data: pedido.updated_at || pedido.created_date,
+                data,
                 link: '/PedidosFornecedor',
                 autogerada: true
               });
             }
           });
-        } catch (e) {
-          // Ignora erro
-        }
+        })
+    );
 
-        // Verificar produtos com estoque baixo (apenas para admin, não para fornecedores)
-        if (userRole === 'admin') {
-          try {
-            const produtos = await Produto.list();
-            const produtosEstoque = produtos.filter(p => p.disponibilidade === 'pronta_entrega');
-
-            const produtosBaixoEstoque = produtosEstoque.filter(p => {
-              const estoqueAtual = p.estoque_atual_grades || 0;
-              const estoqueMinimo = p.estoque_minimo || 5;
-              return estoqueAtual <= estoqueMinimo && estoqueAtual > 0;
-            }).slice(0, 5);
-
-            produtosBaixoEstoque.forEach(produto => {
-              notificacoesAuto.push({
-                id: `estoque-baixo-${produto.id}`,
-                tipo: 'aviso',
-                titulo: 'Estoque Baixo',
-                mensagem: `${produto.nome} está com estoque baixo (${produto.estoque_atual_grades || 0} un.)`,
-                icone: 'estoque',
-                lida: false,
-                data: new Date().toISOString(),
-                link: '/GestaoEstoque',
-                autogerada: true
-              });
-            });
-
-            // Produtos sem estoque (apenas pronta_entrega)
-            const produtosSemEstoque = produtosEstoque.filter(p => (p.estoque_atual_grades || 0) === 0 && p.ativo).slice(0, 3);
-            produtosSemEstoque.forEach(produto => {
-              notificacoesAuto.push({
-                id: `sem-estoque-${produto.id}`,
-                tipo: 'alerta',
-                titulo: 'Produto Sem Estoque',
-                mensagem: `${produto.nome} está sem estoque`,
-                icone: 'estoque',
-                lida: false,
-                data: new Date().toISOString(),
-                link: '/GestaoEstoque',
-                autogerada: true
-              });
-            });
-          } catch (e) {
-            // Ignora erro de produtos
-          }
-        }
-      }
-
-      // Para admin e fornecedor: verificar comprovantes pendentes de análise (individual por título)
-      if (userRole === 'admin' || userTipoNegocio === 'fornecedor') {
-        try {
-          const filtroComprovantes = { status: 'em_analise' };
-          if (userTipoNegocio === 'fornecedor' && userFornecedorId) {
-            filtroComprovantes.fornecedor_id = userFornecedorId;
-          }
-          const comprovantesPendentes = await Carteira.filter(filtroComprovantes, '-created_at', 15);
+    // Comprovantes pendentes de análise (individual por título)
+    tarefas.push(
+      doFornecedor(supabase.from('carteira').select(COLS_TITULO).eq('status', 'em_analise'))
+        .order('created_at', { ascending: false })
+        .limit(15)
+        .then(dados)
+        .then((comprovantesPendentes) => {
           comprovantesPendentes.forEach(titulo => {
             const uploadKey = titulo.comprovante_data_upload ? titulo.comprovante_data_upload.slice(0, 16) : '';
             const valorStr = titulo.valor ? `R$ ${titulo.valor.toFixed(2)}` : '';
-            const pedidoRef = titulo.pedido_id ? `#${titulo.pedido_id.slice(-8).toUpperCase()}` : '';
+            const pedidoRef = titulo.pedido_id ? `#${idCurto(titulo.pedido_id)}` : '';
             notificacoesAuto.push({
               id: `comprovante-recebido-${titulo.id}-${uploadKey}`,
               tipo: 'aviso',
@@ -470,16 +396,159 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
               autogerada: true
             });
           });
-        } catch (e) {
-          // Ignora erro
-        }
+        })
+    );
+  }
+
+  // Estoque baixo / sem estoque (so admin). Filtrado no servidor: antes baixava
+  // a tabela de produtos inteira (2,7 MB) a cada minuto para mostrar 5 itens.
+  // A tabela nao tem estoque_minimo; o limite efetivo sempre foi 5.
+  if (isAdmin) {
+    const COLS_PRODUTO = 'id,nome,estoque_atual_grades';
+    tarefas.push(
+      supabase.from('produtos').select(COLS_PRODUTO)
+        .eq('disponibilidade', 'pronta_entrega')
+        .gt('estoque_atual_grades', 0)
+        .lte('estoque_atual_grades', 5)
+        .limit(5)
+        .then(dados)
+        .then((produtos) => {
+          produtos.forEach(produto => {
+            notificacoesAuto.push({
+              id: `estoque-baixo-${produto.id}`,
+              tipo: 'aviso',
+              titulo: 'Estoque Baixo',
+              mensagem: `${produto.nome} está com estoque baixo (${produto.estoque_atual_grades || 0} un.)`,
+              icone: 'estoque',
+              lida: false,
+              data: new Date().toISOString(),
+              link: '/GestaoEstoque',
+              autogerada: true
+            });
+          });
+        })
+    );
+    tarefas.push(
+      supabase.from('produtos').select(COLS_PRODUTO)
+        .eq('disponibilidade', 'pronta_entrega')
+        .eq('ativo', true)
+        .or('estoque_atual_grades.eq.0,estoque_atual_grades.is.null')
+        .limit(3)
+        .then(dados)
+        .then((produtos) => {
+          produtos.forEach(produto => {
+            notificacoesAuto.push({
+              id: `sem-estoque-${produto.id}`,
+              tipo: 'alerta',
+              titulo: 'Produto Sem Estoque',
+              mensagem: `${produto.nome} está sem estoque`,
+              icone: 'estoque',
+              lida: false,
+              data: new Date().toISOString(),
+              link: '/GestaoEstoque',
+              autogerada: true
+            });
+          });
+        })
+    );
+  }
+
+  const resultados = await Promise.allSettled(tarefas);
+  resultados
+    .filter(r => r.status === 'rejected')
+    .forEach(r => console.warn('Notificações: uma das consultas falhou', r.reason?.message || r.reason));
+
+  return notificacoesAuto;
+}
+
+export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio, userFornecedorId }) {
+  const [notificacoes, setNotificacoes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+  const ultimaCargaRef = useRef(0);
+  const carregandoRef = useRef(false);
+  const navigate = useNavigate();
+
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
       }
+    };
 
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const loadNotificacoes = useCallback(async () => {
+    if (!userId || carregandoRef.current) return;
+    carregandoRef.current = true;
+    ultimaCargaRef.current = Date.now();
+    try {
+      setLoading(true);
+
+      const [notificacoesUsuario, notificacoesAutomaticas] = await Promise.all([
+        Notificacao.filter({ usuario_id: userId }, '-created_at', 50).catch(() => []),
+        gerarNotificacoesAutomaticas({ userId, userRole, userTipoNegocio, userFornecedorId })
+      ]);
+
+      // Filtrar auto-geradas que já foram dispensadas (persistido no localStorage)
+      const dismissed = getDismissedIds(userId);
+      const autoFiltradas = notificacoesAutomaticas.filter(n => !dismissed[n.id]);
+
+      // Combinar e ordenar por data
+      const todasNotificacoes = [...notificacoesUsuario, ...autoFiltradas]
+        .sort((a, b) => parseAsUTC(b.created_at || b.data) - parseAsUTC(a.created_at || a.data));
+
+      setNotificacoes(todasNotificacoes);
     } catch (error) {
-      console.error('Erro ao gerar notificações automáticas:', error);
+      console.error('Erro ao carregar notificações:', error);
+    } finally {
+      carregandoRef.current = false;
+      setLoading(false);
     }
+  }, [userId, userRole, userTipoNegocio, userFornecedorId]);
 
-    return notificacoesAuto;
+  // Polling de 5 min, pausado com a aba escondida. Ao voltar para a aba,
+  // recarrega se a ultima carga passou do intervalo.
+  useEffect(() => {
+    if (!userId) return undefined;
+
+    let timer = null;
+    const parar = () => {
+      if (timer) clearInterval(timer);
+      timer = null;
+    };
+    const iniciar = () => {
+      parar();
+      timer = setInterval(loadNotificacoes, INTERVALO_MS);
+    };
+    const aoMudarVisibilidade = () => {
+      if (document.hidden) {
+        parar();
+        return;
+      }
+      if (Date.now() - ultimaCargaRef.current >= INTERVALO_MS) loadNotificacoes();
+      iniciar();
+    };
+
+    loadNotificacoes();
+    if (!document.hidden) iniciar();
+    document.addEventListener('visibilitychange', aoMudarVisibilidade);
+    return () => {
+      parar();
+      document.removeEventListener('visibilitychange', aoMudarVisibilidade);
+    };
+  }, [userId, loadNotificacoes]);
+
+  // Abrir o sino com dados de mais de 1 min recarrega (com 5 min de intervalo,
+  // quem abre o sino quer ver o que acabou de acontecer).
+  const alternarAberto = () => {
+    const abrindo = !isOpen;
+    setIsOpen(abrindo);
+    if (abrindo && Date.now() - ultimaCargaRef.current > 60 * 1000) loadNotificacoes();
   };
 
   // Marcar notificação como lida
@@ -560,7 +629,8 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
         variant="ghost"
         size="icon"
         className="relative"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={alternarAberto}
+        aria-label="Notificações"
       >
         <Bell className="w-5 h-5 text-gray-600" />
         {naoLidas > 0 && (
@@ -616,8 +686,11 @@ export default function NotificacoesDropdown({ userId, userRole, userTipoNegocio
                     }`}
                     onClick={() => {
                       marcarComoLida(notificacao);
-                      if (notificacao.link) {
-                        window.location.href = notificacao.link;
+                      // So caminho interno: um link vindo do banco nunca pode
+                      // ser javascript: ou outro dominio (diagnostico C4).
+                      if (linkInternoSeguro(notificacao.link)) {
+                        setIsOpen(false);
+                        navigate(notificacao.link);
                       }
                     }}
                   >

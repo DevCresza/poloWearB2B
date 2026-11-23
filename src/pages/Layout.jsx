@@ -365,17 +365,13 @@ export default function Layout({ children, currentPageName }) {
       {/* Mobile Header */}
       <div className="lg:hidden bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="flex items-center justify-between p-4">
-          <img src="/logoPolo.png" alt="Polo Wear" className="h-8 w-auto object-contain" />
+          <img src="/logoPolo.webp" alt="Polo Wear" width={64} height={32} className="h-8 w-auto object-contain" />
           <div className="flex items-center gap-2">
             {isVendedor && <SeletorClienteAlvo />}
             {mostrarSeletorLoja && <SeletorLoja />}
-            {/* Notificações Mobile */}
-            <NotificacoesDropdown
-              userId={currentUser.id}
-              userRole={currentUser.role}
-              userTipoNegocio={currentUser.tipo_negocio}
-              userFornecedorId={currentUser.fornecedor_id}
-            />
+            {/* O sino fica so no header de baixo, que aparece em todas as
+                larguras. Antes havia um aqui tambem: duas instancias, cada uma
+                com seu polling, dobrando as consultas ao banco. */}
             <Button
               variant="ghost"
               size="icon"
@@ -413,7 +409,7 @@ export default function Layout({ children, currentPageName }) {
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex w-64 bg-slate-100 flex-col p-4 sticky top-0 h-screen">
         <div className="h-20 flex items-center justify-center mb-4 flex-shrink-0">
-          <img src="/logoPolo.png" alt="Polo Wear" className="h-14 w-auto object-contain" />
+          <img src="/logoPolo.webp" alt="Polo Wear" width={112} height={56} className="h-14 w-auto object-contain" />
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto min-h-0">
           <NavLinks />

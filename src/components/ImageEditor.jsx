@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { RotateCw, ZoomIn, Save, X, Maximize2, Square } from 'lucide-react';
 import { toast } from 'sonner';
+import { canvasParaUpload } from '@/utils/imagemUpload';
 
 /**
  * Editor de Imagem com Crop, Zoom e Rotação para fotos de produtos
@@ -14,7 +15,8 @@ import { toast } from 'sonner';
  * @param {boolean} props.open - Se o dialog está aberto
  * @param {function} props.onClose - Callback ao fechar
  * @param {string} props.imageSrc - URL/Base64 da imagem a editar
- * @param {function} props.onSave - Callback ao salvar (recebe o Blob da imagem editada)
+ * @param {function} props.onSave - Callback ao salvar (recebe o Blob da imagem editada,
+ *   WebP ou JPEG: use arquivoDoBlob() de '@/utils/imagemUpload' para virar File)
  * @param {string} props.aspectRatio - Proporção do crop (default: 1 para quadrado, 4/3 para paisagem)
  */
 export default function ImageEditor({
@@ -94,19 +96,9 @@ export default function ImageEditor({
       pixelCrop.height
     );
 
-    return new Promise((resolve, reject) => {
-      croppedCanvas.toBlob(
-        (blob) => {
-          if (blob) {
-            resolve(blob);
-          } else {
-            reject(new Error('Falha ao gerar imagem recortada. Tente novamente.'));
-          }
-        },
-        'image/jpeg',
-        0.92
-      );
-    });
+    // No maximo 1600 px no lado maior, em WebP 0,82 (JPEG 0,82 se o navegador
+    // nao gerar WebP). Antes: JPEG 0,92 no tamanho original, ate 3 MB por foto.
+    return canvasParaUpload(croppedCanvas);
   };
 
   const handleSave = async () => {
