@@ -6,6 +6,7 @@
 -- Storage (https://<projeto>.supabase.co/...).
 --
 -- Antes de aplicar (23/11/2026): 0 linhas violavam a regra em todas as colunas.
+-- Aplicada em produção em 23/11/2026 às 20h00 (Brasília), versão 20261123230048.
 -- Vazio ('') continua aceito (não abre nada); NULL também.
 -- Fora daqui de propósito: link_rastreio (digitado à mão pelo fornecedor) e
 -- cartao_link_pagamento (aceita texto livre com instruções de pagamento).
