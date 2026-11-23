@@ -18,8 +18,6 @@ const ALLOWED_ORIGINS = [
   'https://www.portalpolowear.com.br',
   'https://portalpolowear.com.br',
   'https://polo-wear-b2-b.vercel.app',
-  // App antigo: sai da lista quando for redirecionado (tarefa T20).
-  'https://polo-wear.vercel.app',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   'http://localhost:4173',
