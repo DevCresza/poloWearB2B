@@ -1,11 +1,30 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// CORS so para os dominios do portal (hotfix 23/11/2026). O wrapper withCors()
+// no Deno.serve coloca o Access-Control-Allow-Origin certo em toda resposta.
+const ALLOWED_ORIGINS = [
+  'https://www.portalpolowear.com.br',
+  'https://portalpolowear.com.br',
+  'https://polo-wear-b2-b.vercel.app',
+  // App antigo: sai da lista quando for redirecionado (tarefa T20).
+  'https://polo-wear.vercel.app',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:4173',
+];
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-my-custom-header',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Vary': 'Origin',
 };
+
+function withCors(req: Request, res: Response): Response {
+  const origin = req.headers.get('Origin') ?? '';
+  res.headers.set('Access-Control-Allow-Origin', ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]);
+  return res;
+}
 
 const json = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), {
@@ -13,22 +32,21 @@ const json = (body: unknown, status: number) =>
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 
-Deno.serve(async (req: Request) => {
+async function handler(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
     // Reseta a senha de qualquer email via service_role. Sem esta checagem,
-    // qualquer cliente logado assumia a conta do admin. Padrao: deleteAuthUser.
-        //
-    // verify_jwt ficou DESLIGADO na plataforma em 02/09/2026: o gateway passou a
-    // recusar tokens de sessao assinados no formato legado (HS256) com
-    // UNAUTHORIZED_LEGACY_JWT, derrubando as funcoes de admin mesmo com sessao
-    // valida. A autorizacao real sempre foi a checagem abaixo (auth.getUser +
-    // papel admin), que e estritamente mais forte. Se alguem reimplantar pela
-    // CLI, precisa manter verify_jwt = false.
-const authHeader = req.headers.get('Authorization');
+    // qualquer cliente logado assumia a conta do admin. A autorizacao e feita
+    // AQUI, nao pelo `verify_jwt` da plataforma: validamos o token com
+    // auth.getUser() e exigimos papel admin. Padrao: deleteAuthUser.
+    //
+    // verify_jwt ficou desligado em 02/09/2026: o gateway passou a recusar tokens
+    // de sessao assinados no formato legado (HS256) com UNAUTHORIZED_LEGACY_JWT,
+    // derrubando as funcoes de admin mesmo com sessao valida.
+    const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return json({ error: 'Token de autenticacao nao fornecido' }, 401);
     }
@@ -88,6 +106,9 @@ const authHeader = req.headers.get('Authorization');
 
     return json({ success: true, message: 'Senha atualizada com sucesso' }, 200);
   } catch (err) {
-    return json({ error: err.message || 'Erro interno' }, 500);
+    console.error('Erro resetUserPassword:', err);
+    return json({ error: 'Erro interno' }, 500);
   }
-});
+}
+
+Deno.serve(async (req: Request) => withCors(req, await handler(req)));
