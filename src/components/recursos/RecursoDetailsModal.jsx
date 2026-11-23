@@ -1,4 +1,6 @@
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import DOMPurify from 'dompurify';
+import { abrirUrlSegura } from '@/utils/urlSegura';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -106,7 +108,7 @@ export default function RecursoDetailsModal({ recurso, onClose, onEdit, onDelete
                   className="w-full h-[70vh]"
                 />
               </div>
-              <Button onClick={() => window.open(recurso.arquivo_url, '_blank')} className="w-full bg-blue-600 hover:bg-blue-700 text-white">
+              <Button onClick={() => abrirUrlSegura(recurso.arquivo_url)} className="w-full bg-blue-600 hover:bg-blue-700 text-white">
                 <Download className="w-4 h-4 mr-2" /> Baixar PDF
               </Button>
             </div>
@@ -138,7 +140,7 @@ export default function RecursoDetailsModal({ recurso, onClose, onEdit, onDelete
           <div className="prose prose-invert max-w-none">
             <div 
               className="text-gray-300 leading-relaxed whitespace-pre-wrap"
-              dangerouslySetInnerHTML={{ __html: recurso.conteudo || 'Sem conteúdo disponível.' }}
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(recurso.conteudo || 'Sem conteúdo disponível.', { USE_PROFILES: { html: true } }) }}
             />
           </div>
         );
@@ -253,7 +255,7 @@ export default function RecursoDetailsModal({ recurso, onClose, onEdit, onDelete
               </div>
               <Button
                 variant="outline"
-                onClick={() => window.open(recurso.arquivo_url, '_blank')}
+                onClick={() => abrirUrlSegura(recurso.arquivo_url)}
                 className="border-gray-700 hover:bg-gray-800"
               >
                 <Download className="w-4 h-4 mr-2" />

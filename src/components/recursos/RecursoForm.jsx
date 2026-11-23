@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { abrirUrlSegura } from '@/utils/urlSegura';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -253,7 +254,7 @@ export default function RecursoForm({ recurso, onClose, onSuccess }) {
                   className="bg-gray-800 text-white border-gray-700 placeholder:text-gray-500 file:bg-gray-700 file:text-white file:border-gray-600 file:hover:bg-gray-600"
                 />
                 {formData.arquivo_url && (
-                  <Button type="button" variant="outline" onClick={() => window.open(formData.arquivo_url, '_blank')} className="border-gray-600 hover:bg-gray-800 text-gray-200 hover:text-white">
+                  <Button type="button" variant="outline" onClick={() => abrirUrlSegura(formData.arquivo_url)} className="border-gray-600 hover:bg-gray-800 text-gray-200 hover:text-white">
                     Abrir PDF
                   </Button>
                 )}
@@ -319,7 +320,7 @@ export default function RecursoForm({ recurso, onClose, onSuccess }) {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => window.open(formData.arquivo_url, '_blank')}
+                    onClick={() => abrirUrlSegura(formData.arquivo_url)}
                     className="border-gray-600 hover:bg-gray-800 text-gray-200 hover:text-white"
                   >
                     Ver Arquivo

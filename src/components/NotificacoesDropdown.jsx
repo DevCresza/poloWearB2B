@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Notificacao } from '@/api/entities';
 import { supabase } from '@/lib/supabase';
-import { linkInternoSeguro } from '@/utils/linkSeguro';
+import { linkInternoSeguro } from '@/utils/urlSegura';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {

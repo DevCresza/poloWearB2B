@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from 'react';
+import { abrirUrlSegura } from '@/utils/urlSegura';
 import { Pedido, PedidoResumo } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { User } from '@/api/entities';
@@ -451,7 +452,7 @@ export default function MeusPedidos() {
       { key: 'status_pagamento', label: 'Status Pagamento' },
       { key: 'metodo_pagamento', label: 'Método Pagamento' },
       { key: 'quantidade_itens', label: 'Qtd. Itens' },
-      { key: 'valor_total', label: 'Valor Total (R$)' },
+      { key: 'valor_total', label: 'Valor Total (R$)', type: 'money' },
       { key: 'transportadora', label: 'Transportadora' },
       { key: 'codigo_rastreio', label: 'Código Rastreio' }
     ];
@@ -548,10 +549,10 @@ export default function MeusPedidos() {
         { key: 'ref_linx', label: 'REF LINX' },
         { key: 'cor', label: 'COR' },
         { key: 'tamanho', label: 'TAMANHO' },
-        { key: 'preco_unitario', label: 'PREÇO UNITÁRIO' },
+        { key: 'preco_unitario', label: 'PREÇO UNITÁRIO', type: 'money' },
         { key: 'total_itens', label: 'TOTAL DE ITENS' },
         { key: 'grades', label: 'GRADES' },
-        { key: 'preco_total', label: 'PREÇO TOTAL' },
+        { key: 'preco_total', label: 'PREÇO TOTAL', type: 'money' },
         { key: 'nf_numero', label: 'Nº NF' },
         { key: 'status_pedido', label: 'STATUS DO PEDIDO' }
       ];
@@ -603,7 +604,7 @@ export default function MeusPedidos() {
       { key: 'status', label: 'Status' },
       { key: 'status_pagamento', label: 'Pagamento' },
       { key: 'quantidade_itens', label: 'Qtd.' },
-      { key: 'valor_total', label: 'Valor Total' }
+      { key: 'valor_total', label: 'Valor Total', type: 'money' }
     ];
 
     exportToPDF(
@@ -1029,7 +1030,7 @@ export default function MeusPedidos() {
                               size="sm"
                               variant="outline"
                               className="h-7 text-xs rounded-lg"
-                              onClick={() => window.open(pedido.link_rastreio, '_blank')}
+                              onClick={() => abrirUrlSegura(pedido.link_rastreio)}
                             >
                               <Truck className="w-3 h-3 mr-1" />
                               Rastrear Pedido
@@ -1134,7 +1135,7 @@ export default function MeusPedidos() {
                       {pedido.nf_url && (
                         <Button
                           variant="outline"
-                          onClick={() => window.open(pedido.nf_url, '_blank')}
+                          onClick={() => abrirUrlSegura(pedido.nf_url)}
                           className="w-full rounded-xl"
                         >
                           <Download className="w-4 h-4 mr-2" />
@@ -1145,7 +1146,7 @@ export default function MeusPedidos() {
                       {pedido.boleto_url && (
                         <Button
                           variant="outline"
-                          onClick={() => window.open(pedido.boleto_url, '_blank')}
+                          onClick={() => abrirUrlSegura(pedido.boleto_url)}
                           className="w-full rounded-xl"
                         >
                           <Download className="w-4 h-4 mr-2" />
@@ -1307,7 +1308,7 @@ export default function MeusPedidos() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => window.open(titulo.comprovante_url, '_blank')}
+                                  onClick={() => abrirUrlSegura(titulo.comprovante_url)}
                                 >
                                   <Eye className="w-4 h-4 mr-2" />
                                   Ver Comprovante

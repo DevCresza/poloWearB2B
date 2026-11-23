@@ -6,9 +6,31 @@ import { toast } from 'sonner';
 // Utilitários para exportação de dados para CSV e PDF
 
 /**
+ * Neutraliza injeção de fórmula em CSV (OWASP "CSV injection").
+ * Texto que começa com = + - @ tab ou CR seria executado pelo Excel/Sheets
+ * como fórmula; o prefixo ' faz a célula ser lida como texto.
+ * Números de verdade (typeof number) não passam por aqui. Texto que é só um
+ * número com sinal ("-12,50") ou só o traço de "vazio" ("-") fica como está.
+ */
+export const neutralizarFormulaCSV = (texto) => {
+  if (typeof texto !== 'string' || texto === '') return texto;
+  if (!/^[=+\-@\t\r]/.test(texto)) return texto;
+  if (texto === '-' || /^[+-]?\d[\d.,]*$/.test(texto)) return texto;
+  return `'${texto}`;
+};
+
+const numeroCSV = (n) => n.toLocaleString('pt-BR', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  useGrouping: false
+});
+
+/**
  * Converte array de objetos para CSV
  * @param {Array} data - Array de objetos com os dados
- * @param {Array} columns - Array com as colunas {key, label}
+ * @param {Array} columns - Array com as colunas {key, label, type?}.
+ *   type: 'money' grava sempre número com 2 casas (1234,50), sem "R$",
+ *   para o Excel somar a coluna. Passe o valor numérico, não o formatado.
  * @param {string} filename - Nome do arquivo
  */
 export const exportToCSV = (data, columns, filename = 'export.csv') => {
@@ -29,25 +51,27 @@ export const exportToCSV = (data, columns, filename = 'export.csv') => {
     return columns.map(col => {
       let value = item[col.key];
 
+      // Dinheiro: aceita número ou texto numérico vindo do banco ("1234.5").
+      if (col.type === 'money' && typeof value === 'string' && value.trim() !== '') {
+        const n = Number(value);
+        if (Number.isFinite(n)) value = n;
+      }
+
       // Formatar valores
       if (value === null || value === undefined) {
         value = '';
       } else if (typeof value === 'number') {
-        value = Number.isInteger(value)
-          ? String(value)
-          : value.toLocaleString('pt-BR', {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-              useGrouping: false
-            });
+        if (!Number.isFinite(value)) value = '';
+        else if (col.type === 'money' || !Number.isInteger(value)) value = numeroCSV(value);
+        else value = String(value);
       } else if (typeof value === 'object') {
-        value = JSON.stringify(value);
+        value = neutralizarFormulaCSV(JSON.stringify(value));
       } else {
-        value = String(value);
+        value = neutralizarFormulaCSV(String(value));
       }
 
       // Escapar separador, aspas e quebras de linha
-      if (value.includes(SEP) || value.includes('"') || value.includes('\n')) {
+      if (value.includes(SEP) || value.includes('"') || value.includes('\n') || value.includes('\r')) {
         value = `"${value.replace(/"/g, '""')}"`;
       }
 

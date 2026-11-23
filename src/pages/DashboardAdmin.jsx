@@ -20,7 +20,6 @@ import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
-import { base44 } from '@/api/base44Client';
 import { exportToCSV, formatCurrency, formatDate, getMesesFaturamentoResumo } from '@/utils/exportUtils';
 
 // 'YYYY-MM' de uma data (para casar com o mês de faturamento dos pedidos).
