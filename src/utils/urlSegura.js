@@ -1,13 +1,21 @@
 import { toast } from 'sonner';
 
+// Links que vêm do banco (comprovante, boleto, NF, rastreio, recurso,
+// notificacao.link...) nunca podem levar a javascript:, data:, http: ou a
+// outro domínio disfarçado de caminho ("//host" ou "/\host", que o navegador
+// trata como outro domínio). Diagnóstico C4 e M14.
+
 /**
- * Valida uma URL vinda de dado (comprovante, boleto, NF, rastreio, recurso...).
- *
- * Aceita só:
+ * Caminho interno do portal: começa com uma barra só ("/Pagina").
+ * Use para navegar dentro do app (ex.: o sino de notificações).
+ */
+export const linkInternoSeguro = (link) =>
+  typeof link === 'string' && /^\/(?![/\\])/.test(link);
+
+/**
+ * Valida uma URL para abrir em aba nova. Aceita só:
  *  - endereço absoluto https:
- *  - caminho interno do próprio portal ("/Pagina"), nunca "//host" nem "/\host"
- *
- * Qualquer outra coisa (javascript:, data:, http:, vbscript:, file:...) é recusada.
+ *  - caminho interno do portal (linkInternoSeguro)
  * Devolve a URL normalizada ou null.
  */
 export function urlSegura(url) {
@@ -15,8 +23,7 @@ export function urlSegura(url) {
   const bruta = url.trim();
   if (!bruta) return null;
 
-  // Caminho interno: começa com uma barra só.
-  if (bruta.startsWith('/') && !bruta.startsWith('//') && !bruta.startsWith('/\\')) {
+  if (linkInternoSeguro(bruta)) {
     try {
       const alvo = new URL(bruta, window.location.origin);
       return alvo.origin === window.location.origin ? alvo.href : null;
