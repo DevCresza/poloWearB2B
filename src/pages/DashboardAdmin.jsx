@@ -1,11 +1,7 @@
 
 import { useState, useEffect } from 'react';
-import { User } from '@/api/entities';
-import { Pedido } from '@/api/entities';
-import { Produto } from '@/api/entities';
-import { Fornecedor } from '@/api/entities';
-import { Carteira } from '@/api/entities';
 import { Meta } from '@/api/entities';
+import { kpisDashboard, kpisDashboardAdmin, porStatus, dataLocalISO } from '@/api/kpis';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,19 +16,18 @@ import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
-import { exportToCSV, formatCurrency, formatDate, getMesesFaturamentoResumo } from '@/utils/exportUtils';
+import { exportToCSV, formatCurrency, formatDate } from '@/utils/exportUtils';
 
 // 'YYYY-MM' de uma data (para casar com o mês de faturamento dos pedidos).
 const chaveMes = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 import DashboardKpiCards from '../components/DashboardKpiCards';
 
+// Status que contam como faturamento nos cards (inclui parcialmente_faturado;
+// os graficos nao incluem -- duas listas, como sempre foi).
+const FATURAMENTO_STATUSES = ['faturado', 'parcialmente_faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'];
+
 export default function DashboardAdmin() {
   const [loading, setLoading] = useState(true);
-  const [pedidos, setPedidos] = useState([]);
-  const [produtos, setProdutos] = useState([]);
-  const [fornecedores, setFornecedores] = useState([]);
-  const [clientes, setClientes] = useState([]);
-  const [carteira, setCarteira] = useState([]);
   const [metas, setMetas] = useState([]);
   const [mesSelecionado, setMesSelecionado] = useState(new Date().getMonth() + 1);
   const [anoSelecionado, setAnoSelecionado] = useState(new Date().getFullYear());
@@ -80,83 +75,32 @@ export default function DashboardAdmin() {
     loadData();
   }, [mesSelecionado, anoSelecionado]); // Using original dependencies [mesSelecionado, anoSelecionado]
 
+  // Antes esta tela baixava pedidos.* inteiro (com o itens), produtos, users,
+  // carteira e fornecedores -- cerca de 90 MB -- para somar no navegador. As
+  // contas agora rodam no banco (kpis_dashboard + kpis_dashboard_admin, ver a
+  // migration 20261123233919) e voltam so os numeros, com a mesma regra.
   const loadData = async () => {
     setLoading(true);
     try {
-      const [
-        pedidosList,
-        produtosList,
-        fornecedoresList,
-        clientesList,
-        carteiraList,
-        metasList
-      ] = await Promise.all([
-        Pedido.list({ sort: '-created_date' }),
-        Produto.list(),
-        Fornecedor.list(),
-        User.list(),
-        Carteira.list(),
+      const agora = new Date();
+      const [kpis, adm, metasList] = await Promise.all([
+        kpisDashboard(),
+        kpisDashboardAdmin(agora),
         Meta.filter({ ano: anoSelecionado, mes: mesSelecionado })
       ]);
 
-      // Filtrar apenas clientes (multimarca e franqueado)
-      const clientesFiltrados = (clientesList || []).filter(u =>
-        u.tipo_negocio === 'multimarca' || u.tipo_negocio === 'franqueado' || u.categoria_cliente === 'franqueado'
-      );
-
-      setPedidos(pedidosList || []);
-      setProdutos(produtosList || []);
-      setFornecedores(fornecedoresList || []);
-      setClientes(clientesFiltrados);
-      setCarteira(carteiraList || []);
       setMetas(metasList || []);
 
-      calculateStats(pedidosList, produtosList, clientesFiltrados, carteiraList);
-      generateChartData(pedidosList, fornecedoresList, clientesFiltrados);
+      // Faturamento por mes de faturamento ('YYYY-MM' -> valores F4/F5).
+      const porMes = {};
+      (adm?.por_mes || []).forEach(m => { porMes[m.mes] = m; });
 
-      // Carregar pedidos atrasados
-      const hoje = new Date();
-
-      const atrasados = pedidosList.filter(pedido => {
-        // Pedidos aprovados há mais de 7 dias que não foram faturados
-        if (pedido.status === 'aprovado' && pedido.data_aprovacao) {
-          const dataAprovacao = new Date(pedido.data_aprovacao);
-          const diasDesdeAprovacao = Math.floor((hoje - dataAprovacao) / (1000 * 60 * 60 * 24));
-          return diasDesdeAprovacao > 7;
-        }
-
-        // Pedidos em produção há mais de 15 dias
-        if (pedido.status === 'em_producao') {
-          const dataCriacao = new Date(pedido.created_date); // Assuming created_date as the relevant start date for this calculation
-          const diasDesdeCriacao = Math.floor((hoje - dataCriacao) / (1000 * 60 * 60 * 24));
-          return diasDesdeCriacao > 15;
-        }
-
-        // Pedidos faturados há mais de 5 dias que não foram enviados
-        if (pedido.status === 'faturado' && pedido.nf_data_upload) {
-          const dataFaturamento = new Date(pedido.nf_data_upload);
-          const diasDesdeFaturamento = Math.floor((hoje - dataFaturamento) / (1000 * 60 * 60 * 24));
-          // Assuming 'faturado' means it's ready to be sent, and needs to be in a later status like 'em_transporte' or 'finalizado' to be considered 'sent'.
-          // So if status is still 'faturado' and days since nf_data_upload > 5, it's atrasado.
-          return diasDesdeFaturamento > 5;
-        }
-
-        return false;
-      });
-
-      const atrasadosDetalhados = atrasados.map(pedido => {
-        const fornecedor = fornecedoresList.find(f => f.id === pedido.fornecedor_id);
-        const cliente = clientesList.find(c => c.id === pedido.comprador_user_id);
-        return {
-          ...pedido,
-          fornecedor_nome: fornecedor?.nome_marca || 'Desconhecido',
-          cliente_nome: cliente?.empresa || cliente?.razao_social || cliente?.nome_marca || cliente?.full_name || 'Desconhecido'
-        };
-      });
+      calculateStats(kpis, adm, porMes);
+      generateChartData(kpis, adm, porMes, agora);
 
       setPedidosAtrasados({
-        total: atrasados.length,
-        detalhes: atrasadosDetalhados
+        total: Number(adm?.atrasados_total) || 0,
+        detalhes: adm?.atrasados || []
       });
 
     } catch (_error) {
@@ -165,110 +109,74 @@ export default function DashboardAdmin() {
     }
   };
 
-  const calculateStats = (pedidosList, produtosList, clientesList, carteiraList) => {
-    const hoje = new Date();
+  const calculateStats = (kpis, adm, porMes) => {
+    const st = porStatus(kpis);
     const mesAnterior = new Date(anoSelecionado, mesSelecionado - 2, 1);
 
-    // Faturamento - considerar pedidos faturados, em transporte, pendente de pagamento e finalizados
-    const FATURAMENTO_STATUSES = ['faturado', 'parcialmente_faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'];
-    const pedidosParaFaturamento = pedidosList.filter(p =>
-      FATURAMENTO_STATUSES.includes(p.status)
-    );
-    // Use valor_faturado (real invoiced amount) instead of valor_final/valor_total
-    const faturamentoTotal = pedidosParaFaturamento.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
+    // Faturamento - pedidos faturados, em transporte, pendente de pagamento e
+    // finalizados (valor_faturado real, nao valor_final/valor_total).
+    const faturamentoTotal = st.soma(FATURAMENTO_STATUSES, 'valor_faturado');
+    const qtdFaturamento = st.qtd(FATURAMENTO_STATUSES);
 
     // Escopo do mês por MÊS DE FATURAMENTO (NF, senão cápsula), não pela data
     // do pedido — o seletor de mês/ano representa o mês em que se fatura.
     const chaveMesSel = `${anoSelecionado}-${String(mesSelecionado).padStart(2, '0')}`;
     const chaveMesAnt = chaveMes(mesAnterior);
 
-    const pedidosMes = pedidosParaFaturamento.filter(p =>
-      getMesesFaturamentoResumo(p).includes(chaveMesSel)
-    );
-    const faturamentoMes = pedidosMes.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
-
-    const pedidosMesAnterior = pedidosParaFaturamento.filter(p =>
-      getMesesFaturamentoResumo(p).includes(chaveMesAnt)
-    );
-    const faturamentoMesAnterior = pedidosMesAnterior.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
+    const faturamentoMes = Number(porMes[chaveMesSel]?.valor_f5) || 0;
+    const pedidosMes = Number(porMes[chaveMesSel]?.qtd_f5) || 0;
+    const faturamentoMesAnterior = Number(porMes[chaveMesAnt]?.valor_f5) || 0;
 
     const crescimentoMensal = faturamentoMesAnterior > 0
       ? ((faturamentoMes - faturamentoMesAnterior) / faturamentoMesAnterior) * 100
       : 0;
 
     // Pedidos (excluir cancelados do total)
-    const pedidosTotal = pedidosList.filter(p => p.status !== 'cancelado').length;
-    const pedidosEmAnalise = pedidosList.filter(p => ['novo_pedido', 'em_analise'].includes(p.status)).length;
-    const pedidosEmProducao = pedidosList.filter(p => p.status === 'em_producao').length;
-    const pedidosFaturados = pedidosList.filter(p => p.status === 'faturado').length;
+    const naoCancelados = st.exceto('cancelado');
+    const pedidosTotal = st.qtd(naoCancelados);
+    const pedidosEmAnalise = st.qtd(['novo_pedido', 'em_analise']);
+    const pedidosEmProducao = st.qtd(['em_producao']);
+    const pedidosFaturados = st.qtd(['faturado']);
 
     // Clientes
-    const clientesAtivos = clientesList.filter(c => !c.bloqueado).length;
-    const clientesBloqueados = clientesList.filter(c => c.bloqueado).length;
-    const trintaDiasAtras = new Date();
-    trintaDiasAtras.setDate(hoje.getDate() - 30);
-    const clientesNovos = clientesList.filter(c => new Date(c.created_date) >= trintaDiasAtras).length;
+    const clientesAtivos = Number(adm?.clientes_ativos) || 0;
+    const clientesBloqueados = Number(adm?.clientes_bloqueados) || 0;
+    // Sempre deu 0: a conta lia users.created_date, coluna que nao existe (a
+    // tabela tem created_at). Mantido igual para o numero da tela nao mudar
+    // nesta troca; corrigir e decisao a parte.
+    const clientesNovos = 0;
 
-    // Faturado (KPI padronizado) - usa valor_faturado real
-    const pedidosFaturadosAll = pedidosList.filter(p => FATURAMENTO_STATUSES.includes(p.status));
-    const qtdFaturada = pedidosFaturadosAll.length;
-    const valorFaturado = pedidosFaturadosAll.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
+    // Quebra total, saldo pendente (o que falta faturar) e valor total
+    const valorQuebraTotal = st.soma('*', 'valor_quebra');
+    const statusPendentes = ['em_producao', 'parcialmente_faturado'];
+    const saldoPendente = st.soma(statusPendentes, 'valor_total')
+      - st.soma(statusPendentes, 'valor_faturado')
+      - st.soma(statusPendentes, 'valor_quebra');
+    const valorTotalPedidos = st.soma(naoCancelados, 'valor_total');
 
-    // Quebra total (parseFloat because Supabase returns numeric as string)
-    const valorQuebraTotal = pedidosList.reduce((sum, p) => sum + (parseFloat(p.valor_quebra) || 0), 0);
-
-    // Saldo Pendente: pedidos em_producao/parcialmente_faturado that still have uninvoiced value
-    const saldoPendente = pedidosList
-      .filter(p => ['em_producao', 'parcialmente_faturado'].includes(p.status))
-      .reduce((sum, p) => sum + ((parseFloat(p.valor_total) || 0) - (parseFloat(p.valor_faturado) || 0) - (parseFloat(p.valor_quebra) || 0)), 0);
-
-    // Valor total dos pedidos (referência original)
-    const valorTotalPedidos = pedidosList
-      .filter(p => p.status !== 'cancelado')
-      .reduce((sum, p) => sum + (p.valor_total || 0), 0);
-
-    // Financeiro
-    const hojeZero = new Date();
-    hojeZero.setHours(0, 0, 0, 0);
-    const pendentesCarteira = carteiraList.filter(t => t.status === 'pendente');
-    const valorEmAberto = pendentesCarteira.reduce((sum, t) => sum + (t.valor || 0), 0);
-
-    const valorAVencer = pendentesCarteira
-      .filter(t => {
-        const vencimento = new Date(t.data_vencimento);
-        return vencimento >= hojeZero;
-      })
-      .reduce((sum, t) => sum + (t.valor || 0), 0);
-
-    const valorVencido = pendentesCarteira
-      .filter(t => {
-        const vencimento = new Date(t.data_vencimento);
-        return vencimento < hojeZero;
-      })
-      .reduce((sum, t) => sum + (t.valor || 0), 0);
+    // Financeiro (titulos pendentes)
+    const valorEmAberto = Number(kpis?.carteira?.em_aberto) || 0;
+    const valorAVencer = Number(kpis?.carteira?.a_vencer) || 0;
+    const valorVencido = Number(kpis?.carteira?.vencido) || 0;
 
     // Produtos
-    const produtosAtivos = produtosList.filter(p => p.ativo).length;
-    const produtosEstoqueBaixo = produtosList.filter(p =>
-      p.controla_estoque && p.estoque_atual_grades <= p.estoque_minimo_grades
-    ).length;
+    const produtosAtivos = Number(kpis?.produtos?.ativos) || 0;
+    const produtosEstoqueBaixo = Number(kpis?.produtos?.estoque_baixo) || 0;
 
     // Ticket Médio (baseado no valor faturado)
-    const ticketMedio = pedidosParaFaturamento.length > 0
-      ? faturamentoTotal / pedidosParaFaturamento.length
-      : 0;
+    const ticketMedio = qtdFaturamento > 0 ? faturamentoTotal / qtdFaturamento : 0;
 
     setStats({
       faturamentoTotal,
       faturamentoMes,
       crescimentoMensal,
       pedidosTotal,
-      pedidosMes: pedidosMes.length,
+      pedidosMes,
       pedidosEmAnalise,
       pedidosEmProducao,
       pedidosFaturados,
-      qtdFaturada,
-      valorFaturado,
+      qtdFaturada: qtdFaturamento,
+      valorFaturado: faturamentoTotal,
       valorQuebraTotal,
       saldoPendente,
       valorTotalPedidos,
@@ -284,40 +192,34 @@ export default function DashboardAdmin() {
     });
   };
 
-  const generateChartData = (pedidosList, fornecedoresList, clientesList) => {
-    // Status considerados para faturamento
-    const statusFaturamento = ['finalizado', 'faturado', 'em_transporte', 'pendente_pagamento'];
+  const generateChartData = (kpis, adm, porMes, agora) => {
+    const st = porStatus(kpis);
 
-    // Faturamento Mensal (últimos 12 meses) — por MÊS DE FATURAMENTO.
+    // Faturamento Mensal (últimos 12 meses) — por MÊS DE FATURAMENTO. O laco
+    // de datas e o mesmo de antes; so a soma vem pronta do banco.
     const faturamentoMensal = [];
     for (let i = 11; i >= 0; i--) {
-      const mes = new Date();
+      const mes = new Date(agora);
       mes.setMonth(mes.getMonth() - i);
-      const chaveMesLoop = chaveMes(mes);
-
-      const pedidosMes = pedidosList.filter(p =>
-        statusFaturamento.includes(p.status) && getMesesFaturamentoResumo(p).includes(chaveMesLoop)
-      );
-
-      const valor = pedidosMes.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
+      const m = porMes[chaveMes(mes)];
 
       faturamentoMensal.push({
         mes: mes.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
-        valor: valor,
-        pedidos: pedidosMes.length
+        valor: Number(m?.valor_f4) || 0,
+        pedidos: Number(m?.qtd_f4) || 0
       });
     }
 
     // Pedidos por Status
     const statusCounts = {
-      'Novos': pedidosList.filter(p => p.status === 'novo_pedido').length,
-      'Em Análise': pedidosList.filter(p => p.status === 'em_analise').length,
-      'Aprovados': pedidosList.filter(p => p.status === 'aprovado').length,
-      'Em Produção': pedidosList.filter(p => p.status === 'em_producao').length,
-      'Faturados': pedidosList.filter(p => p.status === 'faturado').length,
-      'Em Transporte': pedidosList.filter(p => p.status === 'em_transporte').length,
-      'Aguardando Pagamento': pedidosList.filter(p => p.status === 'pendente_pagamento').length,
-      'Finalizados': pedidosList.filter(p => p.status === 'finalizado').length
+      'Novos': st.qtd(['novo_pedido']),
+      'Em Análise': st.qtd(['em_analise']),
+      'Aprovados': st.qtd(['aprovado']),
+      'Em Produção': st.qtd(['em_producao']),
+      'Faturados': st.qtd(['faturado']),
+      'Em Transporte': st.qtd(['em_transporte']),
+      'Aguardando Pagamento': st.qtd(['pendente_pagamento']),
+      'Finalizados': st.qtd(['finalizado'])
     };
 
     const pedidosPorStatus = Object.entries(statusCounts).map(([status, count]) => ({
@@ -325,73 +227,32 @@ export default function DashboardAdmin() {
       count
     }));
 
-    // Faturamento por Fornecedor
-    const faturamentoPorFornecedor = fornecedoresList.map(fornecedor => {
-      const pedidosFornecedor = pedidosList.filter(p =>
-        p.fornecedor_id === fornecedor.id && statusFaturamento.includes(p.status)
-      );
-      const valor = pedidosFornecedor.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
+    const numeros = (lista) => (lista || []).map(x => ({
+      ...x,
+      valor: Number(x.valor) || 0,
+      ...(x.pedidos != null ? { pedidos: Number(x.pedidos) || 0 } : {}),
+      ...(x.quantidade != null ? { quantidade: Number(x.quantidade) || 0 } : {})
+    }));
 
-      return {
-        nome: fornecedor.nome_marca || fornecedor.razao_social || fornecedor.nome_fantasia,
-        valor: valor,
-        pedidos: pedidosFornecedor.length
-      };
-    }).filter(f => f.valor > 0).sort((a, b) => b.valor - a.valor);
-
-    // Top Clientes
-    const clientesComFaturamento = clientesList.map(cliente => {
-      const pedidosCliente = pedidosList.filter(p =>
-        p.comprador_user_id === cliente.id && statusFaturamento.includes(p.status)
-      );
-      const valor = pedidosCliente.reduce((sum, p) => sum + (p.valor_faturado || 0), 0);
-
-      return {
-        nome: cliente.empresa || cliente.razao_social || cliente.nome_marca || cliente.full_name,
-        valor: valor,
-        pedidos: pedidosCliente.length
-      };
-    }).filter(c => c.valor > 0).sort((a, b) => b.valor - a.valor).slice(0, 10);
-
-    // Produtos Mais Vendidos
-    const produtosVendidos = {};
-    pedidosList.filter(p => statusFaturamento.includes(p.status)).forEach(pedido => {
-      try {
-        const itens = Array.isArray(pedido.itens) ? pedido.itens : JSON.parse(pedido.itens);
-        itens.forEach(item => {
-          const key = item.nome;
-          if (!produtosVendidos[key]) {
-            produtosVendidos[key] = { nome: item.nome, quantidade: 0, valor: 0 };
-          }
-          produtosVendidos[key].quantidade += item.quantidade || 0;
-          produtosVendidos[key].valor += (item.preco * item.quantidade) || 0;
-        });
-      } catch (_e) {
-      }
-    });
-
-    const produtosMaisVendidos = Object.values(produtosVendidos)
-      .sort((a, b) => b.valor - a.valor)
-      .slice(0, 10);
+    // Faturamento por fornecedor, top 10 clientes e top 10 produtos: ja vem
+    // filtrados (> 0) e ordenados do banco.
+    const faturamentoPorFornecedor = numeros(adm?.por_fornecedor);
+    const topClientes = numeros(adm?.top_clientes);
+    const produtosMaisVendidos = numeros(adm?.mais_vendidos);
 
     // Evolução de Pedidos (últimos 30 dias, excluindo cancelados)
+    const porDia = {};
+    (adm?.evolucao || []).forEach(d => { porDia[String(d.dia).slice(0, 10)] = d; });
     const evolucaoPedidos = [];
     for (let i = 29; i >= 0; i--) {
-      const dia = new Date();
+      const dia = new Date(agora);
       dia.setDate(dia.getDate() - i);
-      const inicioDia = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate());
-      const fimDia = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate(), 23, 59, 59);
-
-      const pedidosDia = pedidosList.filter(p => {
-        if (p.status === 'cancelado') return false;
-        const data = new Date(p.created_date);
-        return data >= inicioDia && data <= fimDia;
-      });
+      const d = porDia[dataLocalISO(dia)];
 
       evolucaoPedidos.push({
         dia: dia.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-        pedidos: pedidosDia.length,
-        valor: pedidosDia.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0)
+        pedidos: Number(d?.pedidos) || 0,
+        valor: Number(d?.valor) || 0
       });
     }
 
@@ -399,7 +260,7 @@ export default function DashboardAdmin() {
       faturamentoMensal,
       pedidosPorStatus,
       faturamentoPorFornecedor,
-      topClientes: clientesComFaturamento,
+      topClientes,
       produtosMaisVendidos,
       evolucaoPedidos
     });

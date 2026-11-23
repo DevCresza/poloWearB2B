@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Meta } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { User } from '@/api/entities';
-import { Pedido } from '@/api/entities';
+import { metasRealizado } from '@/api/kpis';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,9 +55,26 @@ export default function GestaoMetas() {
         u.tipo_negocio === 'multimarca' || u.tipo_negocio === 'franqueado' || u.categoria_cliente === 'franqueado'
       );
 
-      // Atualizar realizado de cada meta
-      for (const meta of metasList) {
-        await atualizarRealizadoMeta(meta);
+      // Realizado de todas as metas do mes numa chamada so (metas_realizado,
+      // no banco). Antes era um Pedido.list() inteiro (~78 MB) POR META, em
+      // serie. Mesma regra de valor e de pecas -- ver a migration
+      // 20261123233919_kpis_paginas_pesadas.
+      // Se a conta falhar, as metas aparecem com o ultimo realizado gravado --
+      // nunca grava zero por cima por causa de um erro de rede.
+      let realizados = null;
+      if (metasList.length > 0) {
+        try {
+          realizados = await metasRealizado(anoSelecionado, mesSelecionado);
+        } catch (e) {
+          console.warn('Erro ao calcular o realizado das metas:', e);
+        }
+      }
+      if (realizados) {
+        const realizadoPorMeta = {};
+        realizados.forEach(r => { realizadoPorMeta[r.meta_id] = r; });
+        for (const meta of metasList) {
+          await atualizarRealizadoMeta(meta, realizadoPorMeta[meta.id]);
+        }
       }
 
       setMetas(metasList);
@@ -69,66 +86,10 @@ export default function GestaoMetas() {
     }
   };
 
-  const atualizarRealizadoMeta = async (meta) => {
+  const atualizarRealizadoMeta = async (meta, realizado) => {
     try {
-      const dataInicio = new Date(meta.ano, meta.mes - 1, 1);
-      const dataFim = new Date(meta.ano, meta.mes, 0, 23, 59, 59, 999);
-
-      // Buscar pedidos com status que indicam venda confirmada (não cancelados)
-      let pedidos = await Pedido.list();
-
-      // Filtrar pedidos com status de venda confirmada (não apenas finalizados)
-      pedidos = pedidos.filter(p =>
-        ['finalizado', 'faturado', 'em_transporte', 'em_producao', 'pendente_pagamento'].includes(p.status) &&
-        p.status !== 'cancelado'
-      );
-
-      // Filtrar pedidos do período
-      pedidos = pedidos.filter(p => {
-        const dataPedido = new Date(p.created_date);
-        return dataPedido >= dataInicio && dataPedido <= dataFim;
-      });
-
-      // Filtrar por tipo de meta (baseado nos IDs, não no campo tipo)
-      if (meta.fornecedor_id) {
-        pedidos = pedidos.filter(p => p.fornecedor_id === meta.fornecedor_id);
-      } else if (meta.user_id) {
-        pedidos = pedidos.filter(p => p.comprador_user_id === meta.user_id);
-      }
-
-      const valorRealizado = pedidos.reduce((sum, p) => sum + (p.valor_final || p.valor_total || 0), 0);
-      
-      // Calcular peças realizadas
-      let pecasRealizadas = 0;
-      pedidos.forEach(p => {
-        try {
-          const itens = Array.isArray(p.itens) ? p.itens : JSON.parse(p.itens || '[]');
-          itens.forEach(item => {
-            if (item.tipo_venda === 'grade') {
-              let pecasPorGrade = item.total_pecas_grade || 0;
-              // Fallback: calcular a partir de grade_selecionada para pedidos antigos
-              if (!pecasPorGrade && item.grade_selecionada?.quantidades_por_tamanho) {
-                pecasPorGrade = Object.values(item.grade_selecionada.quantidades_por_tamanho)
-                  .reduce((sum, qty) => sum + (Number(qty) || 0), 0);
-              }
-              pecasRealizadas += (item.quantidade || 0) * pecasPorGrade;
-            } else if (item.tipo === 'capsula') {
-              // Cápsulas: somar quantidade de cada produto dentro da cápsula
-              if (item.produtos_quantidades && typeof item.produtos_quantidades === 'object') {
-                const totalPecasCapsula = Object.values(item.produtos_quantidades)
-                  .reduce((sum, qty) => sum + (Number(qty) || 0), 0);
-                pecasRealizadas += totalPecasCapsula * (item.quantidade || 1);
-              } else {
-                pecasRealizadas += item.quantidade || 0;
-              }
-            } else {
-              pecasRealizadas += item.quantidade || 0;
-            }
-          });
-        } catch (e) {
-          // Itens inválidos são ignorados
-        }
-      });
+      const valorRealizado = Number(realizado?.valor_realizado) || 0;
+      const pecasRealizadas = Number(realizado?.pecas_realizadas) || 0;
 
       const percentualValor = meta.valor_meta > 0
         ? (valorRealizado / meta.valor_meta) * 100

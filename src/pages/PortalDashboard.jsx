@@ -1,9 +1,8 @@
 
 import { useState, useEffect } from 'react';
 import { User } from '@/api/entities';
-import { Pedido } from '@/api/entities';
-import { Produto } from '@/api/entities';
-import { Carteira } from '@/api/entities';
+import { PedidoResumo } from '@/api/entities';
+import { kpisDashboard, porStatus } from '@/api/kpis';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -44,8 +43,6 @@ export default function PortalDashboard() {
   const { lojaSelecionada, loading: lojasLoading } = useLojaContext();
   const [user, setUser] = useState(null);
   const [pedidos, setPedidos] = useState([]);
-  const [produtos, setProdutos] = useState([]);
-  const [carteira, setCarteira] = useState([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalPedidos: 0,
@@ -66,6 +63,33 @@ export default function PortalDashboard() {
     loadData();
   }, [lojaSelecionada?.id, lojasLoading]);
 
+  // Cards a partir de pedidos agrupados por status (kpis_dashboard, no banco).
+  // Antes cada ramo baixava a lista inteira de pedidos com o itens -- no admin,
+  // a base toda (~89 MB) -- so para contar e somar aqui.
+  const montarStats = (kpis, statusPendentes, comProdutos) => {
+    const FATURADO_STATUSES = ['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'];
+    const st = porStatus(kpis);
+    const ativos = st.exceto('cancelado');
+    return {
+      totalPedidos: st.qtd(ativos),
+      pedidosPendentes: st.qtd(statusPendentes),
+      pedidosFinalizados: st.qtd(['finalizado']),
+      valorTotalComprado: st.soma(ativos, 'valor_total'),
+      qtdFaturada: st.qtd(FATURADO_STATUSES),
+      valorFaturado: st.soma(FATURADO_STATUSES, 'valor_faturado'),
+      valorQuebra: st.soma(ativos, 'valor_quebra'),
+      valorAVencer: Number(kpis?.carteira?.a_vencer) || 0,
+      valorVencido: Number(kpis?.carteira?.vencido) || 0,
+      produtosAtivos: comProdutos ? Number(kpis?.produtos?.ativos) || 0 : 0,
+      estoqueBaixo: comProdutos ? Number(kpis?.produtos?.estoque_baixo) || 0 : 0
+    };
+  };
+
+  // Lista "Pedidos Recentes": so as 4 colunas que o card mostra, sem o itens.
+  const COLUNAS_RECENTES = 'id,status,created_date,valor_total';
+  const pedidosRecentes = (filters) =>
+    PedidoResumo.list({ filters, sort: '-created_date', limit: 10, columns: COLUNAS_RECENTES });
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -73,65 +97,19 @@ export default function PortalDashboard() {
       setUser(currentUser);
 
       let pedidosList = [];
-      let produtosList = [];
-      let carteiraList = [];
 
       if (currentUser.tipo_negocio === 'multimarca' || currentUser.tipo_negocio === 'franqueado') {
         // Dashboard do Cliente - filter by loja if selected
         const pedidoFilter = { comprador_user_id: currentUser.id };
-        const carteiraFilter = { cliente_user_id: currentUser.id };
         if (lojaSelecionada) {
           pedidoFilter.loja_id = lojaSelecionada.id;
-          carteiraFilter.loja_id = lojaSelecionada.id;
         }
-        pedidosList = await Pedido.filter(pedidoFilter, '-created_date', 10);
-        carteiraList = await Carteira.filter(carteiraFilter);
-
-        // Calcular estatísticas
-        const FATURADO_STATUSES = ['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'];
-        const allPedidos = await Pedido.filter(pedidoFilter);
-        const pedidosAtivos = allPedidos.filter(p => p.status !== 'cancelado');
-        const totalPedidos = pedidosAtivos.length;
-        const pedidosPendentes = pedidosAtivos.filter(p =>
-          ['novo_pedido', 'em_analise', 'aprovado', 'em_producao'].includes(p.status)
-        ).length;
-        const pedidosFinalizados = pedidosAtivos.filter(p => p.status === 'finalizado').length;
-        const valorTotalComprado = pedidosAtivos.reduce((sum, p) => sum + (p.valor_total || 0), 0);
-
-        const pedidosFaturados = pedidosAtivos.filter(p => FATURADO_STATUSES.includes(p.status));
-        const qtdFaturada = pedidosFaturados.length;
-        const valorFaturado = pedidosFaturados.reduce((sum, p) => sum + (parseFloat(p.valor_faturado) || 0), 0);
-        const valorQuebraTotal = pedidosAtivos.reduce((sum, p) => sum + (parseFloat(p.valor_quebra) || 0), 0);
-
-        const hoje = new Date();
-        hoje.setHours(0, 0, 0, 0);
-        const pendentes = carteiraList.filter(t => t.status === 'pendente');
-        const valorAVencer = pendentes
-          .filter(t => {
-            const vencimento = new Date(t.data_vencimento);
-            return vencimento >= hoje;
-          })
-          .reduce((sum, t) => sum + (parseFloat(t.valor) || 0), 0);
-        const valorVencido = pendentes
-          .filter(t => {
-            const vencimento = new Date(t.data_vencimento);
-            return vencimento < hoje;
-          })
-          .reduce((sum, t) => sum + (parseFloat(t.valor) || 0), 0);
-
-        setStats({
-          totalPedidos,
-          pedidosPendentes,
-          pedidosFinalizados,
-          valorTotalComprado,
-          qtdFaturada,
-          valorFaturado,
-          valorQuebra: valorQuebraTotal,
-          valorAVencer,
-          valorVencido,
-          produtosAtivos: 0,
-          estoqueBaixo: 0
-        });
+        const [recentes, kpis] = await Promise.all([
+          pedidosRecentes(pedidoFilter),
+          kpisDashboard({ compradorId: currentUser.id, lojaId: lojaSelecionada?.id || null })
+        ]);
+        pedidosList = recentes;
+        setStats(montarStats(kpis, ['novo_pedido', 'em_analise', 'aprovado', 'em_producao'], false));
 
       } else if (currentUser.tipo_negocio === 'fornecedor') {
         // Dashboard do Fornecedor
@@ -155,60 +133,12 @@ export default function PortalDashboard() {
         }
 
         if (fornecedor) {
-          const FATURADO_STATUSES = ['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'];
-          pedidosList = await Pedido.filter({ fornecedor_id: fornecedorId }, '-created_date', 10);
-          produtosList = await Produto.filter({ fornecedor_id: fornecedorId });
-          carteiraList = await Carteira.filter({ fornecedor_id: fornecedorId });
-
-          const allPedidos = await Pedido.filter({ fornecedor_id: fornecedorId });
-          const pedidosAtivos = allPedidos.filter(p => p.status !== 'cancelado');
-          const totalPedidos = pedidosAtivos.length;
-          const pedidosPendentes = pedidosAtivos.filter(p =>
-            ['novo_pedido', 'em_analise'].includes(p.status)
-          ).length;
-          const pedidosFinalizados = pedidosAtivos.filter(p => p.status === 'finalizado').length;
-          const valorTotalComprado = pedidosAtivos.reduce((sum, p) => sum + (p.valor_total || 0), 0);
-
-          const pedidosFaturados = pedidosAtivos.filter(p => FATURADO_STATUSES.includes(p.status));
-          const qtdFaturada = pedidosFaturados.length;
-          const valorFaturado = pedidosFaturados.reduce((sum, p) => sum + (parseFloat(p.valor_faturado) || 0), 0);
-          const valorQuebraTotal = pedidosAtivos.reduce((sum, p) => sum + (parseFloat(p.valor_quebra) || 0), 0);
-
-          const hoje = new Date();
-          hoje.setHours(0, 0, 0, 0);
-          const pendentes = carteiraList.filter(t => t.status === 'pendente');
-          const valorAVencer = pendentes
-            .filter(t => {
-              const vencimento = new Date(t.data_vencimento);
-              return vencimento >= hoje;
-            })
-            .reduce((sum, t) => sum + (parseFloat(t.valor) || 0), 0);
-          const valorVencido = pendentes
-            .filter(t => {
-              const vencimento = new Date(t.data_vencimento);
-              return vencimento < hoje;
-            })
-            .reduce((sum, t) => sum + (parseFloat(t.valor) || 0), 0);
-
-          const produtosAtivos = produtosList.filter(p => p.ativo).length;
-          const estoqueBaixo = produtosList.filter(p =>
-            p.controla_estoque &&
-            p.estoque_atual_grades <= p.estoque_minimo_grades
-          ).length;
-
-          setStats({
-            totalPedidos,
-            pedidosPendentes,
-            pedidosFinalizados,
-            valorTotalComprado,
-            qtdFaturada,
-            valorFaturado,
-            valorQuebra: valorQuebraTotal,
-            valorAVencer,
-            valorVencido,
-            produtosAtivos,
-            estoqueBaixo
-          });
+          const [recentes, kpis] = await Promise.all([
+            pedidosRecentes({ fornecedor_id: fornecedorId }),
+            kpisDashboard({ fornecedorId, produtosFornecedorId: fornecedorId })
+          ]);
+          pedidosList = recentes;
+          setStats(montarStats(kpis, ['novo_pedido', 'em_analise'], true));
         } else {
           setStats({
             totalPedidos: 0,
@@ -227,65 +157,15 @@ export default function PortalDashboard() {
 
       } else if (currentUser.role === 'admin') {
         // Dashboard Admin
-        const FATURADO_STATUSES = ['faturado', 'em_transporte', 'pendente_pagamento', 'finalizado'];
-        pedidosList = await Pedido.list({ sort: '-created_date', limit: 10 });
-        produtosList = await Produto.list();
-        carteiraList = await Carteira.list();
-
-        const allPedidos = await Pedido.list();
-        const pedidosAtivos = allPedidos.filter(p => p.status !== 'cancelado');
-        const totalPedidos = pedidosAtivos.length;
-        const pedidosPendentes = pedidosAtivos.filter(p =>
-          ['novo_pedido', 'em_analise'].includes(p.status)
-        ).length;
-        const pedidosFinalizados = pedidosAtivos.filter(p => p.status === 'finalizado').length;
-        const valorTotalComprado = pedidosAtivos.reduce((sum, p) => sum + (p.valor_total || 0), 0);
-
-        const pedidosFaturados = pedidosAtivos.filter(p => FATURADO_STATUSES.includes(p.status));
-        const qtdFaturada = pedidosFaturados.length;
-        const valorFaturado = pedidosFaturados.reduce((sum, p) => sum + (parseFloat(p.valor_faturado) || 0), 0);
-        const valorQuebraTotal = pedidosAtivos.reduce((sum, p) => sum + (parseFloat(p.valor_quebra) || 0), 0);
-
-        const hoje = new Date();
-        hoje.setHours(0, 0, 0, 0);
-        const pendentes = carteiraList.filter(t => t.status === 'pendente');
-        const valorAVencer = pendentes
-          .filter(t => {
-            const vencimento = new Date(t.data_vencimento);
-            return vencimento >= hoje;
-          })
-          .reduce((sum, t) => sum + (parseFloat(t.valor) || 0), 0);
-        const valorVencido = pendentes
-          .filter(t => {
-            const vencimento = new Date(t.data_vencimento);
-            return vencimento < hoje;
-          })
-          .reduce((sum, t) => sum + (parseFloat(t.valor) || 0), 0);
-
-        const produtosAtivos = produtosList.filter(p => p.ativo).length;
-        const estoqueBaixo = produtosList.filter(p =>
-          p.controla_estoque &&
-          p.estoque_atual_grades <= p.estoque_minimo_grades
-        ).length;
-
-        setStats({
-          totalPedidos,
-          pedidosPendentes,
-          pedidosFinalizados,
-          valorTotalComprado,
-          qtdFaturada,
-          valorFaturado,
-          valorQuebra: valorQuebraTotal,
-          valorAVencer,
-          valorVencido,
-          produtosAtivos,
-          estoqueBaixo
-        });
+        const [recentes, kpis] = await Promise.all([
+          pedidosRecentes(undefined),
+          kpisDashboard()
+        ]);
+        pedidosList = recentes;
+        setStats(montarStats(kpis, ['novo_pedido', 'em_analise'], true));
       }
 
       setPedidos(pedidosList);
-      setProdutos(produtosList);
-      setCarteira(carteiraList);
 
     } catch (_error) {
     } finally {

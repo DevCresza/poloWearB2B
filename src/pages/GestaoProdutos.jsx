@@ -19,6 +19,16 @@ import { can, PERM } from '@/utils/permissoes';
 import { isAdmin as ehAdmin } from '@/utils/roles';
 import { thumb, usarOriginalSeFalhar } from '@/utils/thumb';
 
+// So o que a lista e os filtros leem. variantes_cor, descricao e o resto do
+// cadastro ficam para o formulario, que busca a linha inteira ao abrir.
+const COLUNAS_LISTA_PRODUTOS = [
+  'id', 'nome', 'referencia_polo', 'referencia_fornecedor', 'fornecedor_id', 'marca', 'categoria',
+  'genero', 'tipo_venda', 'grade_configuracao', 'fotos', 'ativo', 'arquivado', 'is_destaque',
+  'preco_por_peca', 'preco_peca_multimarca', 'preco_grade_completa', 'preco_grade_multimarca',
+  'total_pecas_grade', 'estoque_atual_grades', 'estoque_minimo_grades', 'controla_estoque',
+  'data_prevista_entrega', 'disponivel_multimarca', 'disponivel_franqueado', 'created_at'
+].join(',');
+
 export default function GestaoProdutos() {
   const [user, setUser] = useState(null);
   const [produtos, setProdutos] = useState([]);
@@ -76,7 +86,7 @@ export default function GestaoProdutos() {
 
         if (fornecedor) {
           // Fornecedor vê apenas seus produtos
-          produtosList = await Produto.filter({ fornecedor_id: fornecedorId });
+          produtosList = await Produto.list({ filters: { fornecedor_id: fornecedorId }, columns: COLUNAS_LISTA_PRODUTOS });
           fornecedoresList = [fornecedor];
         } else {
           produtosList = [];
@@ -84,7 +94,7 @@ export default function GestaoProdutos() {
         }
       } else {
         // Admin ou outros veem tudo
-        produtosList = await Produto.list({ sort: '-created_at' });
+        produtosList = await Produto.list({ sort: '-created_at', columns: COLUNAS_LISTA_PRODUTOS });
         fornecedoresList = await Fornecedor.list();
       }
 
@@ -96,12 +106,27 @@ export default function GestaoProdutos() {
     }
   };
 
-  const handleEdit = (produto) => {
+  // A lista vem com as colunas da tabela; o formulario precisa do cadastro
+  // inteiro (variantes_cor, descricao...), entao busca a linha ao abrir.
+  const carregarProdutoCompleto = async (produto) => {
+    try {
+      return await Produto.get(produto.id);
+    } catch (_e) {
+      toast.error('Não foi possível carregar o produto.');
+      return null;
+    }
+  };
+
+  const handleEdit = async (resumo) => {
+    const produto = await carregarProdutoCompleto(resumo);
+    if (!produto) return;
     setEditingProduto(produto);
     setShowForm(true);
   };
 
-  const handleDuplicate = (produto) => {
+  const handleDuplicate = async (resumo) => {
+    const produto = await carregarProdutoCompleto(resumo);
+    if (!produto) return;
     // Criar cópia do produto sem campos que não devem ser copiados
     const { id, created_at, updated_at, ...produtoBase } = produto;
 
