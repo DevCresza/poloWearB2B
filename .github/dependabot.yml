@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "America/Sao_Paulo"
+    open-pull-requests-limit: 5
+    groups:
+      # Patches e minors juntos num PR só; majors vêm separados para revisar.
+      dependencias-menores:
+        update-types:
+          - "minor"
+          - "patch"
