@@ -1,11 +1,28 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// CORS so para os dominios do portal (hotfix 23/11/2026). O wrapper withCors()
+// no Deno.serve coloca o Access-Control-Allow-Origin certo em toda resposta.
+const ALLOWED_ORIGINS = [
+  'https://www.portalpolowear.com.br',
+  'https://portalpolowear.com.br',
+  'https://polo-wear-b2-b.vercel.app',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:4173',
+];
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-my-custom-header',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Vary': 'Origin',
 };
+
+function withCors(req: Request, res: Response): Response {
+  const origin = req.headers.get('Origin') ?? '';
+  res.headers.set('Access-Control-Allow-Origin', ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]);
+  return res;
+}
 
 const json = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), {
@@ -15,7 +32,7 @@ const json = (body: unknown, status: number) =>
 
 const PAPEIS_VALIDOS = ['admin', 'fornecedor', 'multimarca', 'franqueado', 'vendedor', 'cadastro'];
 
-Deno.serve(async (req: Request) => {
+async function handler(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -123,4 +140,6 @@ Deno.serve(async (req: Request) => {
     console.error('Erro create-user:', err);
     return json({ error: 'Erro interno do servidor' }, 500);
   }
-});
+}
+
+Deno.serve(async (req: Request) => withCors(req, await handler(req)));
