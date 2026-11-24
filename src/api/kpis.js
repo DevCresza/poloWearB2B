@@ -4,35 +4,11 @@
 // inteiro (78 MB de JSON, com o itens) so para somar no navegador. As funcoes
 // sao SECURITY INVOKER: cada um continua vendo so o que a RLS ja deixava.
 import { supabase } from '@/lib/supabase';
+import { hojeBR, agoraUTCsemFuso } from '@/utils/dataBR';
 
-const dois = (n) => String(n).padStart(2, '0');
-
-/** 'YYYY-MM-DD' da data LOCAL (nao UTC). */
-export const dataLocalISO = (d = new Date()) =>
-  `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}`;
-
-/**
- * Relogio local sem fuso ('YYYY-MM-DDTHH:mm:ss.SSS'). As datas de pedidos sao
- * timestamp sem fuso e o JS sempre as leu como hora local; para o banco fazer
- * a mesma conta, ele precisa do "agora" no mesmo referencial.
- */
-export const momentoLocalISO = (d = new Date()) =>
-  `${dataLocalISO(d)}T${dois(d.getHours())}:${dois(d.getMinutes())}:${dois(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3, '0')}`;
-
-/**
- * Ultimo dia de vencimento que os dashboards contam como VENCIDO.
- *
- * Os dashboards faziam `new Date(t.data_vencimento) < hojeMeiaNoiteLocal`. A
- * string so-data vira meia-noite UTC, que em Brasilia e 21h do dia anterior:
- * por isso o titulo que vence hoje ja aparecia como vencido. Esta conta
- * reproduz exatamente aquela comparacao, em qualquer fuso, para os numeros nao
- * mudarem com a troca.
- */
-export const corteVencimentoDashboard = (agora = new Date()) => {
-  const hojeZero = new Date(agora);
-  hojeZero.setHours(0, 0, 0, 0);
-  return new Date(hojeZero.getTime() - 1).toISOString().slice(0, 10);
-};
+// Vencido = data_vencimento < hoje (Brasilia). O titulo que vence hoje NAO
+// e vencido, e titulo sem data vai a parte (carteira.sem_vencimento). Ate a
+// T15 os paineis contavam os dois como vencidos.
 
 const rpc = async (nome, params) => {
   const { data, error } = await supabase.rpc(nome, params);
@@ -46,16 +22,19 @@ const rpc = async (nome, params) => {
  */
 export const kpisDashboard = ({ fornecedorId = null, compradorId = null, lojaId = null, produtosFornecedorId = null } = {}) =>
   rpc('kpis_dashboard', {
-    p_corte_vencimento: corteVencimentoDashboard(),
+    p_corte_vencimento: hojeBR(),
     p_fornecedor_id: fornecedorId,
     p_comprador_user_id: compradorId,
     p_loja_id: lojaId,
     p_produtos_fornecedor_id: produtosFornecedorId,
   });
 
-/** Graficos e listas do DashboardAdmin. */
-export const kpisDashboardAdmin = (agora = new Date()) =>
-  rpc('kpis_dashboard_admin', { p_hoje: dataLocalISO(agora), p_agora: momentoLocalISO(agora) });
+/**
+ * Graficos e listas do DashboardAdmin. p_hoje e o dia em Brasilia; p_agora e
+ * o agora em UTC sem fuso, o mesmo referencial das colunas do banco.
+ */
+export const kpisDashboardAdmin = () =>
+  rpc('kpis_dashboard_admin', { p_hoje: hojeBR(), p_agora: agoraUTCsemFuso() });
 
 /** Realizado (valor e pecas) de todas as metas de um mes. */
 export const metasRealizado = (ano, mes) =>
