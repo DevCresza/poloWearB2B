@@ -89,7 +89,7 @@ export default function BannerCarousel({ isAdmin = false }) {
       load();
       setCurrentIdx(0);
     } catch (err) {
-      toast.error('Erro ao excluir.');
+      toast.error(`Erro ao excluir: ${err?.message || 'erro desconhecido'}`);
     }
   };
 

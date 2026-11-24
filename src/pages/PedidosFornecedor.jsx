@@ -9,6 +9,7 @@ import { User } from '@/api/entities';
 import { Carteira, CarteiraTotaisPorFornecedor } from '@/api/entities';
 import { Fornecedor } from '@/api/entities'; // Added import for Fornecedor
 import { Faturamento } from '@/api/entities';
+import { substituirParcelas, avisoPreservadas, avisoAntecipadas } from '@/api/parcelas';
 import { SendEmail, UploadFile } from '@/api/integrations';
 import { devolverEstoque } from '@/utils/estoqueUtils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -90,7 +91,6 @@ export default function PedidosFornecedor() {
   const [showEnvioModal, setShowEnvioModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [detailsDefaultTab, setDetailsDefaultTab] = useState('itens');
-  const [showBoletoModal, setShowBoletoModal] = useState(false);
   const [showItensEditModal, setShowItensEditModal] = useState(false);
   const [showBoletoNFModal, setShowBoletoNFModal] = useState(false);
   const [boletoNFList, setBoletoNFList] = useState([]);
@@ -111,7 +111,6 @@ export default function PedidosFornecedor() {
   const [motivoRecusa, setMotivoRecusa] = useState('');
   const [dataEntrega, setDataEntrega] = useState('');
   const [nfFile, setNfFile] = useState(null);
-  const [boletoFile, setBoletoFile] = useState(null);
   const [nfNumero, setNfNumero] = useState('');
   const [nfDataEmissao, setNfDataEmissao] = useState('');
   const [transportadora, setTransportadora] = useState('');
@@ -127,11 +126,6 @@ export default function PedidosFornecedor() {
   const [freteModoCobr, setFreteModoCobr] = useState('diluido');
 
 
-  // Estados para parcelas do boleto
-  const [qtdParcelas, setQtdParcelas] = useState(1);
-  const [parcelas, setParcelas] = useState([{ dataVencimento: '', boletoFile: null }]);
-  const [boletoUnico, setBoletoUnico] = useState(false);
-  const [boletoUnicoFile, setBoletoUnicoFile] = useState(null);
 
   useEffect(() => {
     // Carga inicial: aqui o spinner e legitimo, nao ha lista na tela ainda.
@@ -371,63 +365,88 @@ export default function PedidosFornecedor() {
 
       await Pedido.update(selectedPedido.id, updateData);
 
-      // Se FOB + incluir no boleto e já existem parcelas, recalcular
+      // Se FOB + incluir no boleto e já existem parcelas, recalcular.
+      // Vai pela RPC substituir_parcelas: preserva as pagas e as em analise e
+      // nao cria jogo em dobro (antes o fornecedor "apagava" sem permissao e
+      // recriava por cima).
+      // Pedido com nota fiscal tem as parcelas por nota. Regra: com UMA nota
+      // cujas parcelas de boleto estao todas pendentes, recalcula pela nota
+      // (parte em boleto da nota + frete, mantendo o faturamento_id). Com
+      // parcela paga/em analise, ou com varias notas (nao da para saber em
+      // qual o frete entra), nao mexe e avisa para reenviar o boleto da nota.
       if (tipoFrete === 'FOB' && freteInclusoBoleto && valorFrete > 0) {
+        const AVISO_FRETE_NOTA = 'Frete salvo no pedido, mas as parcelas não foram recalculadas: '
+          + 'o pedido tem nota fiscal com parcela paga ou em análise, ou mais de uma nota. '
+          + 'Se o frete entra no boleto, reenvie o boleto pela nota.';
         try {
-          const parcelasExistentes = await Carteira.filter({ pedido_id: selectedPedido.id });
-          const parcelasReais = (parcelasExistentes || []).filter(t => t.parcela_numero);
+          const notas = await Faturamento.filter({ pedido_id: selectedPedido.id });
+          const titulos = await Carteira.filter({ pedido_id: selectedPedido.id });
+          const parcelasDoPedido = (titulos || [])
+            .filter(t => t.parcela_numero && !t.faturamento_id)
+            .sort((a, b) => a.parcela_numero - b.parcela_numero);
 
-          if (parcelasReais.length > 0) {
-            const totalParcelas = parcelasReais.length;
+          if ((notas || []).length > 0) {
+            const nota = notas.length === 1 ? notas[0] : null;
+            const parcelasDaNota = nota
+              ? (titulos || [])
+                .filter(t => t.faturamento_id === nota.id && t.parcela_numero && t.parcela_numero < 900
+                  && (!t.metodo_pagamento || ehBoleto(t.metodo_pagamento)))
+                .sort((a, b) => a.parcela_numero - b.parcela_numero)
+              : [];
+            const todasPendentes = parcelasDaNota.length > 0
+              && parcelasDaNota.every(t => t.status !== 'pago' && t.status !== 'em_analise');
 
-            // Deletar parcelas existentes
-            for (const parcela of parcelasExistentes) {
-              await Carteira.delete(parcela.id);
+            // Boleto antecipado do pedido (sem nota) tambem entraria na troca:
+            // ai o fornecedor confere e reenvia pela nota, nao automatico.
+            if (nota && todasPendentes && parcelasDoPedido.length === 0
+                && parcelasDaNota.every(t => t.data_vencimento)) {
+              const totalParcelas = parcelasDaNota.length;
+              // Base e a parte em boleto declarada na nota, nao o valor atual
+              // das parcelas: salvar o envio de novo nao soma o frete 2 vezes.
+              const parteBoleto = parteBoletoDaNota(nota);
+              const valores = freteModoCobr === 'primeiro_boleto' && totalParcelas > 1
+                ? parcelar(parteBoleto, totalParcelas).map((v, i) => (i === 0 ? Math.round((v + valorFrete) * 100) / 100 : v))
+                : parcelar(parteBoleto + valorFrete, totalParcelas);
+              await substituirParcelas({
+                faturamentoId: nota.id,
+                parcelas: parcelasDaNota.map((antiga, i) => ({
+                  parcela_numero: antiga.parcela_numero,
+                  valor: valores[i],
+                  data_vencimento: antiga.data_vencimento,
+                  boleto_url: antiga.boleto_url || null,
+                  metodo_pagamento: antiga.metodo_pagamento || null,
+                  descricao: antiga.descricao || null
+                }))
+              });
+              toast.info(`Parcelas da NF #${nota.numero_nf} recalculadas com o frete.`, { duration: 8000 });
+            } else if ((titulos || []).some(t => t.parcela_numero && t.parcela_numero < 900)) {
+              toast.warning(AVISO_FRETE_NOTA, { duration: 10000 });
             }
-
-            // Recriar com novo valor, respeitando frete_modo_cobranca
-            if (freteModoCobr === 'primeiro_boleto' && totalParcelas > 1) {
-              const valorProdutosParcela = valorProdutos / totalParcelas;
-              for (let i = 0; i < totalParcelas; i++) {
-                const valor = i === 0 ? valorProdutosParcela + valorFrete : valorProdutosParcela;
-                await Carteira.create({
-                  pedido_id: selectedPedido.id,
-                  cliente_user_id: selectedPedido.comprador_user_id,
-                  fornecedor_id: selectedPedido.fornecedor_id,
-                  loja_id: selectedPedido.loja_id,
-                  tipo: 'a_receber',
-                  valor: valor,
-                  data_vencimento: parcelasReais[i]?.data_vencimento,
-                  status: 'pendente',
-                  parcela_numero: i + 1,
-                  total_parcelas: totalParcelas,
-                  boleto_url: parcelasReais[i]?.boleto_url,
-                  descricao: totalParcelas > 1 ? `Parcela ${i + 1}/${totalParcelas} - Pedido #${selectedPedido.id.slice(-8).toUpperCase()}` : `Pedido #${selectedPedido.id.slice(-8).toUpperCase()}`
-                });
-              }
-            } else {
-              // Diluído: valor_final / totalParcelas
-              const valorParcela = valorFinal / totalParcelas;
-              for (let i = 0; i < totalParcelas; i++) {
-                await Carteira.create({
-                  pedido_id: selectedPedido.id,
-                  cliente_user_id: selectedPedido.comprador_user_id,
-                  fornecedor_id: selectedPedido.fornecedor_id,
-                  loja_id: selectedPedido.loja_id,
-                  tipo: 'a_receber',
-                  valor: valorParcela,
-                  data_vencimento: parcelasReais[i]?.data_vencimento,
-                  status: 'pendente',
-                  parcela_numero: i + 1,
-                  total_parcelas: totalParcelas,
-                  boleto_url: parcelasReais[i]?.boleto_url,
-                  descricao: totalParcelas > 1 ? `Parcela ${i + 1}/${totalParcelas} - Pedido #${selectedPedido.id.slice(-8).toUpperCase()}` : `Pedido #${selectedPedido.id.slice(-8).toUpperCase()}`
-                });
-              }
-            }
+          } else if (parcelasDoPedido.length > 0) {
+            const totalParcelas = parcelasDoPedido.length;
+            const numeroCurto = selectedPedido.id.slice(-8).toUpperCase();
+            const valores = freteModoCobr === 'primeiro_boleto' && totalParcelas > 1
+              ? parcelar(valorProdutos, totalParcelas).map((v, i) => (i === 0 ? Math.round((v + valorFrete) * 100) / 100 : v))
+              : parcelar(valorFinal, totalParcelas);
+            const resultado = await substituirParcelas({
+              pedidoId: selectedPedido.id,
+              parcelas: parcelasDoPedido.map((antiga, i) => ({
+                parcela_numero: antiga.parcela_numero,
+                valor: valores[i],
+                data_vencimento: antiga.data_vencimento,
+                boleto_url: antiga.boleto_url || null,
+                metodo_pagamento: antiga.metodo_pagamento || null,
+                descricao: totalParcelas > 1
+                  ? `Parcela ${antiga.parcela_numero}/${totalParcelas} - Pedido #${numeroCurto}`
+                  : `Pedido #${numeroCurto}`
+              }))
+            });
+            const aviso = avisoPreservadas(resultado);
+            if (aviso) toast.info(`Parcelas recalculadas com o frete.${aviso}`, { duration: 8000 });
           }
         } catch (e) {
-          console.warn('Erro ao recalcular parcelas com frete:', e);
+          console.error('Erro ao recalcular parcelas com frete:', e);
+          toast.error(`Envio salvo, mas as parcelas não foram recalculadas com o frete: ${e?.message || 'erro desconhecido'}`, { duration: 10000 });
         }
       }
 
@@ -489,115 +508,6 @@ export default function PedidosFornecedor() {
       loadPedidos({ silencioso: true }); // Changed from loadData
     } catch (error) {
       toast.error('Erro ao alterar método de pagamento');
-    }
-  };
-
-  // Handler para enviar boleto separadamente
-  const handleEnviarBoleto = async () => {
-    if (!boletoFile) {
-      toast.info('Selecione o arquivo do boleto');
-      return;
-    }
-
-    // Validar datas de vencimento das parcelas
-    const datasInvalidas = parcelas.some(p => !p.dataVencimento);
-    if (datasInvalidas) {
-      toast.info('Informe a data de vencimento de todas as parcelas');
-      return;
-    }
-    const checagem = validarVencimentos(parcelas.map(p => p.dataVencimento));
-    if (!checagem.ok) { toast.error(checagem.erro, { duration: 8000 }); return; }
-    if (checagem.aviso && !window.confirm(checagem.aviso)) return;
-
-    setUploading(true);
-    try {
-      const boletoUpload = await UploadFile({ file: boletoFile });
-
-      // Atualizar pedido com boleto e info de parcelas
-      // Resetar confirmação de boleto do cliente ao atualizar
-      await Pedido.update(selectedPedido.id, {
-        boleto_url: boletoUpload.file_url,
-        boleto_data_upload: new Date().toISOString(),
-        qtd_parcelas: qtdParcelas,
-        cliente_confirmou_boleto: false,
-        status_pagamento: 'pendente',
-        parcelas_info: parcelas.map((p, i) => ({
-          numero: i + 1,
-          dataVencimento: p.dataVencimento,
-          boletoUrl: boletoUpload.file_url
-        }))
-      });
-
-      // Excluir TODAS as cobranças existentes do pedido (placeholders e parcelas reais)
-      // Ao atualizar boleto, todas as parcelas anteriores são substituídas pelas novas
-      try {
-        const todasEntradas = await Carteira.filter({ pedido_id: selectedPedido.id });
-        for (const entrada of (todasEntradas || [])) {
-          await Carteira.delete(entrada.id);
-        }
-      } catch (e) {
-        console.warn('Erro ao limpar cobranças anteriores:', e);
-      }
-
-      // Criar títulos na carteira financeira para cada parcela
-      // Usar valor_final se disponível (inclui frete FOB), caso contrário usar valor_total
-      const valorBase = selectedPedido.valor_final || selectedPedido.valor_total;
-      const frete = parseFloat(selectedPedido.valor_frete_fob) || 0;
-      const freteNoBoleto = selectedPedido.frete_incluso_boleto && frete > 0;
-
-      if (freteNoBoleto && selectedPedido.frete_modo_cobranca === 'primeiro_boleto' && qtdParcelas > 1) {
-        // Valor dos produtos dividido igualmente, frete todo na primeira parcela
-        const valorProdutosParcela = (selectedPedido.valor_total || 0) / qtdParcelas;
-        for (let i = 0; i < qtdParcelas; i++) {
-          const valor = i === 0 ? valorProdutosParcela + frete : valorProdutosParcela;
-          await Carteira.create({
-            pedido_id: selectedPedido.id,
-            cliente_user_id: selectedPedido.comprador_user_id,
-            fornecedor_id: selectedPedido.fornecedor_id,
-            loja_id: selectedPedido.loja_id,
-            tipo: 'a_receber',
-            valor: valor,
-            data_vencimento: parcelas[i].dataVencimento,
-            status: 'pendente',
-            parcela_numero: i + 1,
-            total_parcelas: qtdParcelas,
-            boleto_url: boletoUpload.file_url,
-            descricao: qtdParcelas > 1 ? `Parcela ${i + 1}/${qtdParcelas} - Pedido #${selectedPedido.id.slice(-8).toUpperCase()}` : `Pedido #${selectedPedido.id.slice(-8).toUpperCase()}`
-          });
-        }
-      } else {
-        // Fluxo normal: valor_final já inclui frete se diluído
-        const valorParcela = valorBase / qtdParcelas;
-        for (let i = 0; i < qtdParcelas; i++) {
-          await Carteira.create({
-            pedido_id: selectedPedido.id,
-            cliente_user_id: selectedPedido.comprador_user_id,
-            fornecedor_id: selectedPedido.fornecedor_id,
-            loja_id: selectedPedido.loja_id,
-            tipo: 'a_receber',
-            valor: valorParcela,
-            data_vencimento: parcelas[i].dataVencimento,
-            status: 'pendente',
-            parcela_numero: i + 1,
-            total_parcelas: qtdParcelas,
-            boleto_url: boletoUpload.file_url,
-            descricao: qtdParcelas > 1 ? `Parcela ${i + 1}/${qtdParcelas} - Pedido #${selectedPedido.id.slice(-8).toUpperCase()}` : `Pedido #${selectedPedido.id.slice(-8).toUpperCase()}`
-          });
-        }
-      }
-
-      // Notificação ao cliente é disparada automaticamente pelo webhook notify-pedido
-      toast.success('Boleto enviado com sucesso!');
-      setShowBoletoModal(false);
-      setBoletoFile(null);
-      setQtdParcelas(1);
-      setParcelas([{ dataVencimento: '', boletoFile: null }]);
-      loadPedidos({ silencioso: true });
-    } catch (error) {
-      console.error('Erro ao enviar boleto:', error);
-      toast.error('Erro ao enviar boleto');
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -1192,6 +1102,34 @@ export default function PedidosFornecedor() {
         }
       }
 
+      // Parcelas primeiro: se a troca for recusada (permissao, soma acima da
+      // nota...), a nota nao fica apontando para um boleto que nao vale.
+      // Reenviar o boleto da MESMA NF substitui as parcelas anteriores numa
+      // transacao so (RPC substituir_parcelas): pagas e em analise ficam, as
+      // partes a vista/cartao/pix da nota (titulos 900+) nao sao tocadas.
+      let resultado = null;
+      if (temDatas) {
+        const metodoBoleto = linhasPagamento.find(l => ehBoleto(l.metodo))?.metodo
+          || boletoNFSelected.metodo_pagamento
+          || selectedPedido.metodo_pagamento || 'boleto';
+
+        resultado = await substituirParcelas({
+          faturamentoId: boletoNFSelected.id,
+          parcelas: Array.from({ length: boletoNFQtdParcelas }, (_, i) => ({
+            parcela_numero: i + 1,
+            valor: valoresParcelas[i],
+            data_vencimento: boletoNFParcelas[i].dataVencimento,
+            metodo_pagamento: metodoBoleto,
+            // Fallback defensivo: se por algum motivo faltar URL para esta
+            // posicao, a parcela nasce com o primeiro boleto em vez de sem nenhum.
+            boleto_url: urlsPorParcela[i] || urlsPorParcela[0],
+            descricao: boletoNFQtdParcelas > 1
+              ? `Parcela ${i + 1}/${boletoNFQtdParcelas} - NF #${boletoNFSelected.numero_nf}`
+              : `Boleto - NF #${boletoNFSelected.numero_nf}`
+          }))
+        });
+      }
+
       // faturamentos.boleto_url e uma coluna so: guarda o primeiro, para o link
       // da NF continuar abrindo algo. A verdade por parcela fica em
       // carteira.boleto_url, que e de onde o cliente baixa o dele.
@@ -1200,54 +1138,10 @@ export default function PedidosFornecedor() {
         boleto_data_upload: new Date().toISOString(),
         qtd_parcelas: boletoNFQtdParcelas
       });
-      // Criar parcelas na carteira
-      if (temDatas) {
-        // Reenviar o boleto da MESMA NF substitui as parcelas anteriores. Sem
-        // isso, cada reenvio (tipico quando se corrige uma data de vencimento)
-        // criava um novo jogo de titulos e o cliente aparecia devendo o dobro
-        // ou o triplo — virando "inadimplente" sem dever nada.
-        const jaExistentes = await Carteira.filter({ faturamento_id: boletoNFSelected.id });
-        const numerosPagos = new Set();
-        for (const antiga of (jaExistentes || [])) {
-          if (!antiga.parcela_numero) continue;
-          // So os titulos DE BOLETO sao refeitos aqui. A parte paga a vista,
-          // no cartao ou em pix virou titulo na hora de faturar e nao tem nada
-          // a ver com este reenvio -- apagar junto sumiria com a cobranca.
-          if (antiga.metodo_pagamento && !ehBoleto(antiga.metodo_pagamento)) continue;
-          if (antiga.status === 'pago') numerosPagos.add(antiga.parcela_numero);
-          else await Carteira.delete(antiga.id);
-        }
-
-        const metodoBoleto = linhasPagamento.find(l => ehBoleto(l.metodo))?.metodo
-          || boletoNFSelected.metodo_pagamento
-          || selectedPedido.metodo_pagamento || 'boleto';
-
-        for (let i = 0; i < boletoNFQtdParcelas; i++) {
-          // Parcela ja quitada nao volta a ser cobrada.
-          if (numerosPagos.has(i + 1)) continue;
-          await Carteira.create({
-            pedido_id: selectedPedido.id,
-            faturamento_id: boletoNFSelected.id,
-            tipo: 'a_receber',
-            status: 'pendente',
-            valor: valoresParcelas[i],
-            data_vencimento: boletoNFParcelas[i].dataVencimento,
-            parcela_numero: i + 1,
-            total_parcelas: boletoNFQtdParcelas,
-            metodo_pagamento: metodoBoleto,
-            // Fallback defensivo: se por algum motivo faltar URL para esta
-            // posicao, a parcela nasce com o primeiro boleto em vez de sem nenhum.
-            boleto_url: urlsPorParcela[i] || urlsPorParcela[0],
-            descricao: boletoNFQtdParcelas > 1
-              ? `Parcela ${i + 1}/${boletoNFQtdParcelas} - NF #${boletoNFSelected.numero_nf}`
-              : `Boleto - NF #${boletoNFSelected.numero_nf}`,
-            loja_id: selectedPedido.loja_id || null,
-            cliente_user_id: selectedPedido.comprador_user_id || null,
-            fornecedor_id: selectedPedido.fornecedor_id || null
-          });
-        }
-
-      }
+      const avisoNF = avisoPreservadas(resultado);
+      if (avisoNF) toast.info(avisoNF.trim(), { duration: 8000 });
+      const avisoAnt = avisoAntecipadas(resultado);
+      if (avisoAnt) toast.warning(avisoAnt, { duration: 15000 });
       toast.success(`Boleto enviado para NF #${boletoNFSelected.numero_nf} (${formatCurrency(parteBoleto)}).`);
       setShowBoletoNFModal(false);
       loadPedidos({ silencioso: true });
@@ -1257,38 +1151,6 @@ export default function PedidosFornecedor() {
     } finally {
       setBoletoNFUploading(false);
     }
-  };
-
-  // Função para atualizar quantidade de parcelas
-  const handleQtdParcelasChange = (qtd) => {
-    const novaQtd = parseInt(qtd) || 1;
-    setQtdParcelas(novaQtd);
-
-    // Calcular datas sugeridas (30 em 30 dias a partir de hoje)
-    const novasParcelas = [];
-    for (let i = 0; i < novaQtd; i++) {
-      const dataBase = new Date();
-      dataBase.setDate(dataBase.getDate() + (30 * (i + 1)));
-      novasParcelas.push({
-        dataVencimento: parcelas[i]?.dataVencimento || dataBase.toISOString().split('T')[0],
-        boletoFile: parcelas[i]?.boletoFile || null
-      });
-    }
-    setParcelas(novasParcelas);
-  };
-
-  // Função para atualizar data de uma parcela específica
-  const handleParcelaDataChange = (index, data) => {
-    const novasParcelas = [...parcelas];
-    novasParcelas[index] = { ...novasParcelas[index], dataVencimento: data };
-    setParcelas(novasParcelas);
-  };
-
-  // Função para atualizar boleto de uma parcela específica
-  const handleParcelaBoletoChange = (index, file) => {
-    const novasParcelas = [...parcelas];
-    novasParcelas[index] = { ...novasParcelas[index], boletoFile: file };
-    setParcelas(novasParcelas);
   };
 
   const resetEnvioForm = () => {
@@ -2454,125 +2316,6 @@ export default function PedidosFornecedor() {
           onUpdate={loadPedidos}
         />
       )}
-
-      {/* Modal de Envio de Boleto */}
-      <Dialog open={showBoletoModal} onOpenChange={setShowBoletoModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Enviar Boleto</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            {selectedPedido?.boleto_url && (
-              <Alert className="bg-green-50 border-green-300">
-                <CheckCircle className="h-4 w-4 text-green-600" />
-                <AlertDescription className="text-green-800">
-                  Este pedido já possui um boleto anexado.
-                  <Button
-                    variant="link"
-                    className="p-0 h-auto ml-2"
-                    onClick={() => abrirUrlSegura(selectedPedido.boleto_url)}
-                  >
-                    Ver boleto atual
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {/* Configuração de Parcelas */}
-            <div className="border rounded-lg p-4 bg-blue-50 space-y-4">
-              <h4 className="font-semibold text-blue-900 flex items-center gap-2">
-                <FileText className="w-4 h-4" />
-                Configuração de Parcelas
-              </h4>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="qtdParcelas">Quantidade de Parcelas</Label>
-                  <Select value={String(qtdParcelas)} onValueChange={handleQtdParcelasChange}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
-                        <SelectItem key={n} value={String(n)}>{n}x</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-end">
-                  <div className="text-sm text-blue-800">
-                    {selectedPedido?.valor_frete_fob > 0 && (
-                      <p className="text-xs text-gray-600">
-                        Produtos: {formatCurrency(selectedPedido?.valor_total)} + Frete: {formatCurrency(selectedPedido?.valor_frete_fob)}
-                      </p>
-                    )}
-                    <p>
-                      <strong>Valor total:</strong> {formatCurrency(selectedPedido?.valor_final || selectedPedido?.valor_total)}
-                    </p>
-                    <p>
-                      <strong>Valor por parcela:</strong> {formatCurrency((selectedPedido?.valor_final || selectedPedido?.valor_total) / qtdParcelas)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Parcelas - datas de vencimento */}
-              <div className="space-y-3">
-                <Label>Datas de Vencimento *</Label>
-                {parcelas.map((parcela, index) => (
-                  <div key={index} className="bg-white p-3 rounded-lg border border-blue-200">
-                    <div className="flex items-center gap-4">
-                      <Badge className="bg-blue-600">Parcela {index + 1}/{qtdParcelas}</Badge>
-                      <span className="text-sm text-gray-600">
-                        {formatCurrency((selectedPedido?.valor_final || selectedPedido?.valor_total) / qtdParcelas)}
-                      </span>
-                      <div className="flex-1">
-                        <Input
-                          type="date"
-                          value={parcela.dataVencimento}
-                          onChange={(e) => handleParcelaDataChange(index, e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="boletoFileModal">Upload do Boleto *</Label>
-              <Input
-                id="boletoFileModal"
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png,.crm"
-                onChange={(e) => setBoletoFile(e.target.files[0])}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                <strong>Formatos aceitos:</strong> PDF, JPG, PNG, CRM
-              </p>
-              <p className="text-xs text-gray-500">
-                O cliente será notificado por email e poderá baixar o boleto pelo sistema.
-              </p>
-            </div>
-
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => {
-                setShowBoletoModal(false);
-                setBoletoFile(null);
-              }}>
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleEnviarBoleto}
-                disabled={uploading || !boletoFile}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                {uploading ? 'Enviando...' : 'Enviar Boleto'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Modal de Atualizar NF */}
       <Dialog open={showAtualizarNFModal} onOpenChange={setShowAtualizarNFModal}>

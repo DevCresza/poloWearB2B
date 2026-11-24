@@ -72,8 +72,8 @@ export default function ConfigWhatsApp() {
     try {
       await WhatsappTemplate.delete(id);
       loadTemplates();
-    } catch (_error) {
-      toast.error('Erro ao excluir template');
+    } catch (error) {
+      toast.error(`Erro ao excluir template: ${error?.message || 'erro desconhecido'}`);
     }
   };
 
