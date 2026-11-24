@@ -12,6 +12,7 @@ import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-route
 import { Loader2 } from 'lucide-react';
 import { AuthProvider } from '@/contexts/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import AtualizacaoPortal from '@/components/AtualizacaoPortal';
 
 const UserManagement = lazyComRecarga(() => import("./UserManagement"));
 const PortalDashboard = lazyComRecarga(() => import("./PortalDashboard"));
@@ -134,6 +135,8 @@ function PagesContent() {
     const currentPage = _getCurrentPage(location.pathname);
 
     return (
+        <>
+        <AtualizacaoPortal />
         <Layout currentPageName={currentPage}>
             <Suspense fallback={<CarregandoPagina />}>
             <Routes>
@@ -177,6 +180,7 @@ function PagesContent() {
             </Routes>
             </Suspense>
         </Layout>
+        </>
     );
 }
 
