@@ -14,3 +14,12 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      # @vitejs/plugin-react 6 exige vite 8 (Rolldown); o projeto esta no vite 6.
+      # A 5.x continua liberada. Remover quando migrarmos para o vite 8.
+      - dependency-name: "@vitejs/plugin-react"
+        versions: [">=6.0.0"]
+      # date-fns 4 conflita com react-day-picker 8 (peer date-fns ^2 || ^3).
+      # Liberar junto com a migracao do calendario para react-day-picker 9.
+      - dependency-name: "date-fns"
+        versions: [">=4.0.0"]
