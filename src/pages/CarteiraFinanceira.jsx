@@ -163,7 +163,9 @@ export default function CarteiraFinanceira() {
       // A view ja vem recortada pela RLS, entao cada um ve o que e seu.
       if (currentUser.role === 'admin' || currentUser.tipo_negocio === 'fornecedor') {
         try {
-          setConferencia(await ConferenciaCobranca.list());
+          // Ordem fixa: a lista vem em paginas de 1000 e, sem ORDER BY, duas
+          // paginas podiam repetir ou pular nota.
+          setConferencia(await ConferenciaCobranca.list({ sort: 'faturamento_id' }));
         } catch (e) {
           // Conferencia e acessoria: se falhar, a carteira abre do mesmo jeito.
           console.warn('Erro ao carregar conferencia NF x titulos:', e);
@@ -219,11 +221,17 @@ export default function CarteiraFinanceira() {
       q = q.eq('cliente_user_id', r.clienteId).eq('cobravel_cliente', true);
       if (r.lojaId) q = q.eq('loja_id', r.lojaId);
     } else if (r.tipo === 'fornecedor') {
-      q = q.eq('fornecedor_id', r.fornecedorId);
+      // So parcelas: o titulo provisorio do checkout (sem parcela_numero) tem
+      // fornecedor_id desde o T19, mas nunca apareceu na carteira do
+      // fornecedor e continua sem aparecer.
+      q = q.eq('fornecedor_id', r.fornecedorId).not('parcela_numero', 'is', null);
     }
 
-    // Fornecedor (múltipla seleção)
-    if (filtrosFornecedor.length > 0) q = q.in('fornecedor_id', filtrosFornecedor);
+    // Fornecedor (múltipla seleção). Mesmo recorte: antes do T19 o provisorio
+    // nao tinha fornecedor_id, entao este filtro so pegava parcelas.
+    if (filtrosFornecedor.length > 0) {
+      q = q.in('fornecedor_id', filtrosFornecedor).not('parcela_numero', 'is', null);
+    }
 
     // Emissão e faturamento do pedido (sem pedido ou sem NF: fica de fora)
     if (filtroEmissaoDe) q = q.gte('pedido_emissao', filtroEmissaoDe);
@@ -596,7 +604,9 @@ export default function CarteiraFinanceira() {
   // parcela_numero, entao a conta dele e so entre os cobraveis.
   const getParcelaInfo = (titulo) => {
     if (!titulo.pedido_id) return null;
-    if (recorte?.tipo === 'cliente') {
+    // Fornecedor tambem conta so entre as parcelas: o provisorio nao e dele
+    // na tela (ver montarConsultaTitulos).
+    if (recorte?.tipo === 'cliente' || recorte?.tipo === 'fornecedor') {
       return {
         numeroParcela: Number(titulo.parcela_ordem_cobraveis) || 0,
         totalParcelas: Number(titulo.parcela_total_cobraveis) || 0
@@ -620,7 +630,7 @@ export default function CarteiraFinanceira() {
         q = q.eq('cliente_user_id', recorte.clienteId).eq('cobravel_cliente', true);
         if (recorte.lojaId) q = q.eq('loja_id', recorte.lojaId);
       } else if (recorte?.tipo === 'fornecedor') {
-        q = q.eq('fornecedor_id', recorte.fornecedorId);
+        q = q.eq('fornecedor_id', recorte.fornecedorId).not('parcela_numero', 'is', null);
       }
       const [pedido, parcelas] = await Promise.all([
         Pedido.get(titulo.pedido_id),
