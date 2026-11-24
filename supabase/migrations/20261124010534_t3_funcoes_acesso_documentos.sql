@@ -3,7 +3,7 @@
 -- Só cria funções e a foto das referências dos arquivos antigos. Não muda
 -- nenhuma policy, bucket ou dado: pode ser aplicada antes do merge do front.
 -- Precisa existir ANTES do sendEmail v11 (que chama documento_acessivel para
--- assinar links de e-mail) e da parte 2 (20261124120100_t3_storage_escrita_por_dono).
+-- assinar links de e-mail) e da parte 2 (20261124011322_t3_storage_escrita_por_dono).
 --
 -- ROLLBACK: nada usa estas funções até a parte 2 e o sendEmail v11. Para
 -- remover: drop function public.pode_escrever_produtos_storage(text),
