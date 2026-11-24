@@ -509,8 +509,9 @@ export default function Carrinho() {
   //
   // A chave de envio fica guardada por fornecedor+loja ate dar certo: um clique
   // duplo (ou um "tentar de novo" depois de a resposta se perder) devolve o
-  // mesmo pedido em vez de criar outro.
-  const criarPedidoParaLoja = async (grupoData, loja, metodo, obs) => {
+  // mesmo pedido em vez de criar outro. Quem chama pode passar a propria chave
+  // (`chaveFixa`): o envio para varias lojas guarda uma por loja no modal.
+  const criarPedidoParaLoja = async (grupoData, loja, metodo, obs, chaveFixa = null) => {
     // Endereco: o servidor tambem confere; aqui e so para avisar antes.
     const enderecoSource = loja || user;
     if (!enderecoSource?.endereco_completo || !enderecoSource.cep || !enderecoSource.cidade || !enderecoSource.estado) {
@@ -521,19 +522,19 @@ export default function Carrinho() {
     }
 
     const chaveId = `${grupoData.fornecedor_id}|${loja?.id || ''}`;
-    if (!chavesEnvio.current[chaveId]) chavesEnvio.current[chaveId] = novaChaveEnvio();
+    if (!chaveFixa && !chavesEnvio.current[chaveId]) chavesEnvio.current[chaveId] = novaChaveEnvio();
 
     try {
       const resultado = await criarPedido({
         carrinho: carrinhoParaPayload(grupoData.itens),
         lojaId: loja?.id || null,
         metodoPagamento: metodo,
-        chave: chavesEnvio.current[chaveId],
+        chave: chaveFixa || chavesEnvio.current[chaveId],
         observacoes: obs || '',
         // `user` e o comprador; so muda quando um vendedor compra pelo cliente.
         compradorUserId: isVendedor ? user.id : null,
       });
-      delete chavesEnvio.current[chaveId];
+      if (!chaveFixa) delete chavesEnvio.current[chaveId];
       return { success: true, pedidoId: resultado?.pedido_id, valorTotal: resultado?.valor_total };
     } catch (err) {
       console.error('Erro ao criar pedido para loja:', err);
