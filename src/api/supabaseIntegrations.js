@@ -1,5 +1,9 @@
 // Integrações reais com Supabase Storage
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import {
+  BUCKET_DOCUMENTOS, EXTENSOES_DOCUMENTO, TAMANHO_MAXIMO_DOCUMENTO,
+  caminhoDocumento, pastaDocumento, tipoDocumento,
+} from '@/utils/documentos';
 
 // Helper para gerar nome de arquivo único
 const generateUniqueFileName = (originalName) => {
@@ -12,88 +16,80 @@ const generateUniqueFileName = (originalName) => {
   return `${cleanBaseName}_${timestamp}_${randomString}.${extension}`;
 };
 
+// Sobe um documento de pedido no bucket `documentos`, na pasta do DONO
+// (fornecedor/<id> ou cliente/<id>). As policies do bucket recusam upload fora
+// da pasta de quem está logado (salvo staff). Ver src/utils/documentos.js.
+const enviarDocumento = async ({ file, dono }) => {
+  if (!isSupabaseConfigured() || !supabase) {
+    throw new Error('Supabase não está configurado');
+  }
+  if (!file) throw new Error('Nenhum arquivo selecionado');
+
+  const contentType = tipoDocumento(file);
+  if (!contentType) {
+    throw new Error(`Tipo de arquivo não permitido. Use ${EXTENSOES_DOCUMENTO.join(', ').toUpperCase()}.`);
+  }
+  if ((file.size || 0) > TAMANHO_MAXIMO_DOCUMENTO) {
+    const mb = (file.size / (1024 * 1024)).toFixed(1);
+    throw new Error(`Arquivo muito grande (${mb} MB). O limite é ${TAMANHO_MAXIMO_DOCUMENTO / (1024 * 1024)} MB.`);
+  }
+
+  const fileName = generateUniqueFileName(file.name);
+  const filePath = `${pastaDocumento(dono)}/${fileName}`;
+
+  const { error } = await supabase.storage
+    .from(BUCKET_DOCUMENTOS)
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      contentType,
+      upsert: false
+    });
+
+  if (error) {
+    console.error('Erro no upload:', error);
+    throw new Error(error.message || 'Erro ao fazer upload do arquivo');
+  }
+
+  return { filePath, fileName, contentType };
+};
+
 export const supabaseIntegrations = {
-  // Upload de arquivo para Supabase Storage
-  UploadFile: async ({ file, folder = 'uploads' }) => {
-    if (!isSupabaseConfigured() || !supabase) {
-      throw new Error('Supabase não está configurado');
-    }
+  // Upload de documento de pedido (NF, XML, boleto, comprovante).
+  // `dono`: { fornecedorId } ou { clienteId } — de quem é o documento.
+  // file_url é a REFERÊNCIA guardada no banco (formato público); para abrir,
+  // use abrirUrlSegura()/urlAssinadaDocumento(), que assinam na hora.
+  UploadFile: async ({ file, dono }) => {
+    const { filePath, fileName, contentType } = await enviarDocumento({ file, dono });
 
-    try {
-      const fileName = generateUniqueFileName(file.name);
-      const filePath = `${folder}/${fileName}`;
+    const { data: urlData } = supabase.storage
+      .from(BUCKET_DOCUMENTOS)
+      .getPublicUrl(filePath);
 
-      // Upload para o bucket 'documentos'
-      const { data, error } = await supabase.storage
-        .from('documentos')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false
-        });
-
-      if (error) {
-        console.error('Erro no upload:', error);
-        throw error;
-      }
-
-      // Obter URL pública do arquivo
-      const { data: urlData } = supabase.storage
-        .from('documentos')
-        .getPublicUrl(filePath);
-
-      return {
-        success: true,
-        file_url: urlData.publicUrl,
-        url: urlData.publicUrl,
-        file_path: filePath,
-        filename: fileName,
-        original_name: file.name,
-        size: file.size || 0,
-        mime_type: file.type || 'application/octet-stream',
-        uploaded_at: new Date().toISOString(),
-      };
-    } catch (error) {
-      console.error('Erro ao fazer upload:', error);
-      throw new Error(error.message || 'Erro ao fazer upload do arquivo');
-    }
+    return {
+      success: true,
+      file_url: urlData.publicUrl,
+      url: urlData.publicUrl,
+      file_path: filePath,
+      filename: fileName,
+      original_name: file.name,
+      size: file.size || 0,
+      mime_type: contentType,
+      uploaded_at: new Date().toISOString(),
+    };
   },
 
-  // Upload de arquivo privado
-  UploadPrivateFile: async ({ file, folder = 'private' }) => {
-    if (!isSupabaseConfigured() || !supabase) {
-      throw new Error('Supabase não está configurado');
-    }
-
-    try {
-      const fileName = generateUniqueFileName(file.name);
-      const filePath = `${folder}/${fileName}`;
-
-      // Upload para o bucket 'documentos-privados' (ou 'documentos' com RLS)
-      const { data, error } = await supabase.storage
-        .from('documentos')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false
-        });
-
-      if (error) {
-        console.error('Erro no upload privado:', error);
-        throw error;
-      }
-
-      return {
-        success: true,
-        file_path: filePath,
-        filename: fileName,
-        original_name: file.name,
-        size: file.size || 0,
-        mime_type: file.type || 'application/octet-stream',
-        uploaded_at: new Date().toISOString(),
-      };
-    } catch (error) {
-      console.error('Erro ao fazer upload privado:', error);
-      throw new Error(error.message || 'Erro ao fazer upload do arquivo');
-    }
+  // Upload sem URL de referência: devolve só o caminho.
+  UploadPrivateFile: async ({ file, dono }) => {
+    const { filePath, fileName, contentType } = await enviarDocumento({ file, dono });
+    return {
+      success: true,
+      file_path: filePath,
+      filename: fileName,
+      original_name: file.name,
+      size: file.size || 0,
+      mime_type: contentType,
+      uploaded_at: new Date().toISOString(),
+    };
   },
 
   // Criar URL assinada para arquivo privado
@@ -104,8 +100,8 @@ export const supabaseIntegrations = {
 
     try {
       const { data, error } = await supabase.storage
-        .from('documentos')
-        .createSignedUrl(file_path, expires_in);
+        .from(BUCKET_DOCUMENTOS)
+        .createSignedUrl(caminhoDocumento(file_path) || file_path, expires_in);
 
       if (error) {
         console.error('Erro ao criar URL assinada:', error);
@@ -133,8 +129,8 @@ export const supabaseIntegrations = {
 
     try {
       const { error } = await supabase.storage
-        .from('documentos')
-        .remove([file_path]);
+        .from(BUCKET_DOCUMENTOS)
+        .remove([caminhoDocumento(file_path) || file_path]);
 
       if (error) {
         console.error('Erro ao deletar arquivo:', error);

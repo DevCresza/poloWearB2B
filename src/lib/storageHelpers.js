@@ -83,6 +83,50 @@ export const uploadImage = async (file, folder = 'produtos') => {
   }
 };
 
+// Arquivos PÚBLICOS do portal que não são foto de produto: banners do catálogo
+// e materiais da página Recursos. Iam para o bucket `documentos` (que fica
+// privado: NF, boleto, comprovante); agora vão para `produtos`, nas pastas
+// banners/ e recursos/, onde só admin escreve (policy do storage).
+const PASTAS_PUBLICAS = ['banners', 'recursos'];
+const TIPOS_PUBLICOS = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif',
+  pdf: 'application/pdf',
+};
+export const TAMANHO_MAXIMO_PUBLICO = 50 * 1024 * 1024; // limite do bucket produtos
+
+/**
+ * Upload de banner ou material de Recursos (só admin).
+ * @param {File|Blob} file
+ * @param {'banners'|'recursos'} pasta
+ * @returns {Promise<{ url: string, file_url: string, path: string }>} lança erro se falhar
+ */
+export const uploadArquivoPublico = async (file, pasta) => {
+  if (!isSupabaseConfigured()) throw new Error('Supabase não está configurado');
+  if (!file) throw new Error('Nenhum arquivo fornecido');
+  if (!PASTAS_PUBLICAS.includes(pasta)) throw new Error('Pasta inválida');
+
+  const nome = file.name || 'arquivo';
+  const ext = nome.includes('.') ? nome.split('.').pop().toLowerCase() : '';
+  const tipoPorNome = TIPOS_PUBLICOS[ext];
+  const tipo = tipoPorNome || (Object.values(TIPOS_PUBLICOS).includes(file.type) ? file.type : null);
+  if (!tipo) throw new Error('Tipo de arquivo não permitido. Use JPG, PNG, WebP, GIF ou PDF.');
+  if ((file.size || 0) > TAMANHO_MAXIMO_PUBLICO) {
+    throw new Error(`Arquivo muito grande. Tamanho máximo: ${TAMANHO_MAXIMO_PUBLICO / (1024 * 1024)} MB`);
+  }
+
+  const extFinal = ext && TIPOS_PUBLICOS[ext] ? ext : (tipo === 'application/pdf' ? 'pdf' : tipo.split('/')[1]);
+  const base = nome.includes('.') ? nome : `${nome}.${extFinal}`;
+  const filePath = `${pasta}/${generateUniqueFileName(base)}`;
+
+  const { error } = await supabase.storage
+    .from(BUCKET_NAME)
+    .upload(filePath, file, { cacheControl: '3600', contentType: tipo, upsert: false });
+  if (error) throw new Error(error.message || 'Erro ao fazer upload');
+
+  const { data: { publicUrl } } = supabase.storage.from(BUCKET_NAME).getPublicUrl(filePath);
+  return { url: publicUrl, file_url: publicUrl, path: filePath };
+};
+
 /**
  * Faz upload de múltiplas imagens
  * @param {FileList|Array<File>} files - Arquivos a serem enviados

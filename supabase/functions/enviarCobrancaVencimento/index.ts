@@ -1,6 +1,12 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// enviarCobrancaVencimento v5 — 24/11/2026 (T3): o bucket `documentos` fica
+// privado, entao o link "Baixar Boleto" deixa de ser a URL publica guardada em
+// carteira.boleto_url e passa a ser uma URL assinada de 60 dias, gerada aqui na
+// hora do envio (decisao do dono). Arquivo sumido ou fora do bucket: link do
+// portal (Carteira Financeira).
+//
 // enviarCobrancaVencimento v4 — hotfix 23/11/2026: fechada.
 //
 // Ate a v3 qualquer pessoa, sem login, disparava a cobranca dos titulos que
@@ -57,6 +63,37 @@ async function autorizado(req: Request, supabase: any): Promise<number> {
   const { data: perfil } = await supabase.from('users').select('role').eq('id', user.id).maybeSingle();
   return perfil?.role === 'admin' ? 200 : 403;
 }
+
+const PORTAL_URL = 'https://www.portalpolowear.com.br';
+const VALIDADE_LINK_EMAIL = 60 * 24 * 60 * 60; // 60 dias
+
+// Caminho no bucket documentos a partir da URL guardada (formato publico).
+function caminhoDocumento(url: unknown): string | null {
+  if (typeof url !== 'string') return null;
+  const base = (Deno.env.get('SUPABASE_URL') ?? '').replace(/\/+$/, '');
+  const prefixo = `${base}/storage/v1/object/public/documentos/`;
+  if (!base || !url.startsWith(prefixo)) return null;
+  const caminho = url.slice(prefixo.length).split(/[?#]/)[0];
+  try {
+    const c = decodeURIComponent(caminho);
+    return c && !c.split('/').some((p) => p === '' || p === '.' || p === '..') ? c : null;
+  } catch {
+    return null;
+  }
+}
+
+// deno-lint-ignore no-explicit-any
+async function linkBoleto(supabase: any, boletoUrl: string): Promise<string> {
+  const caminho = caminhoDocumento(boletoUrl);
+  if (caminho) {
+    const { data, error } = await supabase.storage.from('documentos').createSignedUrl(caminho, VALIDADE_LINK_EMAIL);
+    if (!error && data?.signedUrl) return data.signedUrl;
+    console.warn('Boleto nao assinado, usa link do portal:', error?.message);
+  }
+  return `${PORTAL_URL}/CarteiraFinanceira`;
+}
+
+const escapeAttr = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
 Deno.serve(async (req: Request) => withCors(req, await handler(req)));
 
@@ -132,6 +169,8 @@ async function handler(req: Request): Promise<Response> {
           ? `Parcela ${titulo.parcela_numero}/${titulo.total_parcelas}`
           : 'Pagamento';
 
+        const hrefBoleto = titulo.boleto_url ? escapeAttr(await linkBoleto(supabase, titulo.boleto_url)) : null;
+
         // Enviar email usando Resend ou outro serviço
         const resendApiKey = Deno.env.get('RESEND_API_KEY');
 
@@ -163,9 +202,9 @@ async function handler(req: Request): Promise<Response> {
                       ${titulo.descricao ? `<p style="margin: 5px 0;"><strong>Ref:</strong> ${titulo.descricao}</p>` : ''}
                     </div>
 
-                    ${titulo.boleto_url ? `
+                    ${hrefBoleto ? `
                       <div style="text-align: center; margin-top: 30px;">
-                        <a href="${titulo.boleto_url}" style="display: inline-block; background: #f59e0b; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                        <a href="${hrefBoleto}" style="display: inline-block; background: #f59e0b; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
                           📄 Baixar Boleto
                         </a>
                       </div>

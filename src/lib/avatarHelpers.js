@@ -29,7 +29,9 @@ export const uploadAvatar = async (file, userId) => {
     const timestamp = Date.now();
     const extension = file.name.split('.').pop();
     const fileName = `avatar-${userId}-${timestamp}.${extension}`;
-    const filePath = `avatars/${fileName}`;
+    // Pasta por usuario: a policy do bucket so deixa cada um escrever em
+    // avatars/<proprio id>/ (diagnostico A2 / T3).
+    const filePath = `avatars/${userId}/${fileName}`;
 
 
     // Upload para o bucket 'produtos' na pasta 'avatars'

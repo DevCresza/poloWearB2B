@@ -330,7 +330,7 @@ export default function MeusPedidos() {
     setUploadingComprovante(true);
     try {
       // Upload do arquivo
-      const { file_url } = await UploadFile({ file });
+      const { file_url } = await UploadFile({ file, dono: { clienteId: user?.id } });
 
       // Atualizar título com comprovante
       await Carteira.update(tituloId, {
@@ -364,7 +364,10 @@ export default function MeusPedidos() {
 
     setUploadingComprovante(true);
     try {
-      const { file_url } = await UploadFile({ file: comprovanteFile });
+      const { file_url } = await UploadFile({
+        file: comprovanteFile,
+        dono: { clienteId: selectedTitulo?.cliente_user_id || selectedPedido?.comprador_user_id || user?.id },
+      });
 
       if (selectedTitulo) {
         // Upload para título individual (vindo da Carteira Financeira)

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Banner } from '@/api/entities';
-import { UploadFile } from '@/api/integrations';
+import { uploadArquivoPublico } from '@/lib/storageHelpers';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -62,7 +62,7 @@ export default function BannerCarousel({ isAdmin = false }) {
     setUploading(true);
     try {
       const file = arquivoDoBlob(blob, 'banner');
-      const result = await UploadFile({ file });
+      const result = await uploadArquivoPublico(file, 'banners');
       const url = result.url || result.file_url;
       if (editingBanner) {
         await Banner.update(editingBanner.id, { imagem_url: url });
