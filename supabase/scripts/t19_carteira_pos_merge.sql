@@ -1,5 +1,9 @@
 -- T19: preenchimento definitivo de carteira.fornecedor_id.
 --
+-- EXECUTADO em producao em 24/11/2026 as 20h39 (Brasilia): 7.620 titulos
+-- preenchidos (35 novos foram incluidos no backup antes do UPDATE); depois,
+-- 0 nulos e 0 divergentes do pedido. Nao rodar de novo.
+--
 -- RODAR SO DEPOIS do merge do PR do T19 estar publicado na Vercel (a lista,
 -- a parcela X/Y e os detalhes da Carteira do fornecedor passam a filtrar so
 -- parcelas). E depois das 20h (Brasilia): atualiza ~7.600 linhas da carteira.

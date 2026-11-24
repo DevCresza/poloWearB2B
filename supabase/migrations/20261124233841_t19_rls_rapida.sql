@@ -35,9 +35,8 @@
 -- amostra de linhas sao identicos antes e depois. Numeros no PR.
 -- (M19, movimentacoes_estoque, ja foi em 20261124113754.)
 --
--- PENDENTE: tem DROP POLICY (pede Accept do dono) e trava tabelas por
--- instantes -- aplicar depois das 20h. Renomear o arquivo para a versao que o
--- apply_migration gravar.
+-- Aplicada em producao em 24/11/2026, depois das 20h (versao 20261124233841),
+-- logo apos o teste de equivalencia de novo: 132 comparacoes, nenhuma diferenca.
 --
 -- Rollback: ver o bloco comentado no fim do arquivo.
 
