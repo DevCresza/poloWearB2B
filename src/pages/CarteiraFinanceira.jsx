@@ -28,7 +28,7 @@ import { useLojaContext } from '@/contexts/LojaContext';
 import { Store } from 'lucide-react';
 import { thumb, usarOriginalSeFalhar } from '@/utils/thumb';
 import { supabase } from '@/lib/supabase';
-import { dataLocalISO, corteVencimentoDashboard } from '@/api/kpis';
+import { hojeBR } from '@/utils/dataBR';
 
 export default function CarteiraFinanceira() {
   const { lojaSelecionada, lojas, loading: lojasLoading } = useLojaContext();
@@ -176,11 +176,11 @@ export default function CarteiraFinanceira() {
   };
 
   // Cards sobre o recorte inteiro (nao so a pagina): em aberto, vencido, vence
-  // em 7 dias, pago. Mesma conta de antes: a data de vencimento lida como data
-  // local (parseDataVenc), vencido = antes de hoje.
+  // em 7 dias, pago. Vencido = vencimento antes de hoje (Brasilia); titulo
+  // sem data nao e vencido.
   const carregarResumo = async (r) => {
     const { data, error } = await supabase.rpc('carteira_resumo', {
-      p_hoje: dataLocalISO(),
+      p_hoje: hojeBR(),
       p_cliente_user_id: r.tipo === 'cliente' ? r.clienteId : null,
       p_loja_id: r.tipo === 'cliente' ? r.lojaId : null,
       p_fornecedor_id: r.tipo === 'fornecedor' ? r.fornecedorId : null,
@@ -244,24 +244,28 @@ export default function CarteiraFinanceira() {
       grupos.push(`or(${termos.join(',')})`);
     }
 
-    // Vencimento: a comparacao antiga era de texto, e titulo sem data passava.
+    // Vencimento: so titulos COM data dentro da faixa (ate a T15, titulo sem
+    // data passava em qualquer faixa).
     if (filtroVencimentoDe || filtroVencimentoAte) {
       const faixa = [
         filtroVencimentoDe && `data_vencimento.gte.${filtroVencimentoDe}`,
         filtroVencimentoAte && `data_vencimento.lte.${filtroVencimentoAte}`
       ].filter(Boolean);
-      grupos.push(`or(data_vencimento.is.null,and(${faixa.join(',')}))`);
+      grupos.push(`and(${faixa.join(',')})`);
     }
 
     // Status (múltipla seleção). "vencidos" nao e status real: pendente com
-    // new Date(data) < hoje -- a mesma comparacao em UTC dos dashboards, por
-    // isso o mesmo corte (o que vence hoje ja conta, e sem data tambem).
+    // vencimento ANTES de hoje (Brasilia). O que vence hoje nao conta, e
+    // titulo sem data tem a opcao "sem vencimento".
     if (filtrosStatus.length > 0) {
       const opcoes = [];
-      const reais = filtrosStatus.filter(f => f !== 'vencidos');
+      const reais = filtrosStatus.filter(f => f !== 'vencidos' && f !== 'sem_vencimento');
       if (reais.length > 0) opcoes.push(`status.in.(${reais.map(aspas).join(',')})`);
       if (filtrosStatus.includes('vencidos')) {
-        opcoes.push(`and(status.eq.pendente,or(data_vencimento.is.null,data_vencimento.lte.${corteVencimentoDashboard()}))`);
+        opcoes.push(`and(status.eq.pendente,data_vencimento.lt.${hojeBR()})`);
+      }
+      if (filtrosStatus.includes('sem_vencimento')) {
+        opcoes.push('and(status.eq.pendente,data_vencimento.is.null)');
       }
       grupos.push(`or(${opcoes.join(',')})`);
     }
@@ -370,7 +374,7 @@ export default function CarteiraFinanceira() {
   const handleIniciarAprovacao = (titulo) => {
     setTituloParaAprovar(titulo);
     // Usar data informada pelo cliente como sugestão, ou hoje
-    setDataPagamentoConfirmada(titulo.data_pagamento_informada || new Date().toISOString().split('T')[0]);
+    setDataPagamentoConfirmada(titulo.data_pagamento_informada || hojeBR());
     setShowAprovacaoModal(true);
   };
 
@@ -395,8 +399,7 @@ export default function CarteiraFinanceira() {
         const cliente = await User.get(tituloParaAprovar.cliente_user_id);
 
         const todosTitulos = await Carteira.filter({ cliente_user_id: tituloParaAprovar.cliente_user_id });
-        const hoje = new Date();
-        hoje.setHours(0, 0, 0, 0);
+        const hoje = new Date(`${hojeBR()}T00:00:00`);
 
         // Excluir o título atual (acabou de ser marcado como pago) e os
         // placeholders sem boleto, que nao sao divida cobravel.
@@ -558,8 +561,12 @@ export default function CarteiraFinanceira() {
       return { label: 'Em Análise', color: 'bg-blue-100 text-blue-800', icon: Clock };
     }
 
+    if (!titulo.data_vencimento) {
+      return { label: 'Sem vencimento', color: 'bg-gray-100 text-gray-700', icon: Clock };
+    }
+
     // Normalizar datas para comparação (ignorar horário)
-    const hoje = new Date();
+    const hoje = new Date(`${hojeBR()}T00:00:00`);
     hoje.setHours(0, 0, 0, 0);
     const vencimento = new Date(titulo.data_vencimento + 'T00:00:00');
     const diffDias = Math.ceil((vencimento - hoje) / (1000 * 60 * 60 * 24));
@@ -661,10 +668,9 @@ export default function CarteiraFinanceira() {
       // Preparar dados para exportação
       const exportData = filteredData.map(titulo => {
         // Calcular status de exibição
-        const vencimento = new Date(titulo.data_vencimento);
-        const hoje = new Date();
-        hoje.setHours(0, 0, 0, 0);
-        const isVencido = vencimento < hoje && titulo.status === 'pendente';
+        // Vencido = vencimento antes de hoje (Brasilia); sem data nao e vencido.
+        const isVencido = !!titulo.data_vencimento && titulo.data_vencimento < hojeBR()
+          && titulo.status === 'pendente';
 
         // Tipo: mostrar "Recebido" quando pago, senão traduzir o tipo original
         const tipoLabel = titulo.status === 'pago'
@@ -716,14 +722,14 @@ export default function CarteiraFinanceira() {
           exportData,
           columns,
           'Carteira Financeira - Polo Wear',
-          `carteira_financeira_${new Date().toISOString().split('T')[0]}.pdf`,
+          `carteira_financeira_${hojeBR()}.pdf`,
           { orientation: 'landscape' }
         );
       } else if (format === 'csv') {
         exportToCSV(
           exportData,
           columns,
-          `carteira_financeira_${new Date().toISOString().split('T')[0]}.csv`
+          `carteira_financeira_${hojeBR()}.csv`
         );
       }
     } catch (_error) {
@@ -1018,6 +1024,7 @@ export default function CarteiraFinanceira() {
               options={[
                 { value: 'pendente', label: 'Pendentes' },
                 { value: 'vencidos', label: 'Vencidos' },
+                { value: 'sem_vencimento', label: 'Sem vencimento' },
                 { value: 'pago', label: 'Pagos' },
                 { value: 'em_analise', label: 'Em Análise' }
               ]}
@@ -1287,7 +1294,7 @@ export default function CarteiraFinanceira() {
                 value={dataPagamentoInformada}
                 onChange={(e) => setDataPagamentoInformada(e.target.value)}
                 className="mt-2"
-                max={new Date().toISOString().split('T')[0]}
+                max={hojeBR()}
               />
               <p className="text-xs text-gray-500 mt-1">
                 Informe a data em que o pagamento foi realizado

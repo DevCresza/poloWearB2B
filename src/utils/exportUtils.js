@@ -1,4 +1,5 @@
 import { toast } from 'sonner';
+import { mesBR } from './dataBR';
 // jspdf (+ html2canvas, que ele puxa) e jspdf-autotable pesam ~400 kB: sao
 // carregados so quando alguem exporta um PDF, e nao no bundle inicial de todas
 // as telas (este arquivo e importado por ~20 paginas por causa do formatCurrency).
@@ -276,11 +277,11 @@ export const formatMesAno = (date) => {
 export const getMesEntregaItem = (pedido, item, produtoEntregaMap = {}) => {
   if (item?.mes_entrega) return formatMesAno(`${item.mes_entrega}-01`);
   const entregaProduto = item?.produto_id ? produtoEntregaMap[item.produto_id] : null;
-  return formatMesAno(
-    entregaProduto
-      || pedido?.data_prevista_entrega
-      || pedido?.created_date
-  );
+  const base = entregaProduto || pedido?.data_prevista_entrega || pedido?.created_date;
+  // Mes em Brasilia: created_date e UTC sem fuso (o pedido das 22h do dia 31
+  // e do mes 31, nao do seguinte).
+  const mes = base ? mesBR(base) : '';
+  return mes ? formatMesAno(`${mes}-01`) : '';
 };
 
 /**
@@ -311,7 +312,7 @@ const mesNotaDoItem = (pedido, item) => {
   if (item?.mes_faturamento) return String(item.mes_faturamento).slice(0, 7);
   const meses = pedido?.meses_faturamento;
   if (Array.isArray(meses) && meses.length > 0 && meses[0]) return String(meses[0]).slice(0, 7);
-  if (pedido?.nf_data_upload) return String(pedido.nf_data_upload).slice(0, 7);
+  if (pedido?.nf_data_upload) return mesBR(pedido.nf_data_upload) || null;
   return null;
 };
 
@@ -352,7 +353,8 @@ export const getMesFaturamentoItemKey = (pedido, item, produtoEntregaMap = {}) =
   if (item?.mes_entrega) return String(item.mes_entrega).slice(0, 7);
   const ep = item?.produto_id ? produtoEntregaMap[item.produto_id] : null;
   const base = ep || pedido?.data_prevista_entrega || pedido?.created_date;
-  return base ? String(base).slice(0, 7) : null;
+  // Mes em Brasilia (mesma regra de public.data_br no banco).
+  return base ? (mesBR(base) || null) : null;
 };
 
 /**
@@ -372,7 +374,7 @@ export const getMesesFaturamentoPedido = (pedido, produtoEntregaMap = {}) => {
   }
   // Pedido antigo, com NF no pedido mas sem faturamento registrado.
   if (pedido?.nf_data_upload) {
-    const k = String(pedido.nf_data_upload).slice(0, 7);
+    const k = mesBR(pedido.nf_data_upload);
     return k ? [k] : [];
   }
   // Fonte única: a coluna resolvida no banco. Até 09/11/2026 esta função e a

@@ -38,6 +38,7 @@ import { conferirDivisao, parcelar, valorInformado, ehBoleto, rotuloMetodo, METO
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
 import { pecasDoItem, precoPorPecaDoItem, itemEmGrades } from '@/utils/itemPedido';
+import { dataBR, hojeBR, mesBR } from '@/utils/dataBR';
 
 export default function PedidosFornecedor() {
   // So o que a LISTA, os filtros e os botoes leem. A tela carregava a linha
@@ -669,7 +670,7 @@ export default function PedidosFornecedor() {
       };
     });
 
-    exportToPDF(data, columns, 'Relatório de Pedidos', `pedidos-${new Date().toISOString().split('T')[0]}.pdf`, { orientation: 'landscape' });
+    exportToPDF(data, columns, 'Relatório de Pedidos', `pedidos-${hojeBR()}.pdf`, { orientation: 'landscape' });
   };
 
   const handleExportCSV = () => {
@@ -718,7 +719,7 @@ export default function PedidosFornecedor() {
       };
     });
 
-    exportToCSV(data, columns, `pedidos-${new Date().toISOString().split('T')[0]}.csv`);
+    exportToCSV(data, columns, `pedidos-${hojeBR()}.csv`);
   };
 
   // Extrato detalhado por item (1 linha por item) — visao de faturamento.
@@ -786,6 +787,7 @@ export default function PedidosFornecedor() {
             continue;
           }
           // Regra unica de pecas (utils/itemPedido): item por tamanho ja vem em pecas.
+          const isGrade = itemEmGrades(it);
           const totalItens = pecasDoItem(it);
           const precoBase = Number(it.preco) || 0;
           const precoTotal = Number(it.total) || precoBase * (it.quantidade || 0);
@@ -839,7 +841,7 @@ export default function PedidosFornecedor() {
         { key: 'status_pedido', label: 'STATUS DO PEDIDO' }
       ];
 
-      exportToCSV(linhas, columns, `extrato-itens-${new Date().toISOString().split('T')[0]}.csv`);
+      exportToCSV(linhas, columns, `extrato-itens-${hojeBR()}.csv`);
       toast.success(`Extrato gerado com ${linhas.length} linha(s)`);
     } catch (error) {
       console.error('Erro ao gerar extrato:', error);
@@ -941,7 +943,7 @@ export default function PedidosFornecedor() {
       { key: 'qtd_grades', label: 'Qtd. Grades' }
     ];
 
-    exportToCSV(data, columns, `relatorio-producao-${new Date().toISOString().split('T')[0]}.csv`);
+    exportToCSV(data, columns, `relatorio-producao-${hojeBR()}.csv`);
     toast.success(`Relatório gerado com ${data.length} produto(s)`);
   };
 
@@ -994,7 +996,7 @@ export default function PedidosFornecedor() {
       const novas = prazos.map(dias => {
         const data = new Date(hoje);
         data.setDate(data.getDate() + dias);
-        return { dataVencimento: data.toISOString().split('T')[0], arquivo: null };
+        return { dataVencimento: dataBR(data), arquivo: null };
       });
       setBoletoNFParcelas(novas);
     } else {
@@ -1002,7 +1004,7 @@ export default function PedidosFornecedor() {
       setBoletoNFQtdParcelas(1);
       const data = new Date(hoje);
       data.setDate(data.getDate() + 30);
-      setBoletoNFParcelas([{ dataVencimento: data.toISOString().split('T')[0], arquivo: null }]);
+      setBoletoNFParcelas([{ dataVencimento: dataBR(data), arquivo: null }]);
     }
 
     setBoletoNFLoading(true);
@@ -1026,7 +1028,7 @@ export default function PedidosFornecedor() {
       if (boletoNFParcelas[i]?.dataVencimento) return boletoNFParcelas[i];
       const data = new Date(hoje);
       data.setDate(data.getDate() + 30 * (i + 1));
-      return { dataVencimento: data.toISOString().split('T')[0], arquivo: null };
+      return { dataVencimento: dataBR(data), arquivo: null };
     });
     setBoletoNFParcelas(novas);
   };
@@ -1217,10 +1219,8 @@ export default function PedidosFornecedor() {
 
     let matchesMes = true;
     if (filtroMes !== 'todos') {
-      const dataPedido = new Date(pedido.created_date);
-      const [ano, mes] = filtroMes.split('-');
-      matchesMes = dataPedido.getFullYear() === parseInt(ano) &&
-                   dataPedido.getMonth() + 1 === parseInt(mes);
+      // Mes do pedido em Brasilia (created_date e UTC sem fuso).
+      matchesMes = mesBR(pedido.created_date) === filtroMes;
     }
 
     // Filtro por data de emissão
@@ -1370,7 +1370,7 @@ export default function PedidosFornecedor() {
                 {Array.from({ length: 12 }, (_, i) => {
                   const now = new Date();
                   const data = new Date(now.getFullYear(), now.getMonth() - i, 1);
-                  const valor = data.toISOString().slice(0, 7);
+                  const valor = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`;
                   const label = data.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
                   return (
                     <SelectItem key={`${valor}-${i}`} value={valor}>
@@ -1864,7 +1864,7 @@ export default function PedidosFornecedor() {
                 type="date"
                 value={dataEntrega}
                 onChange={(e) => setDataEntrega(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
+                min={hojeBR()}
               />
             </div>
             <div className="flex justify-end gap-3">
@@ -1965,7 +1965,7 @@ export default function PedidosFornecedor() {
                 type="date"
                 value={dataEnvio}
                 onChange={(e) => setDataEnvio(e.target.value)}
-                max={new Date().toISOString().split('T')[0]}
+                max={hojeBR()}
               />
             </div>
 

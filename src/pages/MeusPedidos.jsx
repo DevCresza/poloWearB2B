@@ -29,7 +29,8 @@ import MultiSelectFilter from '@/components/MultiSelectFilter';
 import { useLojaContext } from '@/contexts/LojaContext';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
-import { pecasDoItem, precoPorPecaDoItem } from '@/utils/itemPedido';
+import { pecasDoItem, precoPorPecaDoItem, itemEmGrades } from '@/utils/itemPedido';
+import { hojeBR } from '@/utils/dataBR';
 
 export default function MeusPedidos() {
   const { lojaSelecionada, lojas, loading: lojasLoading } = useLojaContext();
@@ -462,7 +463,7 @@ export default function MeusPedidos() {
     exportToCSV(
       exportData,
       columns,
-      `meus_pedidos_${new Date().toISOString().split('T')[0]}.csv`
+      `meus_pedidos_${hojeBR()}.csv`
     );
   };
 
@@ -502,6 +503,7 @@ export default function MeusPedidos() {
 
         for (const it of itens) {
           // Regra unica de pecas (utils/itemPedido): item por tamanho ja vem em pecas.
+          const isGrade = itemEmGrades(it);
           const totalItens = pecasDoItem(it);
           const precoBase = Number(it.preco) || 0;
           const precoTotal = Number(it.total) || precoBase * (it.quantidade || 0);
@@ -559,7 +561,7 @@ export default function MeusPedidos() {
         { key: 'status_pedido', label: 'STATUS DO PEDIDO' }
       ];
 
-      exportToCSV(linhas, columns, `extrato-itens-${new Date().toISOString().split('T')[0]}.csv`);
+      exportToCSV(linhas, columns, `extrato-itens-${hojeBR()}.csv`);
       toast.success(`Extrato gerado com ${linhas.length} linha(s)`);
     } catch (error) {
       console.error('Erro ao gerar extrato:', error);
@@ -613,7 +615,7 @@ export default function MeusPedidos() {
       exportData,
       columns,
       `Meus Pedidos - ${user?.empresa || user?.full_name || 'Cliente'}`,
-      `meus_pedidos_${new Date().toISOString().split('T')[0]}.pdf`,
+      `meus_pedidos_${hojeBR()}.pdf`,
       { orientation: 'landscape' }
     );
   };
@@ -1342,7 +1344,7 @@ export default function MeusPedidos() {
                   type="date"
                   value={dataPagamentoComprovante}
                   onChange={(e) => setDataPagamentoComprovante(e.target.value)}
-                  max={new Date().toISOString().split('T')[0]}
+                  max={hojeBR()}
                 />
                 <p className="text-xs text-gray-500 mt-1">Informe a data em que o pagamento foi realizado</p>
               </div>
@@ -1421,7 +1423,7 @@ export default function MeusPedidos() {
                 value={dataConfirmacao}
                 onChange={(e) => setDataConfirmacao(e.target.value)}
                 className="rounded-xl"
-                max={new Date().toISOString().split('T')[0]}
+                max={hojeBR()}
               />
               <p className="text-xs text-gray-500 mt-1">
                 Informe a data em que você recebeu {tipoConfirmacao === 'recebimento' ? 'o produto' : tipoConfirmacao === 'nf' ? 'a nota fiscal' : 'o boleto'}

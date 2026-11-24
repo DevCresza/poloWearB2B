@@ -27,6 +27,7 @@ import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
 import { can, PERM } from '@/utils/permissoes';
 import { pecasDoItem, precoPorPecaDoItem, itemEmGrades } from '@/utils/itemPedido';
+import { hojeBR } from '@/utils/dataBR';
 
 export default function PedidosAdmin() {
   const navigate = useNavigate();
@@ -237,14 +238,14 @@ export default function PedidosAdmin() {
           exportData,
           columns,
           'Relatório de Pedidos - Polo Wear',
-          `pedidos_${new Date().toISOString().split('T')[0]}.pdf`,
+          `pedidos_${hojeBR()}.pdf`,
           { orientation: 'landscape' }
         );
       } else if (format === 'csv') {
         exportToCSV(
           exportData,
           columns,
-          `pedidos_${new Date().toISOString().split('T')[0]}.csv`
+          `pedidos_${hojeBR()}.csv`
         );
       }
     } catch (error) {
@@ -323,6 +324,7 @@ export default function PedidosAdmin() {
             continue;
           }
           // Regra unica de pecas (utils/itemPedido): item por tamanho ja vem em pecas.
+          const isGrade = itemEmGrades(it);
           const totalItens = pecasDoItem(it);
           const precoBase = Number(it.preco) || 0;
           const precoTotal = Number(it.total) || precoBase * (it.quantidade || 0);
@@ -381,7 +383,7 @@ export default function PedidosAdmin() {
         { key: 'status_pedido', label: 'STATUS DO PEDIDO' }
       ];
 
-      exportToCSV(linhas, columns, `extrato-itens-${new Date().toISOString().split('T')[0]}.csv`);
+      exportToCSV(linhas, columns, `extrato-itens-${hojeBR()}.csv`);
       toast.success(`Extrato gerado com ${linhas.length} linha(s)`);
     } catch (error) {
       console.error('Erro ao gerar extrato:', error);
@@ -466,7 +468,7 @@ export default function PedidosAdmin() {
       { key: 'qtd_grades', label: 'Qtd. Grades' }
     ];
 
-    exportToCSV(data, columns, `relatorio-producao-${new Date().toISOString().split('T')[0]}.csv`);
+    exportToCSV(data, columns, `relatorio-producao-${hojeBR()}.csv`);
     toast.success(`Relatório gerado com ${data.length} produto(s)`);
   };
 

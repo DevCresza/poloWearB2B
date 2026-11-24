@@ -13,6 +13,7 @@ import CrmHeader from '../components/crm/CrmHeader';
 import { Users, Clock, MessageCircle, CheckCircle, X, Download } from 'lucide-react';
 import { exportToCSV, exportToPDF, formatDateTime } from '@/utils/exportUtils';
 import { toast } from 'sonner';
+import { hojeBR } from '@/utils/dataBR';
 
 
 export default function CrmDashboard() {
@@ -113,13 +114,13 @@ export default function CrmDashboard() {
           exportData,
           columns,
           'Relatório de Leads - CRM Polo Wear',
-          `leads_crm_${new Date().toISOString().split('T')[0]}.pdf`
+          `leads_crm_${hojeBR()}.pdf`
         );
       } else if (format === 'csv') {
         exportToCSV(
           exportData,
           columns,
-          `leads_crm_${new Date().toISOString().split('T')[0]}.csv`
+          `leads_crm_${hojeBR()}.csv`
         );
       }
     } catch (_error) {
