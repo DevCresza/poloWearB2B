@@ -87,16 +87,14 @@ export default function GestaoEstoque() {
           });
           fornecedoresList = [fornecedor]; // Apenas seu próprio fornecedor
 
-          // Buscar movimentações dos produtos deste fornecedor
-          // (movimentacoes_estoque não tem fornecedor_id, então filtramos por produto_id)
-          const produtoIds = produtosList.map(p => p.id);
-          if (produtoIds.length > 0) {
-            // Buscar todas movimentações e filtrar localmente por produto_id
-            const todasMovimentacoes = await MovimentacaoEstoque.list({ sort: '-created_at', limit: 100 });
-            movimentacoesList = todasMovimentacoes.filter(m => produtoIds.includes(m.produto_id));
-          } else {
-            movimentacoesList = [];
-          }
+          // Movimentacoes deste fornecedor. Desde o T19 a tabela tem
+          // fornecedor_id (preenchido pelo banco a partir do produto) e a RLS
+          // ja recorta; o filtro aqui so deixa a consulta usar o indice.
+          movimentacoesList = await MovimentacaoEstoque.list({
+            filters: { fornecedor_id: fornecedorId },
+            sort: '-created_at',
+            limit: 100
+          });
         } else {
           produtosList = [];
           fornecedoresList = [];

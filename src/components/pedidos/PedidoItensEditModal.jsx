@@ -273,7 +273,12 @@ Valor: ${formatCurrency(valorAtual)} → ${formatCurrency(novoValorTotal)}`;
 
       // 6) Carteira: redistribui valor pelos títulos pendentes
       try {
-        const titulos = await Carteira.filter({ pedido_id: pedido.id });
+        const todosTitulos = await Carteira.filter({ pedido_id: pedido.id });
+        // Com parcela emitida, a conta e so entre as parcelas: o titulo
+        // provisorio do checkout nao entra na divisao (o admin ja o via e o
+        // fornecedor passa a ve-lo com o fornecedor_id do T19).
+        const temParcela = (todosTitulos || []).some(t => t.parcela_numero);
+        const titulos = temParcela ? todosTitulos.filter(t => t.parcela_numero) : todosTitulos;
         if (titulos && titulos.length > 0) {
           const pendentes = titulos.filter(t => t.status === 'pendente');
           const pagos = titulos.filter(t => t.status === 'pago');
