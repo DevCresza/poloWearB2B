@@ -96,7 +96,7 @@ export default function GestaoCapsulas() {
         await Capsula.delete(capsulaId);
         loadCapsulas();
       } catch (error) {
-        toast.error('Falha ao excluir a cápsula.');
+        toast.error(`Falha ao excluir a cápsula: ${error?.message || 'erro desconhecido'}`);
       }
     }
   };

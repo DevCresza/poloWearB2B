@@ -1,6 +1,11 @@
 // Autenticação com Supabase
 import { supabase, isSupabaseConfigured, handleAuthError, clearAuthStorage } from '@/lib/supabase';
 import { mockAuth } from './mockAuth';
+import { createSupabaseEntity } from './supabaseEntities';
+
+// Mesma camada das outras tabelas: lista paginada (com desempate por id),
+// erro com code preservado e erro quando update/delete nao afetam nenhuma linha.
+const usersTabela = createSupabaseEntity('users');
 
 // Se Supabase não configurado, usa mock
 if (!isSupabaseConfigured()) {
@@ -264,38 +269,12 @@ export const supabaseAuth = {
   },
 
   // List - Listar usuários (para admin)
+  // Antes cortava em 1000 linhas sem avisar (o Supabase devolve no maximo
+  // 1000 por requisicao). Agora pagina como as outras entidades (M3).
+  // options.columns traz so as colunas pedidas.
   async list(options = {}) {
     if (isSupabaseConfigured()) {
-      try {
-        let query = supabase.from('users').select('*');
-
-        // Aplicar filtros
-        if (options.filters) {
-          Object.entries(options.filters).forEach(([key, value]) => {
-            query = query.eq(key, value);
-          });
-        }
-
-        // Aplicar ordenação
-        if (options.sort) {
-          const isDesc = options.sort.startsWith('-');
-          const field = isDesc ? options.sort.substring(1) : options.sort;
-          query = query.order(field, { ascending: !isDesc });
-        }
-
-        // Aplicar limite
-        if (options.limit) {
-          query = query.limit(options.limit);
-        }
-
-        const { data, error } = await query;
-
-        if (error) throw error;
-
-        return data;
-      } catch (error) {
-        throw new Error(error.message);
-      }
+      return await usersTabela.list(options);
     }
 
     // Fallback para Mock
@@ -315,20 +294,7 @@ export const supabaseAuth = {
   // Update - Atualizar usuário (para admin)
   async update(userId, updates) {
     if (isSupabaseConfigured()) {
-      try {
-        const { data, error } = await supabase
-          .from('users')
-          .update(updates)
-          .eq('id', userId)
-          .select()
-          .single();
-
-        if (error) throw error;
-
-        return data;
-      } catch (error) {
-        throw new Error(error.message);
-      }
+      return await usersTabela.update(userId, updates);
     }
 
     // Fallback para Mock
@@ -339,20 +305,9 @@ export const supabaseAuth = {
   },
 
   // Get - Buscar usuário por ID
-  async get(id) {
+  async get(id, options = {}) {
     if (isSupabaseConfigured()) {
-      try {
-        const { data, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', id)
-          .single();
-
-        if (error) throw error;
-        return data;
-      } catch (error) {
-        throw new Error(error.message);
-      }
+      return await usersTabela.get(id, options);
     }
     throw new Error('Método não implementado');
   },
@@ -360,18 +315,8 @@ export const supabaseAuth = {
   // Delete - Excluir usuário (para admin)
   async delete(userId) {
     if (isSupabaseConfigured()) {
-      try {
-        const { error } = await supabase
-          .from('users')
-          .delete()
-          .eq('id', userId);
-
-        if (error) throw error;
-
-        return true;
-      } catch (error) {
-        throw new Error(error.message);
-      }
+      await usersTabela.delete(userId);
+      return true;
     }
 
     // Fallback para Mock

@@ -1,20 +1,64 @@
 // Supabase Entities - Entidades que usam APENAS Supabase (sem fallback para Mock)
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
+// Mensagens para os codigos que o usuario de fato encontra. O resto segue com a
+// mensagem do banco -- as travas (triggers) ja levantam texto em portugues.
+const MENSAGEM_POR_CODIGO = {
+  '23505': 'Já existe um registro igual (duplicado).',
+  '23503': 'O registro está ligado a outros dados e não pode ser alterado ou excluído.',
+  '42501': 'Sem permissão para esta operação.',
+};
+
+/**
+ * Erro da camada de entidades. Preserva code/details/hint do PostgREST/Postgres
+ * (antes eram descartados e o 23505 de duplicidade nunca chegava a tela).
+ */
+export class EntidadeError extends Error {
+  constructor(acao, tableName, original) {
+    const code = original?.code;
+    const texto = MENSAGEM_POR_CODIGO[code] || original?.message || 'erro desconhecido';
+    super(`Erro ao ${acao} ${tableName}: ${texto}`);
+    this.name = 'EntidadeError';
+    this.code = code;
+    this.details = original?.details;
+    this.hint = original?.hint;
+    this.cause = original;
+  }
+}
+
+// Codigo proprio para "a operacao rodou e nao afetou nenhuma linha". Com RLS
+// e isso que acontece quando o usuario nao tem permissao: o banco nao da erro,
+// so nao apaga/altera nada -- e a tela dizia "excluido com sucesso".
+export const SEM_LINHAS = 'SEM_LINHAS';
+
+const semLinhas = (acao) => ({
+  code: SEM_LINHAS,
+  message: `nenhum registro foi ${acao}. Ele não existe mais ou você não tem permissão para isso.`,
+});
+
+const exigirConfig = () => {
+  if (!isSupabaseConfigured()) {
+    throw new Error('❌ Supabase não configurado. Verifique as variáveis de ambiente.');
+  }
+};
+
 /**
  * Cria uma entidade Supabase com métodos CRUD
  * @param {string} tableName - Nome da tabela no Supabase
+ * @param {object} [config]
+ * @param {string[]} [config.chave] - colunas que identificam a linha, usadas
+ *   como desempate na ordenacao da paginacao. Padrao ['id']; views sem id
+ *   informam a propria chave.
  */
-const createSupabaseEntity = (tableName) => {
+export const createSupabaseEntity = (tableName, config = {}) => {
+  const chave = config.chave || ['id'];
   return {
     /**
      * Listar registros
      * @param {object} options - Opções de filtro, ordenação, etc
      */
     async list(options = {}) {
-      if (!isSupabaseConfigured()) {
-        throw new Error('❌ Supabase não configurado. Verifique as variáveis de ambiente.');
-      }
+      exigirConfig();
 
       try {
         // Monta a query base (filtros + ordenacao). Reconstruida a cada pagina
@@ -31,10 +75,17 @@ const createSupabaseEntity = (tableName) => {
               q = q.eq(key, value);
             });
           }
+          let campoOrdem = null;
           if (options.sort) {
             const isDesc = options.sort.startsWith('-');
-            const field = isDesc ? options.sort.substring(1) : options.sort;
-            q = q.order(field, { ascending: !isDesc });
+            campoOrdem = isDesc ? options.sort.substring(1) : options.sort;
+            q = q.order(campoOrdem, { ascending: !isDesc });
+          }
+          // Desempate pela chave: sem ele, linhas com o mesmo valor de
+          // ordenacao (ou sem ordenacao nenhuma) podem trocar de lugar entre
+          // uma pagina e outra, e a lista repete ou pula registros (M2).
+          for (const col of chave) {
+            if (col !== campoOrdem) q = q.order(col, { ascending: true });
           }
           return q;
         };
@@ -97,7 +148,7 @@ const createSupabaseEntity = (tableName) => {
         }
         return todos;
       } catch (error) {
-        throw new Error(`Erro ao listar ${tableName}: ${error.message}`);
+        throw new EntidadeError('listar', tableName, error);
       }
     },
 
@@ -116,10 +167,8 @@ const createSupabaseEntity = (tableName) => {
      * Existe para telas que precisam de poucos registros de uma tabela grande
      * (ex: os produtos de UM pedido) sem baixar a tabela inteira.
      */
-    async listByIds(ids = []) {
-      if (!isSupabaseConfigured()) {
-        throw new Error('❌ Supabase não configurado. Verifique as variáveis de ambiente.');
-      }
+    async listByIds(ids = [], options = {}) {
+      exigirConfig();
 
       const unicos = [...new Set((ids || []).filter(Boolean))];
       if (unicos.length === 0) return [];
@@ -131,29 +180,28 @@ const createSupabaseEntity = (tableName) => {
         for (let i = 0; i < unicos.length; i += LOTE) {
           const { data, error } = await supabase
             .from(tableName)
-            .select('*')
+            .select(options.columns || '*')
             .in('id', unicos.slice(i, i + LOTE));
           if (error) throw error;
           todos = todos.concat(data || []);
         }
         return todos;
       } catch (error) {
-        throw new Error(`Erro ao listar ${tableName}: ${error.message}`);
+        throw new EntidadeError('listar', tableName, error);
       }
     },
 
     /**
      * Obter registro por ID
+     * @param {object} [options] - { columns } para trazer so parte das colunas
      */
-    async get(id) {
-      if (!isSupabaseConfigured()) {
-        throw new Error('❌ Supabase não configurado. Verifique as variáveis de ambiente.');
-      }
+    async get(id, options = {}) {
+      exigirConfig();
 
       try {
         const { data, error } = await supabase
           .from(tableName)
-          .select('*')
+          .select(options.columns || '*')
           .eq('id', id)
           .single();
 
@@ -161,7 +209,7 @@ const createSupabaseEntity = (tableName) => {
 
         return data;
       } catch (error) {
-        throw new Error(`Erro ao buscar ${tableName}: ${error.message}`);
+        throw new EntidadeError('buscar', tableName, error);
       }
     },
 
@@ -169,9 +217,7 @@ const createSupabaseEntity = (tableName) => {
      * Criar novo registro
      */
     async create(data) {
-      if (!isSupabaseConfigured()) {
-        throw new Error('❌ Supabase não configurado. Verifique as variáveis de ambiente.');
-      }
+      exigirConfig();
 
       try {
         const { data: created, error } = await supabase
@@ -184,7 +230,7 @@ const createSupabaseEntity = (tableName) => {
 
         return created;
       } catch (error) {
-        throw new Error(`Erro ao criar ${tableName}: ${error.message}`);
+        throw new EntidadeError('criar', tableName, error);
       }
     },
 
@@ -192,23 +238,22 @@ const createSupabaseEntity = (tableName) => {
      * Atualizar registro
      */
     async update(id, data) {
-      if (!isSupabaseConfigured()) {
-        throw new Error('❌ Supabase não configurado. Verifique as variáveis de ambiente.');
-      }
+      exigirConfig();
 
       try {
-        const { data: updated, error } = await supabase
+        const { data: linhas, error } = await supabase
           .from(tableName)
           .update(data)
           .eq('id', id)
-          .select()
-          .single();
+          .select();
 
         if (error) throw error;
+        // RLS que nao deixa alterar devolve 0 linhas, sem erro.
+        if (!linhas || linhas.length === 0) throw semLinhas('alterado');
 
-        return updated;
+        return linhas[0];
       } catch (error) {
-        throw new Error(`Erro ao atualizar ${tableName}: ${error.message}`);
+        throw new EntidadeError('atualizar', tableName, error);
       }
     },
 
@@ -216,21 +261,23 @@ const createSupabaseEntity = (tableName) => {
      * Deletar registro
      */
     async delete(id) {
-      if (!isSupabaseConfigured()) {
-        throw new Error('❌ Supabase não configurado. Verifique as variáveis de ambiente.');
-      }
+      exigirConfig();
 
       try {
-        const { error } = await supabase
+        const { data: apagados, error } = await supabase
           .from(tableName)
           .delete()
-          .eq('id', id);
+          .eq('id', id)
+          .select('id');
 
         if (error) throw error;
+        // RLS que nao deixa apagar devolve 0 linhas, sem erro. Era assim que o
+        // "apagar" do fornecedor falhava em silencio (C6).
+        if (!apagados || apagados.length === 0) throw semLinhas('excluído');
 
         return { id };
       } catch (error) {
-        throw new Error(`Erro ao deletar ${tableName}: ${error.message}`);
+        throw new EntidadeError('excluir', tableName, error);
       }
     },
 
@@ -238,9 +285,7 @@ const createSupabaseEntity = (tableName) => {
      * Contar registros
      */
     async count(filters = {}) {
-      if (!isSupabaseConfigured()) {
-        throw new Error('❌ Supabase não configurado. Verifique as variáveis de ambiente.');
-      }
+      exigirConfig();
 
       try {
         let query = supabase.from(tableName).select('*', { count: 'exact', head: true });
@@ -257,7 +302,7 @@ const createSupabaseEntity = (tableName) => {
 
         return count;
       } catch (error) {
-        throw new Error(`Erro ao contar ${tableName}: ${error.message}`);
+        throw new EntidadeError('contar', tableName, error);
       }
     },
   };
@@ -283,11 +328,11 @@ export const Carteira = createSupabaseEntity('carteira');
 // View (security_invoker): totais da carteira quebrados por cliente E
 // fornecedor. users.total_vencido soma todos os fornecedores e nao serve
 // para a tela do fornecedor. Somente leitura.
-export const CarteiraTotaisPorFornecedor = createSupabaseEntity('carteira_totais_cliente_fornecedor');
+export const CarteiraTotaisPorFornecedor = createSupabaseEntity('carteira_totais_cliente_fornecedor', { chave: ['cliente_user_id', 'fornecedor_id'] });
 // View (security_invoker): conferencia de cobranca por NF -- confronta a
 // nota com o pedido E com os titulos. Somente leitura; ja vem recortada
 // pela RLS de faturamentos/carteira.
-export const ConferenciaCobranca = createSupabaseEntity('vw_conferencia_cobranca');
+export const ConferenciaCobranca = createSupabaseEntity('vw_conferencia_cobranca', { chave: ['faturamento_id'] });
 export const Meta = createSupabaseEntity('metas');
 export const UserTable = createSupabaseEntity('users'); // Tabela users (CRUD - diferente de User auth)
 export const Notificacao = createSupabaseEntity('notificacoes');

@@ -228,7 +228,7 @@ export default function GestaoMetas() {
       loadData();
     } catch (error) {
       console.error('Erro ao excluir meta:', error);
-      toast.error('Erro ao excluir meta');
+      toast.error(`Erro ao excluir meta: ${error?.message || 'erro desconhecido'}`);
     }
   };
 

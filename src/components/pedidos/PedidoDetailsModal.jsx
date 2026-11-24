@@ -21,6 +21,7 @@ import { Pedido, Produto } from '@/api/entities';
 import { Carteira } from '@/api/entities';
 import { Loja, Fornecedor } from '@/api/entities';
 import { Faturamento } from '@/api/entities';
+import { substituirParcelas, avisoPreservadas } from '@/api/parcelas';
 import { PedidoHistorico } from '@/api/entities';
 import { UploadFile } from '@/api/integrations';
 import { formatDateTime, formatCurrency, getMesesEntregaPedido, getMesesFaturamentoPedido, formatMesAno } from '@/utils/exportUtils';
@@ -257,6 +258,10 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     return linhas.filter(l => ehBoleto(l.metodo)).reduce((s2, l) => s2 + (Number(l.valor) || 0), 0);
   };
 
+  // Pedido com nota fiscal tem as parcelas por nota. Boleto "do pedido" por
+  // cima criava um segundo jogo de titulos para a mesma divida.
+  const AVISO_BOLETO_PELA_NOTA = 'Este pedido tem nota fiscal: envie ou atualize o boleto pela nota, na seção Notas Fiscais.';
+
   const handleBoletoFatDataChange = (index, value) => {
     const novas = [...boletoFatParcelas];
     novas[index] = { ...novas[index], dataVencimento: value };
@@ -301,58 +306,38 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     setUploadingBoletoFat(true);
     try {
       const result = await UploadFile({ file: boletoFatFile });
-      // Update faturamento with boleto info
+
+      // Parcelas primeiro (RPC substituir_parcelas, numa transacao): reenviar o
+      // boleto da MESMA NF substitui as parcelas anteriores, mantendo as pagas e
+      // as em analise; as partes a vista/cartao/pix da nota nao sao tocadas.
+      // Se a troca for recusada, a nota nao fica apontando para o boleto novo.
+      let resultado = null;
+      if (temParcelasConfiguradas) {
+        const metodoBoleto = linhasPagamento.find(l => ehBoleto(l.metodo))?.metodo
+          || fat.metodo_pagamento || pedido.metodo_pagamento || 'boleto';
+
+        resultado = await substituirParcelas({
+          faturamentoId: fat.id,
+          parcelas: Array.from({ length: boletoFatQtdParcelas }, (_, i) => ({
+            parcela_numero: i + 1,
+            valor: valoresParcelas[i],
+            data_vencimento: boletoFatParcelas[i].dataVencimento,
+            metodo_pagamento: metodoBoleto,
+            boleto_url: result.file_url,
+            descricao: boletoFatQtdParcelas > 1
+              ? `Parcela ${i + 1}/${boletoFatQtdParcelas} - NF #${fat.numero_nf}`
+              : `Boleto - NF #${fat.numero_nf}`
+          }))
+        });
+      }
+
       await Faturamento.update(fat.id, {
         boleto_url: result.file_url,
         boleto_data_upload: new Date().toISOString(),
         qtd_parcelas: boletoFatQtdParcelas
       });
-
-      // Create parcelas in carteira linked to this faturamento
-      if (temParcelasConfiguradas) {
-        // Reenviar o boleto da MESMA NF substitui as parcelas anteriores. Sem
-        // isso, cada reenvio (tipico quando o fornecedor corrige uma data)
-        // criava um novo jogo de titulos e o cliente aparecia devendo o dobro
-        // ou o triplo — virando "inadimplente" sem dever nada.
-        const jaExistentes = await Carteira.filter({ faturamento_id: fat.id });
-        const numerosPagos = new Set();
-        for (const antiga of (jaExistentes || [])) {
-          if (!antiga.parcela_numero) continue;
-          // So os titulos DE BOLETO sao refeitos aqui. A parte paga a vista,
-          // no cartao ou em pix virou titulo na hora de faturar e nao tem nada
-          // a ver com este reenvio -- apagar junto sumiria com a cobranca.
-          if (antiga.metodo_pagamento && !ehBoleto(antiga.metodo_pagamento)) continue;
-          if (antiga.status === 'pago') numerosPagos.add(antiga.parcela_numero);
-          else await Carteira.delete(antiga.id);
-        }
-
-        const metodoBoleto = linhasPagamento.find(l => ehBoleto(l.metodo))?.metodo
-          || fat.metodo_pagamento || pedido.metodo_pagamento || 'boleto';
-
-        for (let i = 0; i < boletoFatQtdParcelas; i++) {
-          // Parcela ja quitada nao volta a ser cobrada.
-          if (numerosPagos.has(i + 1)) continue;
-          await Carteira.create({
-            pedido_id: pedido.id,
-            faturamento_id: fat.id,
-            tipo: 'a_receber',
-            status: 'pendente',
-            valor: valoresParcelas[i],
-            data_vencimento: boletoFatParcelas[i].dataVencimento,
-            parcela_numero: i + 1,
-            total_parcelas: boletoFatQtdParcelas,
-            metodo_pagamento: metodoBoleto,
-            boleto_url: result.file_url,
-            descricao: boletoFatQtdParcelas > 1
-              ? `Parcela ${i + 1}/${boletoFatQtdParcelas} - NF #${fat.numero_nf}`
-              : `Boleto - NF #${fat.numero_nf}`,
-            loja_id: pedido.loja_id || null,
-            cliente_user_id: pedido.comprador_user_id || null,
-            fornecedor_id: pedido.fornecedor_id || null
-          });
-        }
-
-      }
+      const avisoNF = avisoPreservadas(resultado);
+      if (avisoNF) toast.info(avisoNF.trim(), { duration: 8000 });
 
       toast.success(`Boleto enviado para NF #${fat.numero_nf} (${formatCurrency(parteBoleto)}).`);
       setBoletoFatId(null);
@@ -367,7 +352,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       if (onUpdate) onUpdate();
     } catch (error) {
       console.error('Erro ao enviar boleto para faturamento:', error);
-      toast.error('Erro ao enviar boleto');
+      toast.error(`Erro ao enviar boleto: ${error?.message || 'erro desconhecido'}`, { duration: 10000 });
     } finally {
       setUploadingBoletoFat(false);
     }
@@ -482,12 +467,19 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   };
 
   const handleOpenEditBoleto = () => {
+    if (faturamentos.length > 0) {
+      toast.info(AVISO_BOLETO_PELA_NOTA, { duration: 8000 });
+      return;
+    }
     if (parcelas.length > 0) {
       setQtdParcelasBoleto(parcelas.length);
       setParcelasBoletoConfig(parcelas.map(p => ({
         dataVencimento: p.data_vencimento || '',
         parcelaId: p.id,
-        isPago: p.status === 'pago',
+        parcelaNumero: p.parcela_numero,
+        // Em analise tambem trava: o cliente ja mandou o comprovante.
+        isPago: p.status === 'pago' || p.status === 'em_analise',
+        emAnalise: p.status === 'em_analise',
         valor: p.valor || 0
       })));
     }
@@ -532,6 +524,10 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
 
   // Upload de Boleto (primeiro envio - cria parcelas)
   const handleUploadBoleto = async () => {
+    if (faturamentos.length > 0) {
+      toast.info(AVISO_BOLETO_PELA_NOTA, { duration: 8000 });
+      return;
+    }
     if (!boletoFile) {
       toast.info('Selecione o arquivo do boleto');
       return;
@@ -547,42 +543,35 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     setUploading(true);
     try {
       const result = await UploadFile({ file: boletoFile });
+
+      // Parcelas pela RPC substituir_parcelas (uma transacao): mantem as pagas
+      // e as em analise, e nao cria jogo em dobro. Antes o fornecedor
+      // "apagava" sem permissao e o jogo novo nascia por cima do antigo.
+      let resultado = null;
+      if (temParcelasConfiguradas) {
+        const valorBase = pedido.valor_final || pedido.valor_total || 0;
+        const valores = parcelar(valorBase, qtdParcelasBoleto);
+        const numeroCurto = pedido.id.slice(-8).toUpperCase();
+        resultado = await substituirParcelas({
+          pedidoId: pedido.id,
+          parcelas: Array.from({ length: qtdParcelasBoleto }, (_, i) => ({
+            parcela_numero: i + 1,
+            valor: valores[i],
+            data_vencimento: parcelasBoletoConfig[i].dataVencimento,
+            boleto_url: result.file_url,
+            descricao: qtdParcelasBoleto > 1
+              ? `Parcela ${i + 1}/${qtdParcelasBoleto} - Pedido #${numeroCurto}`
+              : `Pedido #${numeroCurto}`
+          }))
+        });
+      }
+
       await Pedido.update(pedido.id, {
         boleto_url: result.file_url,
         boleto_data_upload: new Date().toISOString()
       });
-
-      if (temParcelasConfiguradas) {
-        // Deletar apenas parcelas não pagas (preservar parcelas já quitadas)
-        const parcelasAntigas = await Carteira.filter({ pedido_id: pedido.id });
-        const parcelasReaisAntigas = (parcelasAntigas || []).filter(t => t.parcela_numero);
-        for (const p of parcelasReaisAntigas) {
-          if (p.status !== 'pago') {
-            await Carteira.delete(p.id);
-          }
-        }
-
-        const valorBase = pedido.valor_final || pedido.valor_total || 0;
-        const valorParcela = valorBase / qtdParcelasBoleto;
-        for (let i = 0; i < qtdParcelasBoleto; i++) {
-          await Carteira.create({
-            pedido_id: pedido.id,
-            cliente_user_id: pedido.comprador_user_id,
-            fornecedor_id: pedido.fornecedor_id,
-            loja_id: pedido.loja_id,
-            tipo: 'a_receber',
-            valor: valorParcela,
-            data_vencimento: parcelasBoletoConfig[i].dataVencimento,
-            status: 'pendente',
-            parcela_numero: i + 1,
-            total_parcelas: qtdParcelasBoleto,
-            boleto_url: result.file_url,
-            descricao: qtdParcelasBoleto > 1
-              ? `Parcela ${i + 1}/${qtdParcelasBoleto} - Pedido #${pedido.id.slice(-8).toUpperCase()}`
-              : `Pedido #${pedido.id.slice(-8).toUpperCase()}`
-          });
-        }
-      }
+      const aviso = avisoPreservadas(resultado);
+      if (aviso) toast.info(aviso.trim(), { duration: 8000 });
 
       toast.success('Boleto enviado com sucesso!');
       setBoletoFile(null);
@@ -590,8 +579,9 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       setParcelasBoletoConfig([{ dataVencimento: '' }]);
       await reloadParcelas();
       onUpdate();
-    } catch (_error) {
-      toast.error('Erro ao enviar boleto');
+    } catch (error) {
+      console.error('Erro ao enviar boleto:', error);
+      toast.error(`Erro ao enviar boleto: ${error?.message || 'erro desconhecido'}`, { duration: 10000 });
     } finally {
       setUploading(false);
     }
@@ -599,6 +589,10 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
 
   // Editar boleto existente (atualiza arquivo, datas, adiciona/remove parcelas não pagas)
   const handleEditBoleto = async () => {
+    if (faturamentos.length > 0) {
+      toast.info(AVISO_BOLETO_PELA_NOTA, { duration: 8000 });
+      return;
+    }
     const parcelasEditaveis = parcelasBoletoConfig.filter(p => !p.isPago);
     if (parcelasEditaveis.some(p => !p.dataVencimento)) {
       toast.info('Preencha todas as datas de vencimento das parcelas pendentes');
@@ -620,7 +614,8 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     }
 
     const qtdEditaveis = parcelasEditaveis.length;
-    const valorPorParcela = qtdEditaveis > 0 ? Math.round((valorRestante / qtdEditaveis) * 100) / 100 : 0;
+    // Centavos exatos: a soma das parcelas fecha com o restante.
+    const valoresEditaveis = qtdEditaveis > 0 ? parcelar(valorRestante, qtdEditaveis) : [];
 
     setUploading(true);
     try {
@@ -628,66 +623,35 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       if (boletoFile) {
         const result = await UploadFile({ file: boletoFile });
         novaUrl = result.file_url;
+      }
+
+      // Travadas (pagas e em analise) mantem o proprio numero e nao sao
+      // tocadas; as demais ocupam os menores numeros livres, na ordem da tela.
+      // A RPC apaga as pendentes que sairam e cria o jogo novo numa transacao.
+      const usados = new Set(parcelasBoletoConfig.filter(p => p.isPago && p.parcelaNumero).map(p => p.parcelaNumero));
+      const totalParcelas = parcelasBoletoConfig.length;
+      const numeroCurto = pedido.id.slice(-8).toUpperCase();
+      let proximo = 1;
+      const novas = parcelasEditaveis.map((config, k) => {
+        while (usados.has(proximo)) proximo++;
+        const parcelaNum = proximo++;
+        return {
+          parcela_numero: parcelaNum,
+          valor: valoresEditaveis[k],
+          data_vencimento: config.dataVencimento,
+          boleto_url: novaUrl || null,
+          descricao: totalParcelas > 1
+            ? `Parcela ${parcelaNum}/${totalParcelas} - Pedido #${numeroCurto}`
+            : `Pedido #${numeroCurto}`
+        };
+      });
+      await substituirParcelas({ pedidoId: pedido.id, parcelas: novas });
+
+      if (boletoFile) {
         await Pedido.update(pedido.id, {
           boleto_url: novaUrl,
           boleto_data_upload: new Date().toISOString()
         });
-      }
-
-      // IDs das parcelas que devem permanecer
-      const idsParcelasConfig = parcelasBoletoConfig
-        .filter(p => p.parcelaId)
-        .map(p => p.parcelaId);
-
-      // Deletar parcelas não-pagas que foram removidas (redução de quantidade)
-      const parcelasParaDeletar = parcelas.filter(
-        p => p.status !== 'pago' && !idsParcelasConfig.includes(p.id)
-      );
-      for (const p of parcelasParaDeletar) {
-        await Carteira.delete(p.id);
-      }
-
-      // Atualizar existentes e criar novas
-      const totalParcelas = parcelasBoletoConfig.length;
-      for (let i = 0; i < parcelasBoletoConfig.length; i++) {
-        const config = parcelasBoletoConfig[i];
-        const parcelaNum = i + 1;
-
-        if (config.isPago && config.parcelaId) {
-          // Parcela paga: só atualizar total_parcelas para exibição correta
-          await Carteira.update(config.parcelaId, {
-            parcela_numero: parcelaNum,
-            total_parcelas: totalParcelas,
-            boleto_url: novaUrl
-          });
-        } else if (config.parcelaId) {
-          // Parcela existente não-paga: atualizar data, valor e URL
-          await Carteira.update(config.parcelaId, {
-            data_vencimento: config.dataVencimento,
-            valor: valorPorParcela,
-            parcela_numero: parcelaNum,
-            total_parcelas: totalParcelas,
-            boleto_url: novaUrl
-          });
-        } else {
-          // Parcela nova: criar
-          await Carteira.create({
-            pedido_id: pedido.id,
-            cliente_user_id: pedido.comprador_user_id,
-            fornecedor_id: pedido.fornecedor_id,
-            loja_id: pedido.loja_id,
-            tipo: 'a_receber',
-            valor: valorPorParcela,
-            data_vencimento: config.dataVencimento,
-            status: 'pendente',
-            parcela_numero: parcelaNum,
-            total_parcelas: totalParcelas,
-            boleto_url: novaUrl,
-            descricao: totalParcelas > 1
-              ? `Parcela ${parcelaNum}/${totalParcelas} - Pedido #${pedido.id.slice(-8).toUpperCase()}`
-              : `Pedido #${pedido.id.slice(-8).toUpperCase()}`
-          });
-        }
       }
 
       toast.success('Boleto atualizado com sucesso!');
@@ -695,8 +659,9 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       setShowEditBoleto(false);
       await reloadParcelas();
       onUpdate();
-    } catch (_error) {
-      toast.error('Erro ao atualizar boleto');
+    } catch (error) {
+      console.error('Erro ao atualizar boleto:', error);
+      toast.error(`Erro ao atualizar boleto: ${error?.message || 'erro desconhecido'}`, { duration: 10000 });
     } finally {
       setUploading(false);
     }
@@ -2526,7 +2491,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                                     </span>
                                     <Badge className="bg-green-100 text-green-800 text-xs shrink-0">
                                       <CheckCircle className="w-3 h-3 mr-1" />
-                                      Pago
+                                      {parcela.emAnalise ? 'Em análise' : 'Pago'}
                                     </Badge>
                                   </>
                                 ) : (
@@ -2848,7 +2813,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                                   </span>
                                   <Badge className="bg-green-100 text-green-800 text-xs shrink-0">
                                     <CheckCircle className="w-3 h-3 mr-1" />
-                                    Pago
+                                    {parcela.emAnalise ? 'Em análise' : 'Pago'}
                                   </Badge>
                                 </>
                               ) : (

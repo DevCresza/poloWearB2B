@@ -266,7 +266,7 @@ export default function GestaoProdutos() {
 
       loadData();
     } catch (error) {
-      toast.error('Falha ao excluir o produto. Verifique se não há pedidos vinculados.');
+      toast.error(`Falha ao excluir o produto: ${error?.message || 'verifique se não há pedidos vinculados.'}`);
     }
   };
 

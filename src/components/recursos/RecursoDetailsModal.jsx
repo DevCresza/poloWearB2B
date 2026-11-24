@@ -31,8 +31,8 @@ export default function RecursoDetailsModal({ recurso, onClose, onEdit, onDelete
         await Recurso.delete(recurso.id);
         toast.success('Recurso excluído com sucesso!');
         onDelete();
-      } catch (_error) {
-        toast.error('Erro ao excluir recurso.');
+      } catch (error) {
+        toast.error(`Erro ao excluir recurso: ${error?.message || 'erro desconhecido'}`);
       }
     }
   };

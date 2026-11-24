@@ -36,8 +36,8 @@ export default function PendingUserDetails({ pendingUser, onClose, onUpdate, for
         toast.success('Usuário pendente excluído com sucesso.');
         onUpdate();
         onClose();
-      } catch (_error) {
-        toast.error('Falha ao excluir usuário.');
+      } catch (error) {
+        toast.error(`Falha ao excluir usuário: ${error?.message || 'erro desconhecido'}`);
       }
     }
   };
