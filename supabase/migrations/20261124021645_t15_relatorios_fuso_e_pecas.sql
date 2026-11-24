@@ -31,14 +31,11 @@
 --   * 0 itens de pedido com tamanho_selecionado preenchido -> qtd_pecas igual
 --     em todos os 7.581 pedidos (soma 2.740.530 antes e depois);
 --   * 0 pedidos com meses_entrega_efetivos diferente pela troca de fuso.
---   Se aparecerem, o recalculo e o script supabase/scripts/t15_recalcular_resumo_pedidos.sql.
+--   Pedido novo ou editado ja passa pela regra nova (trigger).
 --
 -- Rollback: supabase/scripts/t15_rollback_funcoes.sql (as definicoes de antes,
--- tiradas do banco em 24/11), e depois
---   drop function if exists public.pecas_item(jsonb);
---   drop function if exists public.data_br(timestamp without time zone);
---   drop function if exists public.hoje_br();
---   drop function if exists public.inicio_dia_br_utc(date);
+-- tiradas do banco em 24/11). Os helpers novos (data_br, hoje_br,
+-- inicio_dia_br_utc, pecas_item) podem ficar; o script diz como remove-los.
 
 -- ------------------------------------------------------------- helpers --
 
@@ -413,7 +410,9 @@ $function$;
 
 -- ---------------------------------------------- get_produtos_mais_vendidos --
 -- Antes: quantidade x GREATEST(total_pecas_grade, 1) para QUALQUER item, ate
--- unitario. Agora a regra unica (pecas_item).
+-- unitario. Agora a regra unica -- escrita inline, e nao chamando pecas_item:
+-- funcao com SET search_path nao e "inlined", e chamada por item (~100 mil)
+-- deixava esta consulta acima de 30 s no teste.
 create or replace function public.get_produtos_mais_vendidos()
 returns table(produto_id uuid, total_vendido bigint)
 language sql
@@ -425,7 +424,11 @@ as $function$
       it->>'produto_id'          AS pid,
       it->>'tipo'                AS tipo,
       COALESCE((it->>'quantidade')::numeric, 0)        AS quantidade,
-      public.pecas_item(it)      AS pecas,
+      COALESCE((it->>'quantidade')::numeric, 0)
+        * CASE WHEN it->>'tipo_venda' = 'grade'
+                AND NULLIF(it->>'tamanho_selecionado', '') IS NULL
+                AND COALESCE((it->>'total_pecas_grade')::numeric, 0) > 0
+               THEN (it->>'total_pecas_grade')::numeric ELSE 1 END AS pecas,
       it->'produtos_quantidades' AS produtos_quantidades
     FROM pedidos p
     CROSS JOIN LATERAL jsonb_array_elements(p.itens) AS it

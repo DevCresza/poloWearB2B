@@ -1,4 +1,4 @@
--- Rollback da migration 20261124120000_t15_relatorios_fuso_e_pecas.
+-- Rollback da migration 20261124021645_t15_relatorios_fuso_e_pecas.
 --
 -- Volta as funcoes e a view para as definicoes de antes da T15 (tiradas do
 -- banco de producao em 24/11; as de kpis_* / metas_realizado / view sao as da
