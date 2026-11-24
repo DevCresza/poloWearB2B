@@ -32,6 +32,7 @@ import { autorDaLinha, resumoDaLinha, detalhesDaLinha } from '@/utils/historicoP
 import { Store } from 'lucide-react';
 import { thumb, usarOriginalSeFalhar } from '@/utils/thumb';
 import FaturarPedidoModal from './FaturarPedidoModal';
+import { pecasDoItem, precoPorPecaDoItem, itemEmGrades } from '@/utils/itemPedido';
 
 // Notas de um faturamento. nf_arquivos e a lista; nf_url (campo antigo) vale
 // como item unico para faturamento gravado antes da migration 20260922000001.
@@ -1410,12 +1411,12 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       ];
 
       const tableRows = itens.map(item => {
-        // Para itens de grade, converter para unidades e preço por peça
-        const pecasGrade = parseInt(item.total_pecas_grade) || 0;
-        const isGrade = item.tipo_venda === 'grade' && pecasGrade > 0;
+        // Grade sem tamanho: converte para pecas e preco por peca. Item por
+        // tamanho ja vem em pecas (regra unica em utils/itemPedido).
+        const isGrade = itemEmGrades(item);
         const qtdGrades = item.quantidade || 0;
-        const qtdUnidades = isGrade ? qtdGrades * pecasGrade : qtdGrades;
-        const precoUnitario = isGrade ? (item.preco || 0) / pecasGrade : (item.preco || 0);
+        const qtdUnidades = pecasDoItem(item);
+        const precoUnitario = precoPorPecaDoItem(item);
         const valorTotal = precoUnitario * qtdUnidades;
 
         return {
@@ -1430,17 +1431,10 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
         };
       });
 
-      const totalQtd = itens.reduce((sum, item) => {
-        const pecasGrade = parseInt(item.total_pecas_grade) || 0;
-        const isGrade = item.tipo_venda === 'grade' && pecasGrade > 0;
-        return sum + (isGrade ? (item.quantidade || 0) * pecasGrade : (item.quantidade || 0));
-      }, 0);
+      const totalQtd = itens.reduce((sum, item) => sum + pecasDoItem(item), 0);
 
-      const totalGrades = itens.reduce((sum, item) => {
-        const pecasGrade = parseInt(item.total_pecas_grade) || 0;
-        const isGrade = item.tipo_venda === 'grade' && pecasGrade > 0;
-        return sum + (isGrade ? (item.quantidade || 0) : 0);
-      }, 0);
+      const totalGrades = itens.reduce(
+        (sum, item) => sum + (itemEmGrades(item) ? (item.quantidade || 0) : 0), 0);
 
       autoTable(doc, {
         columns: tableColumns,
@@ -1656,13 +1650,11 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                         {item.tipo_venda === 'grade' ? 'Grade Completa' : 'Unitário'}
                       </Badge>
                       {(() => {
-                        const pecasGrade = parseInt(item.total_pecas_grade) || 0;
-                        const isGrade = item.tipo_venda === 'grade' && pecasGrade > 0;
+                        // Por tamanho ja vem em pecas (utils/itemPedido).
+                        const isGrade = itemEmGrades(item);
                         const qtdGrades = item.quantidade || 0;
-                        const qtdPecas = isGrade ? qtdGrades * pecasGrade : qtdGrades;
-                        const precoPorPeca = isGrade
-                          ? (item.preco || 0) / pecasGrade
-                          : (item.preco || 0);
+                        const qtdPecas = pecasDoItem(item);
+                        const precoPorPeca = precoPorPecaDoItem(item);
                         return (
                           <>
                             {isGrade && (

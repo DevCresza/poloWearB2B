@@ -22,20 +22,30 @@ export function precoUnitarioItem(produto, comprador, { porTamanho = false } = {
 }
 
 /**
- * Pecas de um item ja gravado no pedido. Item por tamanho ja vem em pecas --
- * multiplicar pela grade (como o pedidos_calc_resumo faz hoje) conta a mais.
+ * O item gravado esta em GRADES? So quando e grade, SEM tamanho escolhido e a
+ * grade tem pecas. Regra unica de pecas (T15/M4), a mesma da funcao SQL
+ * public.pecas_item(): grade sem tamanho -> quantidade x total_pecas_grade;
+ * qualquer outro caso -> quantidade (item por tamanho ja vem em pecas).
  */
-export function pecasDoItem(item) {
-  const qtd = Number(item?.quantidade) || 0;
-  if (item?.tamanho_selecionado) return qtd;
-  const pecasGrade = Number(item?.total_pecas_grade) || 0;
-  return ehGrade(item) && pecasGrade > 0 ? qtd * pecasGrade : qtd;
+export function itemEmGrades(item) {
+  return ehGrade(item) && !item?.tamanho_selecionado && (Number(item?.total_pecas_grade) || 0) > 0;
+}
+
+/** Pecas em UMA unidade do item (pecas da grade, ou 1). */
+export function pecasPorUnidadeDoItem(item) {
+  return itemEmGrades(item) ? Number(item.total_pecas_grade) : 1;
+}
+
+/**
+ * Pecas de um item ja gravado no pedido. Item por tamanho ja vem em pecas --
+ * multiplicar pela grade (como o pedidos_calc_resumo fazia ate a T15) conta a mais.
+ * `quantidade` opcional: conta outra quantidade do mesmo item (ex.: pendente).
+ */
+export function pecasDoItem(item, quantidade = item?.quantidade) {
+  return (Number(quantidade) || 0) * pecasPorUnidadeDoItem(item);
 }
 
 /** Preco por peca de um item ja gravado no pedido. */
 export function precoPorPecaDoItem(item) {
-  const preco = Number(item?.preco) || 0;
-  if (item?.tamanho_selecionado) return preco;
-  const pecasGrade = Number(item?.total_pecas_grade) || 0;
-  return ehGrade(item) && pecasGrade > 0 ? preco / pecasGrade : preco;
+  return (Number(item?.preco) || 0) / pecasPorUnidadeDoItem(item);
 }

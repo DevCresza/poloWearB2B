@@ -29,6 +29,7 @@ import MultiSelectFilter from '@/components/MultiSelectFilter';
 import { useLojaContext } from '@/contexts/LojaContext';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
+import { pecasDoItem, precoPorPecaDoItem } from '@/utils/itemPedido';
 
 export default function MeusPedidos() {
   const { lojaSelecionada, lojas, loading: lojasLoading } = useLojaContext();
@@ -500,12 +501,12 @@ export default function MeusPedidos() {
           : '';
 
         for (const it of itens) {
-          const isGrade = it.tipo_venda === 'grade' && (it.total_pecas_grade || 0) > 0;
-          const totalItens = (it.quantidade || 0) * (isGrade ? (it.total_pecas_grade || 1) : 1);
+          // Regra unica de pecas (utils/itemPedido): item por tamanho ja vem em pecas.
+          const totalItens = pecasDoItem(it);
           const precoBase = Number(it.preco) || 0;
           const precoTotal = Number(it.total) || precoBase * (it.quantidade || 0);
           // PRECO UNITARIO sempre por PECA (consistente com TOTAL DE ITENS).
-          const precoUnit = isGrade ? precoBase / (it.total_pecas_grade || 1) : precoBase;
+          const precoUnit = precoPorPecaDoItem(it);
 
           linhas.push({
             numero_pedido: numero,

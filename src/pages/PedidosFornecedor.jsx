@@ -37,6 +37,7 @@ import { validarVencimentos } from '@/utils/vencimentoUtils';
 import { conferirDivisao, parcelar, valorInformado, ehBoleto, rotuloMetodo, METODOS } from '@/utils/divisaoPagamento';
 import { Loja } from '@/api/entities';
 import { Store } from 'lucide-react';
+import { pecasDoItem, precoPorPecaDoItem, itemEmGrades } from '@/utils/itemPedido';
 
 export default function PedidosFornecedor() {
   // So o que a LISTA, os filtros e os botoes leem. A tela carregava a linha
@@ -784,13 +785,11 @@ export default function PedidosFornecedor() {
               && getMesFaturamentoItemKey(pedido, it, produtoEntregaMap) !== filtroMesFaturamento) {
             continue;
           }
-          const isGrade = it.tipo_venda === 'grade' && (it.total_pecas_grade || 0) > 0;
-          const totalItens = (it.quantidade || 0) * (isGrade ? (it.total_pecas_grade || 1) : 1);
+          // Regra unica de pecas (utils/itemPedido): item por tamanho ja vem em pecas.
+          const totalItens = pecasDoItem(it);
           const precoBase = Number(it.preco) || 0;
           const precoTotal = Number(it.total) || precoBase * (it.quantidade || 0);
-          const precoUnit = isGrade
-            ? precoBase / (it.total_pecas_grade || 1)
-            : precoBase;
+          const precoUnit = precoPorPecaDoItem(it);
           linhas.push({
             numero_pedido: numero,
             data_pedido: dataPedido,
@@ -899,10 +898,7 @@ export default function PedidosFornecedor() {
         if (!agregado[key]) {
           // Preco unitario sempre por PECA. Para grade, divide o preco
           // da grade inteira pelo numero de pecas da grade.
-          const isGradePreco = item.tipo_venda === 'grade' && (item.total_pecas_grade || 0) > 0;
-          const precoPorPeca = isGradePreco
-            ? (item.preco || 0) / (item.total_pecas_grade || 1)
-            : (item.preco || 0);
+          const precoPorPeca = precoPorPecaDoItem(item);
           agregado[key] = {
             nome: item.nome || '',
             referencia_fornecedor: item.referencia_fornecedor || item.referencia || '',
@@ -917,14 +913,9 @@ export default function PedidosFornecedor() {
         // Quantidade pendente em unidades de venda (grades ou peças avulsas)
         const qtdPendente = (item.quantidade || 0) - (item.qtd_faturada || 0) - (item.qtd_quebra || 0);
         const pendente = Math.max(0, qtdPendente);
-        // Se venda por grade, calcular total de peças = grades * peças_por_grade
-        const isGrade = item.tipo_venda === 'grade' && (item.total_pecas_grade || 0) > 0;
-        if (isGrade) {
-          agregado[key].qtd_grades += pendente;
-          agregado[key].qtd_total_pecas += pendente * (item.total_pecas_grade || 1);
-        } else {
-          agregado[key].qtd_total_pecas += pendente;
-        }
+        // Grade sem tamanho: pecas = grades x pecas da grade. Por tamanho ja e peca.
+        if (itemEmGrades(item)) agregado[key].qtd_grades += pendente;
+        agregado[key].qtd_total_pecas += pecasDoItem(item, pendente);
       });
     });
 
