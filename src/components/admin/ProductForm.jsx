@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import ProductVariantsManager from './ProductVariantsManager'; // New import
 import { Switch } from '@/components/ui/switch'; // New import
 import { Package, DollarSign, Palette, Ruler, Video, Calendar, AlertTriangle, Save, X } from 'lucide-react';
+import { dataBR } from '@/utils/dataBR';
 
 export default function ProductForm({ produto, onSuccess, onCancel }) {
   const [submitting, setSubmitting] = useState(false); // Renamed from 'loading'
@@ -223,10 +224,10 @@ export default function ProductForm({ produto, onSuccess, onCancel }) {
           ? (() => { try { return JSON.parse(produto.estoque_por_tamanho); } catch { return {}; } })()
           : (produto.estoque_por_tamanho || {})),
         // Ensure date fields are correctly formatted for input type="date"
-        data_inicio_venda: produto.data_inicio_venda ? new Date(produto.data_inicio_venda).toISOString().split('T')[0] : '',
-        data_limite_venda: produto.data_limite_venda ? new Date(produto.data_limite_venda).toISOString().split('T')[0] : '',
-        data_prevista_entrega: produto.data_prevista_entrega ? new Date(produto.data_prevista_entrega).toISOString().split('T')[0] : '',
-        data_lancamento: produto.data_lancamento ? new Date(produto.data_lancamento).toISOString().split('T')[0] : ''
+        data_inicio_venda: produto.data_inicio_venda ? dataBR(produto.data_inicio_venda) : '',
+        data_limite_venda: produto.data_limite_venda ? dataBR(produto.data_limite_venda) : '',
+        data_prevista_entrega: produto.data_prevista_entrega ? dataBR(produto.data_prevista_entrega) : '',
+        data_lancamento: produto.data_lancamento ? dataBR(produto.data_lancamento) : ''
       });
       // Ordenar tamanhos ao carregar produto existente
       const tamanhosOrdenados = ordenarTamanhos([...(grade.tamanhos_disponiveis || [])]);

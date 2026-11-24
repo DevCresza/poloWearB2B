@@ -3,6 +3,7 @@ import { Meta } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
 import { User } from '@/api/entities';
 import { metasRealizado } from '@/api/kpis';
+import { anoMesBR, ultimoDiaDoMesISO } from '@/utils/dataBR';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,12 +27,12 @@ export default function GestaoMetas() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingMeta, setEditingMeta] = useState(null);
-  const [anoSelecionado, setAnoSelecionado] = useState(new Date().getFullYear());
-  const [mesSelecionado, setMesSelecionado] = useState(new Date().getMonth() + 1);
+  const [anoSelecionado, setAnoSelecionado] = useState(anoMesBR().ano);
+  const [mesSelecionado, setMesSelecionado] = useState(anoMesBR().mes);
 
   const [formData, setFormData] = useState({
-    ano: new Date().getFullYear(),
-    meses_selecionados: [new Date().getMonth() + 1],
+    ano: anoMesBR().ano,
+    meses_selecionados: [anoMesBR().mes],
     tipo_entidade: 'geral', // geral, fornecedor, cliente
     fornecedor_id: '',
     user_id: '',
@@ -134,11 +135,11 @@ export default function GestaoMetas() {
     try {
       // Função para calcular periodo_inicio e periodo_fim a partir de ano e mês
       const calcularPeriodo = (ano, mes) => {
-        const inicio = new Date(ano, mes - 1, 1);
-        const fim = new Date(ano, mes, 0); // Último dia do mês
+        // Montado como texto: toISOString() da meia-noite local cai no dia
+        // anterior em fusos a leste de UTC.
         return {
-          periodo_inicio: inicio.toISOString().split('T')[0],
-          periodo_fim: fim.toISOString().split('T')[0]
+          periodo_inicio: `${ano}-${String(mes).padStart(2, '0')}-01`,
+          periodo_fim: ultimoDiaDoMesISO(ano, mes)
         };
       };
 
@@ -184,8 +185,8 @@ export default function GestaoMetas() {
       setShowForm(false);
       setEditingMeta(null);
       setFormData({
-        ano: new Date().getFullYear(),
-        meses_selecionados: [new Date().getMonth() + 1],
+        ano: anoMesBR().ano,
+        meses_selecionados: [anoMesBR().mes],
         tipo_entidade: 'geral',
         fornecedor_id: '',
         user_id: '',

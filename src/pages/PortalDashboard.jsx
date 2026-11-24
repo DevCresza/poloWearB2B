@@ -80,6 +80,8 @@ export default function PortalDashboard() {
       valorQuebra: st.soma(ativos, 'valor_quebra'),
       valorAVencer: Number(kpis?.carteira?.a_vencer) || 0,
       valorVencido: Number(kpis?.carteira?.vencido) || 0,
+      valorSemVencimento: Number(kpis?.carteira?.sem_vencimento) || 0,
+      qtdSemVencimento: Number(kpis?.carteira?.qtd_sem_vencimento) || 0,
       produtosAtivos: comProdutos ? Number(kpis?.produtos?.ativos) || 0 : 0,
       estoqueBaixo: comProdutos ? Number(kpis?.produtos?.estoque_baixo) || 0 : 0
     };
@@ -266,6 +268,8 @@ export default function PortalDashboard() {
             qtdPendenteFaturamento: stats.totalPedidos - stats.qtdFaturada,
             valorAVencer: stats.valorAVencer,
             valorVencido: stats.valorVencido,
+            valorSemVencimento: stats.valorSemVencimento,
+            qtdSemVencimento: stats.qtdSemVencimento,
             valorQuebra: stats.valorQuebra,
           }}
         />

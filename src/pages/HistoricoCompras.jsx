@@ -22,6 +22,7 @@ import {
 } from 'recharts';
 import { exportToCSV, exportToPDF, formatCurrency, formatDateTime } from '@/utils/exportUtils';
 import { useLojaContext } from '@/contexts/LojaContext';
+import { anoMesBR, hojeBR, mesBR } from '@/utils/dataBR';
 
 export default function HistoricoCompras() {
   const { lojaSelecionada, loading: lojasLoading } = useLojaContext();
@@ -178,16 +179,16 @@ export default function HistoricoCompras() {
 
     // Compras por mês (últimos 12 meses)
     const comprasPorMes = [];
+    const agoraBR = anoMesBR();
     for (let i = 11; i >= 0; i--) {
-      const data = new Date();
-      data.setMonth(data.getMonth() - i);
+      // Dia 1 do mes (setMonth num dia 31 pulava meses).
+      const data = new Date(agoraBR.ano, agoraBR.mes - 1 - i, 1);
       const mes = data.getMonth();
       const ano = data.getFullYear();
 
-      const pedidosMes = pedidosList.filter(p => {
-        const dataPedido = new Date(p.created_date);
-        return dataPedido.getMonth() === mes && dataPedido.getFullYear() === ano;
-      });
+      // Mes do pedido em Brasilia (created_date e UTC sem fuso).
+      const chave = `${ano}-${String(mes + 1).padStart(2, '0')}`;
+      const pedidosMes = pedidosList.filter(p => mesBR(p.created_date) === chave);
 
       comprasPorMes.push({
         mes: data.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
@@ -388,13 +389,13 @@ export default function HistoricoCompras() {
           exportData,
           columns,
           title,
-          `${fileName}_${new Date().toISOString().split('T')[0]}.pdf`
+          `${fileName}_${hojeBR()}.pdf`
         );
       } else if (format === 'csv') {
         exportToCSV(
           exportData,
           columns,
-          `${fileName}_${new Date().toISOString().split('T')[0]}.csv`
+          `${fileName}_${hojeBR()}.csv`
         );
       }
     } catch (_error) {

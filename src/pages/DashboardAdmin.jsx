@@ -1,7 +1,8 @@
 
 import { useState, useEffect } from 'react';
 import { Meta } from '@/api/entities';
-import { kpisDashboard, kpisDashboardAdmin, porStatus, dataLocalISO } from '@/api/kpis';
+import { kpisDashboard, kpisDashboardAdmin, porStatus } from '@/api/kpis';
+import { anoMesBR, hojeBR, somarDiasISO } from '@/utils/dataBR';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,8 +30,8 @@ const FATURAMENTO_STATUSES = ['faturado', 'parcialmente_faturado', 'em_transport
 export default function DashboardAdmin() {
   const [loading, setLoading] = useState(true);
   const [metas, setMetas] = useState([]);
-  const [mesSelecionado, setMesSelecionado] = useState(new Date().getMonth() + 1);
-  const [anoSelecionado, setAnoSelecionado] = useState(new Date().getFullYear());
+  const [mesSelecionado, setMesSelecionado] = useState(anoMesBR().mes);
+  const [anoSelecionado, setAnoSelecionado] = useState(anoMesBR().ano);
 
   const [pedidosAtrasados, setPedidosAtrasados] = useState({
     total: 0,
@@ -57,6 +58,8 @@ export default function DashboardAdmin() {
     valorEmAberto: 0,
     valorAVencer: 0,
     valorVencido: 0,
+    valorSemVencimento: 0,
+    qtdSemVencimento: 0,
     produtosAtivos: 0,
     produtosEstoqueBaixo: 0,
     ticketMedio: 0
@@ -82,10 +85,9 @@ export default function DashboardAdmin() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const agora = new Date();
       const [kpis, adm, metasList] = await Promise.all([
         kpisDashboard(),
-        kpisDashboardAdmin(agora),
+        kpisDashboardAdmin(),
         Meta.filter({ ano: anoSelecionado, mes: mesSelecionado })
       ]);
 
@@ -96,7 +98,7 @@ export default function DashboardAdmin() {
       (adm?.por_mes || []).forEach(m => { porMes[m.mes] = m; });
 
       calculateStats(kpis, adm, porMes);
-      generateChartData(kpis, adm, porMes, agora);
+      generateChartData(kpis, adm, porMes);
 
       setPedidosAtrasados({
         total: Number(adm?.atrasados_total) || 0,
@@ -141,10 +143,9 @@ export default function DashboardAdmin() {
     // Clientes
     const clientesAtivos = Number(adm?.clientes_ativos) || 0;
     const clientesBloqueados = Number(adm?.clientes_bloqueados) || 0;
-    // Sempre deu 0: a conta lia users.created_date, coluna que nao existe (a
-    // tabela tem created_at). Mantido igual para o numero da tela nao mudar
-    // nesta troca; corrigir e decisao a parte.
-    const clientesNovos = 0;
+    // Clientes cadastrados nos ultimos 30 dias (users.created_at). Ate a T15
+    // dava sempre 0: a conta lia users.created_date, que nao existe.
+    const clientesNovos = Number(adm?.clientes_novos) || 0;
 
     // Quebra total, saldo pendente (o que falta faturar) e valor total
     const valorQuebraTotal = st.soma('*', 'valor_quebra');
@@ -158,6 +159,9 @@ export default function DashboardAdmin() {
     const valorEmAberto = Number(kpis?.carteira?.em_aberto) || 0;
     const valorAVencer = Number(kpis?.carteira?.a_vencer) || 0;
     const valorVencido = Number(kpis?.carteira?.vencido) || 0;
+    // Titulo pendente sem data de vencimento: nem vencido nem a vencer.
+    const valorSemVencimento = Number(kpis?.carteira?.sem_vencimento) || 0;
+    const qtdSemVencimento = Number(kpis?.carteira?.qtd_sem_vencimento) || 0;
 
     // Produtos
     const produtosAtivos = Number(kpis?.produtos?.ativos) || 0;
@@ -186,21 +190,23 @@ export default function DashboardAdmin() {
       valorEmAberto,
       valorAVencer,
       valorVencido,
+      valorSemVencimento,
+      qtdSemVencimento,
       produtosAtivos,
       produtosEstoqueBaixo,
       ticketMedio
     });
   };
 
-  const generateChartData = (kpis, adm, porMes, agora) => {
+  const generateChartData = (kpis, adm, porMes) => {
     const st = porStatus(kpis);
 
-    // Faturamento Mensal (últimos 12 meses) — por MÊS DE FATURAMENTO. O laco
-    // de datas e o mesmo de antes; so a soma vem pronta do banco.
+    // Faturamento Mensal (últimos 12 meses) — por MÊS DE FATURAMENTO, a
+    // partir do mes corrente em Brasilia. (setMonth num dia 31 pulava meses.)
     const faturamentoMensal = [];
+    const atual = anoMesBR();
     for (let i = 11; i >= 0; i--) {
-      const mes = new Date(agora);
-      mes.setMonth(mes.getMonth() - i);
+      const mes = new Date(atual.ano, atual.mes - 1 - i, 1);
       const m = porMes[chaveMes(mes)];
 
       faturamentoMensal.push({
@@ -244,13 +250,14 @@ export default function DashboardAdmin() {
     const porDia = {};
     (adm?.evolucao || []).forEach(d => { porDia[String(d.dia).slice(0, 10)] = d; });
     const evolucaoPedidos = [];
+    const hoje = hojeBR();
     for (let i = 29; i >= 0; i--) {
-      const dia = new Date(agora);
-      dia.setDate(dia.getDate() - i);
-      const d = porDia[dataLocalISO(dia)];
+      // Dias de Brasilia, os mesmos do banco (kpis_dashboard_admin).
+      const diaISO = somarDiasISO(hoje, -i);
+      const d = porDia[diaISO];
 
       evolucaoPedidos.push({
-        dia: dia.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+        dia: `${diaISO.slice(8, 10)}/${diaISO.slice(5, 7)}`,
         pedidos: Number(d?.pedidos) || 0,
         valor: Number(d?.valor) || 0
       });
@@ -426,6 +433,8 @@ export default function DashboardAdmin() {
               qtdPendenteFaturamento: stats.pedidosTotal - stats.qtdFaturada,
               valorAVencer: stats.valorAVencer,
               valorVencido: stats.valorVencido,
+              valorSemVencimento: stats.valorSemVencimento,
+              qtdSemVencimento: stats.qtdSemVencimento,
               valorQuebra: stats.valorQuebraTotal,
             }}
           />

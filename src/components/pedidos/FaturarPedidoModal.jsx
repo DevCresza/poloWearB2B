@@ -15,6 +15,7 @@ import { caminhoDocumento } from '@/utils/documentos';
 import { formatCurrency } from '@/utils/exportUtils';
 import { parseNFeXml, casarItensNFe } from '@/utils/nfeXml';
 import { conferirDivisao, rotuloMetodo, METODOS } from '@/utils/divisaoPagamento';
+import { hojeBR } from '@/utils/dataBR';
 
 /**
  * Faturamento (total ou parcial) de um pedido.
@@ -51,7 +52,7 @@ export default function FaturarPedidoModal({
   // (CFOP diferente, nota complementar, limite do emissor).
   const [nfFiles, setNfFiles] = useState([]);
   const [nfNumero, setNfNumero] = useState(nfInicial?.numero || '');
-  const [nfDataEmissao, setNfDataEmissao] = useState(nfInicial?.dataEmissao || new Date().toISOString().split('T')[0]);
+  const [nfDataEmissao, setNfDataEmissao] = useState(nfInicial?.dataEmissao || hojeBR());
   // Divisao do pagamento desta nota. Uma linha = uma forma. O cliente que
   // paga metade a vista e metade no credito tem duas linhas aqui -- antes
   // era um select unico e nao havia como registrar isso.

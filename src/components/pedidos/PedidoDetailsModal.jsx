@@ -32,6 +32,8 @@ import { autorDaLinha, resumoDaLinha, detalhesDaLinha } from '@/utils/historicoP
 import { Store } from 'lucide-react';
 import { thumb, usarOriginalSeFalhar } from '@/utils/thumb';
 import FaturarPedidoModal from './FaturarPedidoModal';
+import { pecasDoItem, precoPorPecaDoItem, itemEmGrades } from '@/utils/itemPedido';
+import { dataBR as dataISOBR, hojeBR } from '@/utils/dataBR';
 
 // Notas de um faturamento. nf_arquivos e a lista; nf_url (campo antigo) vale
 // como item unico para faturamento gravado antes da migration 20260922000001.
@@ -249,7 +251,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       if (boletoFatParcelas[i]?.dataVencimento) return boletoFatParcelas[i];
       const data = new Date(hoje);
       data.setDate(data.getDate() + 30 * (i + 1));
-      return { dataVencimento: data.toISOString().split('T')[0] };
+      return { dataVencimento: dataISOBR(data) };
     });
     setBoletoFatParcelas(novas);
   };
@@ -277,7 +279,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     setBoletoFatQtdParcelas(1);
     const data = new Date();
     data.setDate(data.getDate() + 30);
-    setBoletoFatParcelas([{ dataVencimento: data.toISOString().split('T')[0] }]);
+    setBoletoFatParcelas([{ dataVencimento: dataISOBR(data) }]);
   };
 
   const handleUploadBoletoFat = async (fat) => {
@@ -404,7 +406,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       await Pedido.update(pedido.id, {
         status: novoStatus,
         cliente_confirmou_recebimento: true,
-        data_confirmacao_recebimento: new Date().toISOString().split('T')[0]
+        data_confirmacao_recebimento: hojeBR()
       });
 
       toast.success(novoStatus === 'finalizado'
@@ -429,7 +431,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       if (parcelasBoletoConfig[i]?.dataVencimento) return parcelasBoletoConfig[i];
       const data = new Date(hoje);
       data.setDate(data.getDate() + 30 * (i + 1));
-      return { dataVencimento: data.toISOString().split('T')[0] };
+      return { dataVencimento: dataISOBR(data) };
     });
     setParcelasBoletoConfig(novasParcelas);
   };
@@ -819,7 +821,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
 
       // Se marcou como pago, registrar data de pagamento
       if (novoStatus === 'pago') {
-        updateData.data_pagamento = new Date().toISOString().split('T')[0];
+        updateData.data_pagamento = hojeBR();
       }
 
       await Pedido.update(pedido.id, updateData);
@@ -1023,7 +1025,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       const updateData = { status: novoStatus };
 
       if (novoStatus === 'pago') {
-        updateData.data_pagamento = dataPagamento || new Date().toISOString().split('T')[0];
+        updateData.data_pagamento = dataPagamento || hojeBR();
       }
 
       if (novoStatus === 'pendente') {
@@ -1040,7 +1042,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
         const parcelasReais = titulosDoPedido.filter(t => t.parcela_numero);
         const todosPagos = parcelasReais.every(t => t.status === 'pago' || (t.id === parcela.id && novoStatus === 'pago'));
         if (todosPagos && pedido.status_pagamento !== 'pago') {
-          await Pedido.update(pedido.id, { status_pagamento: 'pago', data_pagamento: dataPagamento || new Date().toISOString().split('T')[0] });
+          await Pedido.update(pedido.id, { status_pagamento: 'pago', data_pagamento: dataPagamento || hojeBR() });
         } else if (!todosPagos && pedido.status_pagamento === 'pago') {
           await Pedido.update(pedido.id, { status_pagamento: 'pendente' });
         }
@@ -1410,12 +1412,12 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       ];
 
       const tableRows = itens.map(item => {
-        // Para itens de grade, converter para unidades e preço por peça
-        const pecasGrade = parseInt(item.total_pecas_grade) || 0;
-        const isGrade = item.tipo_venda === 'grade' && pecasGrade > 0;
+        // Grade sem tamanho: converte para pecas e preco por peca. Item por
+        // tamanho ja vem em pecas (regra unica em utils/itemPedido).
+        const isGrade = itemEmGrades(item);
         const qtdGrades = item.quantidade || 0;
-        const qtdUnidades = isGrade ? qtdGrades * pecasGrade : qtdGrades;
-        const precoUnitario = isGrade ? (item.preco || 0) / pecasGrade : (item.preco || 0);
+        const qtdUnidades = pecasDoItem(item);
+        const precoUnitario = precoPorPecaDoItem(item);
         const valorTotal = precoUnitario * qtdUnidades;
 
         return {
@@ -1430,17 +1432,10 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
         };
       });
 
-      const totalQtd = itens.reduce((sum, item) => {
-        const pecasGrade = parseInt(item.total_pecas_grade) || 0;
-        const isGrade = item.tipo_venda === 'grade' && pecasGrade > 0;
-        return sum + (isGrade ? (item.quantidade || 0) * pecasGrade : (item.quantidade || 0));
-      }, 0);
+      const totalQtd = itens.reduce((sum, item) => sum + pecasDoItem(item), 0);
 
-      const totalGrades = itens.reduce((sum, item) => {
-        const pecasGrade = parseInt(item.total_pecas_grade) || 0;
-        const isGrade = item.tipo_venda === 'grade' && pecasGrade > 0;
-        return sum + (isGrade ? (item.quantidade || 0) : 0);
-      }, 0);
+      const totalGrades = itens.reduce(
+        (sum, item) => sum + (itemEmGrades(item) ? (item.quantidade || 0) : 0), 0);
 
       autoTable(doc, {
         columns: tableColumns,
@@ -1656,13 +1651,11 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                         {item.tipo_venda === 'grade' ? 'Grade Completa' : 'Unitário'}
                       </Badge>
                       {(() => {
-                        const pecasGrade = parseInt(item.total_pecas_grade) || 0;
-                        const isGrade = item.tipo_venda === 'grade' && pecasGrade > 0;
+                        // Por tamanho ja vem em pecas (utils/itemPedido).
+                        const isGrade = itemEmGrades(item);
                         const qtdGrades = item.quantidade || 0;
-                        const qtdPecas = isGrade ? qtdGrades * pecasGrade : qtdGrades;
-                        const precoPorPeca = isGrade
-                          ? (item.preco || 0) / pecasGrade
-                          : (item.preco || 0);
+                        const qtdPecas = pecasDoItem(item);
+                        const precoPorPeca = precoPorPecaDoItem(item);
                         return (
                           <>
                             {isGrade && (
@@ -1877,7 +1870,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                           defaultValue={pedido.data_prevista_entrega}
                           id="nova_data_prevista"
                           className="h-9"
-                          min={new Date().toISOString().split('T')[0]}
+                          min={hojeBR()}
                         />
                       </div>
                       <Button
@@ -1914,7 +1907,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                         type="date"
                         id="nova_data_prevista"
                         className="h-9 mt-1"
-                        min={new Date().toISOString().split('T')[0]}
+                        min={hojeBR()}
                       />
                     </div>
                     <Button
@@ -2309,7 +2302,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                                   onValueChange={(value) => {
                                     if (value === 'pago') {
                                       setParcelaParaMarcarPago(parcela);
-                                      setDataPagamentoManual(new Date().toISOString().split('T')[0]);
+                                      setDataPagamentoManual(hojeBR());
                                       setShowConfirmarPagoModal(true);
                                     } else {
                                       handleAlterarStatusParcela(parcela, value);
@@ -2365,7 +2358,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                                   <Button
                                     onClick={() => {
                                       setParcelaParaAprovar(parcela);
-                                      setDataPagamentoConfirmada(parcela.data_pagamento_informada || new Date().toISOString().split('T')[0]);
+                                      setDataPagamentoConfirmada(parcela.data_pagamento_informada || hojeBR());
                                       setShowAprovacaoParcelaModal(true);
                                     }}
                                     size="sm"
@@ -3537,7 +3530,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                   value={dataPagamentoParcela}
                   onChange={(e) => setDataPagamentoParcela(e.target.value)}
                   className="mt-2"
-                  max={new Date().toISOString().split('T')[0]}
+                  max={hojeBR()}
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Informe a data em que o pagamento foi realizado

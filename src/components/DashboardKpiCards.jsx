@@ -79,6 +79,20 @@ const CARD_CONFIG = [
     labelOutros: 'Valores Vencidos',
     format: 'currency',
   },
+  {
+    // Titulo pendente sem data: nao e vencido nem a vencer. So aparece se houver.
+    key: 'valorSemVencimento',
+    subKey: 'qtdSemVencimento',
+    icon: Calendar,
+    iconColor: 'text-gray-500',
+    badgeClass: 'bg-gray-200 text-gray-700',
+    badgeLabel: 'Sem data',
+    labelCliente: 'Sem Vencimento',
+    labelOutros: 'Sem Vencimento',
+    format: 'currency',
+    subFormat: 'titulos',
+    hideIfZero: true,
+  },
 ];
 
 function formatValue(value, format) {
@@ -93,6 +107,7 @@ export default function DashboardKpiCards({ role, kpis }) {
   const visibleCards = CARD_CONFIG.filter(card => {
     if (card.adminOnly && !isAdmin) return false;
     if (card.hideForCliente && isCliente) return false;
+    if (card.hideIfZero && !Number(kpis?.[card.key])) return false;
     return true;
   });
 
@@ -118,7 +133,8 @@ export default function DashboardKpiCards({ role, kpis }) {
                 </p>
                 {subValue != null && (
                   <p className="text-xs text-gray-500 mt-1">
-                    {subValue} {card.subFormat === 'pedidos' ? (subValue === 1 ? 'pedido' : 'pedidos') : ''}
+                    {subValue} {card.subFormat === 'pedidos' ? (subValue === 1 ? 'pedido' : 'pedidos')
+                      : card.subFormat === 'titulos' ? (subValue === 1 ? 'título' : 'títulos') : ''}
                   </p>
                 )}
               </div>

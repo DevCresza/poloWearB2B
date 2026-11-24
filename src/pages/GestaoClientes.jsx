@@ -15,6 +15,7 @@ import WhatsappModal from '../components/crm/WhatsappModal';
 import { toast } from 'sonner';
 import { Loja } from '@/api/entities';
 import { supabase } from '@/lib/supabase';
+import { hojeBR } from '@/utils/dataBR';
 
 export default function GestaoClientes() {
   const [users, setUsers] = useState([]);
@@ -147,7 +148,7 @@ export default function GestaoClientes() {
     ];
 
     const sufixo = filterTipoNegocio === 'all' ? 'todas' : filterTipoNegocio;
-    exportToCSV(linhas, columns, `lojas-${sufixo}-${new Date().toISOString().split('T')[0]}.csv`);
+    exportToCSV(linhas, columns, `lojas-${sufixo}-${hojeBR()}.csv`);
     if (linhas.length > 0) {
       toast.success(`${linhas.length} loja(s) exportada(s)`);
     }
