@@ -21,7 +21,7 @@ import { Pedido, Produto } from '@/api/entities';
 import { Carteira } from '@/api/entities';
 import { Loja, Fornecedor } from '@/api/entities';
 import { Faturamento } from '@/api/entities';
-import { substituirParcelas, avisoPreservadas } from '@/api/parcelas';
+import { substituirParcelas, avisoPreservadas, avisoAntecipadas } from '@/api/parcelas';
 import { PedidoHistorico } from '@/api/entities';
 import { UploadFile } from '@/api/integrations';
 import { formatDateTime, formatCurrency, getMesesEntregaPedido, getMesesFaturamentoPedido, formatMesAno } from '@/utils/exportUtils';
@@ -338,6 +338,8 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       });
       const avisoNF = avisoPreservadas(resultado);
       if (avisoNF) toast.info(avisoNF.trim(), { duration: 8000 });
+      const avisoAnt = avisoAntecipadas(resultado);
+      if (avisoAnt) toast.warning(avisoAnt, { duration: 15000 });
 
       toast.success(`Boleto enviado para NF #${fat.numero_nf} (${formatCurrency(parteBoleto)}).`);
       setBoletoFatId(null);

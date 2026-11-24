@@ -9,7 +9,7 @@ import { User } from '@/api/entities';
 import { Carteira, CarteiraTotaisPorFornecedor } from '@/api/entities';
 import { Fornecedor } from '@/api/entities'; // Added import for Fornecedor
 import { Faturamento } from '@/api/entities';
-import { substituirParcelas, avisoPreservadas } from '@/api/parcelas';
+import { substituirParcelas, avisoPreservadas, avisoAntecipadas } from '@/api/parcelas';
 import { SendEmail, UploadFile } from '@/api/integrations';
 import { devolverEstoque } from '@/utils/estoqueUtils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -396,7 +396,10 @@ export default function PedidosFornecedor() {
             const todasPendentes = parcelasDaNota.length > 0
               && parcelasDaNota.every(t => t.status !== 'pago' && t.status !== 'em_analise');
 
-            if (nota && todasPendentes && parcelasDaNota.every(t => t.data_vencimento)) {
+            // Boleto antecipado do pedido (sem nota) tambem entraria na troca:
+            // ai o fornecedor confere e reenvia pela nota, nao automatico.
+            if (nota && todasPendentes && parcelasDoPedido.length === 0
+                && parcelasDaNota.every(t => t.data_vencimento)) {
               const totalParcelas = parcelasDaNota.length;
               // Base e a parte em boleto declarada na nota, nao o valor atual
               // das parcelas: salvar o envio de novo nao soma o frete 2 vezes.
@@ -1137,6 +1140,8 @@ export default function PedidosFornecedor() {
       });
       const avisoNF = avisoPreservadas(resultado);
       if (avisoNF) toast.info(avisoNF.trim(), { duration: 8000 });
+      const avisoAnt = avisoAntecipadas(resultado);
+      if (avisoAnt) toast.warning(avisoAnt, { duration: 15000 });
       toast.success(`Boleto enviado para NF #${boletoNFSelected.numero_nf} (${formatCurrency(parteBoleto)}).`);
       setShowBoletoNFModal(false);
       loadPedidos({ silencioso: true });

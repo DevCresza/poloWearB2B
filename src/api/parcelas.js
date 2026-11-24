@@ -38,3 +38,15 @@ export function avisoPreservadas(resultado) {
   if (mantidas.length === 0) return '';
   return ` Mantida(s) a(s) parcela(s) ${mantidas.join(', ')}, já paga(s) ou com comprovante em análise.`;
 }
+
+/**
+ * Pedido com mais de uma nota: o boleto antecipado do pedido (titulos sem nota)
+ * nao e substituido, porque nao da para saber a qual nota ele pertence.
+ */
+export function avisoAntecipadas(resultado) {
+  const n = resultado?.antecipadas_mantidas || 0;
+  if (n === 0) return '';
+  return `Atenção: este pedido ainda tem ${n} parcela(s) do boleto antecipado, sem nota fiscal. `
+    + 'Como o pedido tem mais de uma nota, elas não foram substituídas. Peça ao admin para conciliar, '
+    + 'ou o cliente pode aparecer devendo em dobro.';
+}
