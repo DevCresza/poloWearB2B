@@ -5,7 +5,7 @@
 -- buckets `documentos` (NF, XML, boleto, comprovante) e `produtos` (fotos,
 -- banners, avatares). Um lojista podia trocar o boleto de outro.
 --
--- Depende da parte 1 (20261124120000_t3_funcoes_acesso_documentos).
+-- Depende da parte 1 (20261124010534_t3_funcoes_acesso_documentos).
 --
 -- ORDEM DE APLICAÇÃO: o front novo (uploads em pasta por dono) precisa estar no
 -- ar ANTES desta migração. O front antigo sobe tudo em `uploads/`, que aqui
@@ -14,7 +14,7 @@
 --
 -- Esta migração NÃO fecha o bucket `documentos` (continua public = true). O
 -- fechamento é outro passo, combinado com o dono:
--- supabase/scripts/t3_fechar_bucket_documentos.sql.
+-- 20261124011345_t3_fechar_bucket_documentos.sql.
 --
 -- Pastas no bucket `documentos`:
 --   fornecedor/<fornecedor_id>/…  NF, XML, boleto (o fornecedor; staff por ele)
@@ -70,7 +70,7 @@ create policy documentos_escrita_dono_remove on storage.objects
 
 -- documentos: leitura por quem tem o pedido. Hoje soma com a leitura pública
 -- ("Qualquer um pode visualizar documentos"); passa a valer sozinha quando o
--- bucket fechar (supabase/scripts/t3_fechar_bucket_documentos.sql).
+-- bucket fechar (20261124011345_t3_fechar_bucket_documentos.sql).
 create policy documentos_leitura_acesso on storage.objects
   for select to authenticated
   using (bucket_id = 'documentos' and public.pode_ler_documento(name));
