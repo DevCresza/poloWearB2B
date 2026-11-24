@@ -113,6 +113,7 @@ function aplicarLinks(html: string, links: string[]): string {
   // Marcador sem documento correspondente vira link do portal: nunca sai cru.
   return html.replace(/\{\{documento_(\d+)\}\}/g, (_m, i) => escapeHtml(links[Number(i)] ?? `${PORTAL_URL}/MeusPedidos`));
 }
+
 const MAX_DESTINATARIOS_NAO_STAFF = 5;
 
 const norm = (e: unknown) => String(e ?? '').trim().toLowerCase();

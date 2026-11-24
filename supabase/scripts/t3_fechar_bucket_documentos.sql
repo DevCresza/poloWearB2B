@@ -4,7 +4,7 @@
 --   1. o front novo (abre documento por URL assinada) estar no ar e conferido;
 --   2. as Edge Functions sendEmail v11 e enviarCobrancaVencimento v5 no ar
 --      (link de e-mail assinado por 60 dias);
---   3. a migração 20261124120000_t3_storage_escrita_por_dono aplicada.
+--   3. as migrações 20261124120000_t3_funcoes_acesso_documentos e 20261124120100_t3_storage_escrita_por_dono aplicadas.
 -- Aplicar depois das 20h. Ao aplicar, copiar para supabase/migrations/ com o
 -- carimbo de data do dia (mesmo nome no apply_migration).
 --
