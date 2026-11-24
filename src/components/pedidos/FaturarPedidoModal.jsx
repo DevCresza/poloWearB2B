@@ -8,11 +8,12 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CheckCircle, XCircle, Truck, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { Pedido, Faturamento, Carteira } from '@/api/entities';
+import { Carteira } from '@/api/entities';
+import { registrarFaturamento } from '@/api/faturamento';
 import { UploadFile, SendEmail } from '@/api/integrations';
 import { formatCurrency } from '@/utils/exportUtils';
 import { parseNFeXml, casarItensNFe } from '@/utils/nfeXml';
-import { conferirDivisao, ehBoleto, rotuloMetodo, METODOS } from '@/utils/divisaoPagamento';
+import { conferirDivisao, rotuloMetodo, METODOS } from '@/utils/divisaoPagamento';
 
 /**
  * Faturamento (total ou parcial) de um pedido.
@@ -221,170 +222,30 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
       }
       const nfUrlPrincipal = nfArquivos[0]?.url || null;
 
-      // Build faturamento items (only invoiced, not quebra)
-      const itensFaturados = itensSelecionados
-        .filter(it => !it._isQuebra)
-        .map(it => ({
-          produto_id: it.produto_id || it.id,
-          nome: it.nome,
-          cor: it.cor_selecionada?.cor_nome || '',
-          referencia: it.referencia || '',
-          qtd_faturada: it._qtdFaturar,
-          preco_unitario: it.preco || 0,
-          total: (it._qtdFaturar) * (it.preco || 0)
-        }));
-
-      const valorFaturamento = itensFaturados.reduce((sum, it) => sum + it.total, 0);
-      const valorQuebra = itensSelecionados
-        .filter(it => it._isQuebra)
-        .reduce((sum, it) => sum + (it._qtdQuebra * (it.preco || 0)), 0);
-
-      // Create faturamento record (only if there are invoiced items — skip for quebra-only)
-      if (itensFaturados.length > 0 && nfUrlPrincipal) {
-        const faturamentoCriado = await Faturamento.create({
-          pedido_id: pedido.id,
-          numero_nf: nfNumero,
+      // Nota, titulos 900+, itens e valores do pedido numa transacao so, no
+      // banco (registrar_faturamento): saldo conferido com o pedido travado,
+      // preco tirado do pedido e valor_faturado somado la -- nada de somar a
+      // partir do pedido em memoria. A NF do pedido (nf_numero/nf_url) so e
+      // preenchida na primeira nota; as demais ficam em faturamentos (M6).
+      const resultado = await registrarFaturamento({
+        pedidoId: pedido.id,
+        itens: itensSelecionados.map(it => (it._isQuebra
+          ? { indice: it._index, qtd_quebra: it._qtdQuebra }
+          : { indice: it._index, qtd_faturar: it._qtdFaturar })),
+        nf: isQuebraOnly ? null : {
+          numero: String(nfNumero).trim(),
           data_emissao: nfDataEmissao,
           nf_url: nfUrlPrincipal,
           nf_arquivos: nfArquivos,
-          itens: itensFaturados,
-          valor_total: valorFaturamento,
-          status: 'faturado',
           transportadora: transportadoraXml || null,
-          pagamentos: divisaoPagamento.linhas,
-          // metodo_pagamento espelha a PRIMEIRA forma: relatorios, exports e o
-          // PDF do pedido leem essa coluna e nao devem quebrar com a divisao.
-          metodo_pagamento: divisaoPagamento.linhas[0]?.metodo || pedido.metodo_pagamento || null
-        });
-
-        // Partes que NAO sao boleto viram titulo agora: elas nao tem boleto
-        // para anexar depois, entao se nao nascerem aqui nunca nascem -- e o
-        // em-aberto do cliente ficaria menor que a nota, parecendo cobranca
-        // faltando. A parte em boleto fica para o fluxo de boleto, que precisa
-        // do PDF e das datas de vencimento.
-        const semBoleto = divisaoPagamento.linhas.filter(l => !ehBoleto(l.metodo));
-        if (faturamentoCriado?.id && semBoleto.length > 0) {
-          for (let i = 0; i < semBoleto.length; i++) {
-            const linha = semBoleto[i];
-            await Carteira.create({
-              pedido_id: pedido.id,
-              faturamento_id: faturamentoCriado.id,
-              tipo: 'a_receber',
-              status: 'pendente',
-              valor: linha.valor,
-              // Sem data de vencimento de proposito. total_vencido conta
-              // 'pendente' COM data_vencimento < hoje; com a data da emissao,
-              // toda venda a vista viraria "vencida" no dia seguinte e o
-              // cliente apareceria inadimplente sem dever nada. Sem data, o
-              // titulo entra no em-aberto (que e verdade: ainda nao teve
-              // baixa) e nunca no vencido.
-              data_vencimento: null,
-              // Numeracao alta e propria: o indice unico
-              // (faturamento_id, parcela_numero) nao aceita repetido, e estes
-              // titulos nao podem colidir com as parcelas 1..N do boleto.
-              parcela_numero: 900 + i,
-              total_parcelas: semBoleto.length,
-              metodo_pagamento: linha.metodo,
-              descricao: `${rotuloMetodo(linha.metodo)} - NF #${nfNumero}`,
-              loja_id: pedido.loja_id || null,
-              cliente_user_id: pedido.comprador_user_id || null,
-              fornecedor_id: pedido.fornecedor_id || null
-            });
-          }
-        }
-      }
-
-      // Update pedido items with qtd_faturada/qtd_quebra
-      // Parse itens safely (may be string or array depending on Supabase response)
-      let parsedItens = pedido.itens || [];
-      if (typeof parsedItens === 'string') {
-        try { parsedItens = JSON.parse(parsedItens); } catch (e) { parsedItens = []; }
-      }
-      const updatedItens = [...parsedItens];
-      for (const item of itensSelecionados) {
-        const idx = item._index;
-        if (idx >= 0 && idx < updatedItens.length) {
-          if (item._isQuebra) {
-            updatedItens[idx] = {
-              ...updatedItens[idx],
-              qtd_quebra: (updatedItens[idx].qtd_quebra || 0) + item._qtdQuebra,
-              status_item: ((updatedItens[idx].qtd_faturada || 0) + (updatedItens[idx].qtd_quebra || 0) + item._qtdQuebra >= updatedItens[idx].quantidade)
-                ? 'quebra' : 'parcial'
-            };
-          } else {
-            const newQtdFaturada = (updatedItens[idx].qtd_faturada || 0) + item._qtdFaturar;
-            const newQtdQuebra = updatedItens[idx].qtd_quebra || 0;
-            const total = updatedItens[idx].quantidade || 0;
-            let statusItem = 'pendente';
-            if (newQtdFaturada + newQtdQuebra >= total) {
-              statusItem = newQtdQuebra > 0 ? 'faturado' : 'faturado';
-            } else if (newQtdFaturada > 0) {
-              statusItem = 'parcial';
-            }
-            updatedItens[idx] = {
-              ...updatedItens[idx],
-              qtd_faturada: newQtdFaturada,
-              status_item: statusItem
-            };
-          }
-        }
-      }
-
-      // Check if all items are resolved
-      const todosResolvidos = updatedItens.every(it => {
-        const faturado = it.qtd_faturada || 0;
-        const quebra = it.qtd_quebra || 0;
-        const total = it.quantidade || 0;
-        return faturado + quebra >= total;
+        },
+        pagamentos: isQuebraOnly ? [] : divisaoPagamento.linhas,
       });
 
-      const novoValorFaturado = (pedido.valor_faturado || 0) + valorFaturamento;
-      const novoValorQuebra = (pedido.valor_quebra || 0) + valorQuebra;
-      const novoStatus = todosResolvidos ? 'faturado' : 'parcialmente_faturado';
-
-      // Clean itens before saving (remove any internal _fields)
-      const cleanItens = updatedItens.map(it => {
-        const clean = { ...it };
-        delete clean._index;
-        delete clean._selected;
-        delete clean._qtdFaturar;
-        delete clean._isQuebra;
-        delete clean._qtdQuebra;
-        delete clean._saldo;
-        return clean;
-      });
-
-      // Update pedido - split into two updates for reliability
-      // First: update status and financial values
-      const pedidoUpdate = {
-        status: novoStatus,
-        valor_faturado: novoValorFaturado,
-        valor_quebra: novoValorQuebra,
-        valor_final: (pedido.valor_total || 0) - novoValorQuebra,
-      };
-      // Only set NF fields if we have a NF (not quebra-only)
-      if (nfUrlPrincipal) {
-        pedidoUpdate.nf_url = nfUrlPrincipal;
-        pedidoUpdate.nf_numero = nfNumero;
-        pedidoUpdate.nf_data_upload = nfDataEmissao + 'T00:00:00';
-      }
-      // Save método de pagamento if changed
-      if (divisaoPagamento.linhas[0]?.metodo) {
-        pedidoUpdate.metodo_pagamento = divisaoPagamento.linhas[0].metodo;
-      }
-      // Transportadora lida do XML. So preenche se o pedido ainda nao tem, para
-      // nao sobrescrever o que ja foi informado no "Informar Envio".
-      if (transportadoraXml && !pedido.transportadora) {
-        pedidoUpdate.transportadora = transportadoraXml;
-      }
-      await Pedido.update(pedido.id, pedidoUpdate);
-
-      // Second: update itens JSONB separately
-      try {
-        await Pedido.update(pedido.id, { itens: cleanItens });
-      } catch (itensErr) {
-        console.warn('Erro ao atualizar itens do pedido (valores já salvos):', itensErr);
-      }
+      const valorFaturamento = Number(resultado?.valor_faturamento) || 0;
+      const valorQuebra = Number(resultado?.valor_quebra) || 0;
+      const todosResolvidos = !!resultado?.todos_resolvidos;
+      const saldoPendente = Number(resultado?.saldo_pendente) || 0;
 
       // Check if parcelas need adjustment warning
       if (valorQuebra > 0) {
@@ -422,7 +283,7 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
                     ${!isQuebraOnly ? `<p><strong>Nota Fiscal:</strong> #${nfNumero}</p>` : ''}
                     ${valorFaturamento > 0 ? `<p><strong>Valor deste faturamento:</strong> ${formatCurrency(valorFaturamento)}</p>` : ''}
                     ${valorQuebra > 0 ? `<p style="color: #dc2626;"><strong>Quebra de produção:</strong> ${formatCurrency(valorQuebra)}</p>` : ''}
-                    ${!todosResolvidos ? `<p><strong>Saldo pendente:</strong> ${formatCurrency((pedido.valor_total || 0) - novoValorFaturado - novoValorQuebra)}</p>` : ''}
+                    ${!todosResolvidos ? `<p><strong>Saldo pendente:</strong> ${formatCurrency(saldoPendente)}</p>` : ''}
                   </div>
                   ${nfArquivos.length > 0 ? `<div style="text-align: center; margin-top: 30px;">
                     ${nfArquivos.map((a, i) => `<a href="${a.url}" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; margin: 4px;">
