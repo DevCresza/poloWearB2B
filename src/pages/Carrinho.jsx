@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { User } from '@/api/entities';
-import { Pedido } from '@/api/entities';
 import { Fornecedor } from '@/api/entities';
-import { Carteira } from '@/api/entities';
 import { Produto } from '@/api/entities';
-import { darBaixaEstoque } from '@/utils/estoqueUtils';
+import { criarPedido, novaChaveEnvio } from '@/api/pedidos';
+import { getPedidoMinimo } from '@/utils/pedidoMinimo';
+import { carrinhoParaPayload, precoCapsula } from '@/utils/capsulaItens';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -26,7 +26,7 @@ import { formatCurrency } from '@/utils/exportUtils';
 import CampoQuantidade from '@/components/CampoQuantidade';
 import { useLojaContext } from '@/contexts/LojaContext';
 import { useRepresentacao } from '@/contexts/RepresentacaoContext';
-import { getPrecoPeca, getPrecoGrade } from '@/utils/precoCliente';
+import { precoUnitarioItem } from '@/utils/itemPedido';
 import { Store } from 'lucide-react';
 import { Loja } from '@/api/entities';
 import ReplicarPedidoModal from '@/components/pedidos/ReplicarPedidoModal';
@@ -57,6 +57,10 @@ export default function Carrinho() {
   const idsBuscados = useRef(new Set());
   const [loading, setLoading] = useState(true);
   const [finalizando, setFinalizando] = useState({});
+  // Trava sincrona contra clique duplo (o state so atualiza no proximo render).
+  const enviando = useRef(new Set());
+  // Chave de idempotencia por fornecedor+loja, mantida ate o pedido sair.
+  const chavesEnvio = useRef({});
   const [metodoPagamento, setMetodoPagamento] = useState({});
   const [observacoes, setObservacoes] = useState({});
   const [showBloqueioModal, setShowBloqueioModal] = useState(false);
@@ -191,16 +195,7 @@ export default function Carrinho() {
   // Pedido minimo do fornecedor conforme o tipo do cliente logado.
   // Multimarca: pedido_minimo_multimarca; Franqueado: pedido_minimo_franqueado.
   // Fallback: pedido_minimo_valor (legado) se o campo especifico nao estiver setado.
-  const getMinimoFornecedor = (fornecedor) => {
-    if (!fornecedor) return 0;
-    const isMulti = user?.tipo_negocio === 'multimarca';
-    const especifico = isMulti
-      ? fornecedor.pedido_minimo_multimarca
-      : fornecedor.pedido_minimo_franqueado;
-    const v = Number(especifico);
-    if (Number.isFinite(v) && v > 0) return v;
-    return Number(fornecedor.pedido_minimo_valor) || 0;
-  };
+  const getMinimoFornecedor = (fornecedor) => getPedidoMinimo(fornecedor, user);
 
   // Helper para parsear fotos do produto (vem como JSON string do banco)
   const getPrimeiraFoto = (item) => {
@@ -338,21 +333,14 @@ export default function Carrinho() {
         return { ...det, configuracao: novaConfig };
       });
 
-      // Recalcula preco unitario com base em produtos atuais do banco
-      let precoUnitario = 0;
-      for (const pid of (item.produto_ids || [])) {
-        const produto = produtos.find(p => p.id === pid);
-        if (!produto) continue;
-        const qtdConf = pq[pid];
-        const precoItem = produto.tipo_venda === 'grade'
-          ? getPrecoGrade(produto, user)
-          : getPrecoPeca(produto, user);
-        if (typeof qtdConf === 'number') {
-          precoUnitario += precoItem * qtdConf;
-        } else if (qtdConf && Array.isArray(qtdConf.variantes)) {
-          qtdConf.variantes.forEach(v => { precoUnitario += precoItem * (v.quantidade || 0); });
-        }
-      }
+      // Recalcula o preco da capsula com os produtos atuais do banco (mesma
+      // regra do servidor, inclusive produto por tamanho).
+      const precoUnitario = precoCapsula({
+        produtoIds: item.produto_ids || [],
+        produtosQuantidades: pq,
+        produtos,
+        comprador: user,
+      });
 
       return {
         ...item,
@@ -388,6 +376,14 @@ export default function Carrinho() {
 
   const itensIndisponiveis = getItensIndisponiveis();
   const temIndisponivel = itensIndisponiveis.size > 0;
+
+  // Preco de uma unidade do item como o servidor vai cobrar: cadastro atual do
+  // produto (nao a copia guardada no carrinho) e, por tamanho, preco por peca.
+  const precoItemCarrinho = (item) => precoUnitarioItem(
+    produtos.find(p => p.id === item.id) || item,
+    user,
+    { porTamanho: !!item.tamanho_selecionado },
+  );
 
   const agruparPorFornecedor = () => {
     const grupos = {};
@@ -445,9 +441,7 @@ export default function Carrinho() {
       if (item.tipo === 'capsula') {
         preco = item.preco_unitario || 0;
       } else {
-        preco = item.tipo_venda === 'grade'
-          ? getPrecoGrade(item, user)
-          : getPrecoPeca(item, user);
+        preco = precoItemCarrinho(item);
       }
 
       grupos[fornecedorKey].total += preco * item.quantidade;
@@ -507,257 +501,40 @@ export default function Carrinho() {
     return metodosBase.filter(m => aceitosPeloFornecedor.includes(m.value));
   };
 
-  // Função reutilizável para criar um pedido para uma loja específica
+  // Cria o pedido de um grupo (fornecedor) para uma loja. Tudo acontece no
+  // servidor, numa transacao so (RPC criar_pedido): preco recalculado a partir
+  // do cadastro, pedido minimo, bloqueio, forma de pagamento, baixa de estoque
+  // com trava, pedido e titulo provisorio. O que vai daqui e so produto,
+  // cor/tamanho e quantidade -- preco do navegador e ignorado.
+  //
+  // A chave de envio fica guardada por fornecedor+loja ate dar certo: um clique
+  // duplo (ou um "tentar de novo" depois de a resposta se perder) devolve o
+  // mesmo pedido em vez de criar outro.
   const criarPedidoParaLoja = async (grupoData, loja, metodo, obs) => {
+    // Endereco: o servidor tambem confere; aqui e so para avisar antes.
+    const enderecoSource = loja || user;
+    if (!enderecoSource?.endereco_completo || !enderecoSource.cep || !enderecoSource.cidade || !enderecoSource.estado) {
+      const msg = loja
+        ? `Loja "${loja.nome_fantasia || loja.nome}" não possui endereço completo.`
+        : 'Endereço de entrega incompleto.';
+      return { success: false, error: msg };
+    }
+
+    const chaveId = `${grupoData.fornecedor_id}|${loja?.id || ''}`;
+    if (!chavesEnvio.current[chaveId]) chavesEnvio.current[chaveId] = novaChaveEnvio();
+
     try {
-      // Validar endereço da loja
-      const enderecoSource = loja || user;
-      if (!enderecoSource.endereco_completo || !enderecoSource.cep || !enderecoSource.cidade || !enderecoSource.estado) {
-        const msg = loja
-          ? `Loja "${loja.nome_fantasia || loja.nome}" não possui endereço completo.`
-          : 'Endereço de entrega incompleto.';
-        return { success: false, error: msg };
-      }
-
-      // Bloqueio por atraso de boleto é MANUAL (decisão do admin), não
-      // automático: um título vencido não impede o pedido por si só. O
-      // bloqueio manual continua valendo (loja.bloqueada / user.bloqueado
-      // são checados no seletor de lojas e no botão de finalizar).
-
-      // Verificar pedido mínimo
-      const fornecedor = fornecedores.find(f => f.id === grupoData.fornecedor_id);
-      if (fornecedor && getMinimoFornecedor(fornecedor) > 0) {
-        if (grupoData.total < getMinimoFornecedor(fornecedor)) {
-          return { success: false, error: `Valor abaixo do mínimo de ${formatCurrency(getMinimoFornecedor(fornecedor))}.` };
-        }
-      }
-
-      // Mapear itens - expandir cápsulas em produtos individuais
-      const itensPedido = grupoData.itens.flatMap(item => {
-        if (item.tipo === 'capsula') {
-          // Expandir cápsula em produtos individuais
-          const detalhes = item.detalhes_produtos || [];
-          const capsulaQtd = item.quantidade || 1;
-
-          return detalhes.flatMap(detalhe => {
-            const produtoCompleto = produtos.find(p => p.id === detalhe.id);
-            if (!produtoCompleto) return [];
-
-            const config = detalhe.configuracao;
-            const tipoVenda = produtoCompleto.tipo_venda || 'avulso';
-            const pecasGrade = parseInt(produtoCompleto.total_pecas_grade) || 1;
-            const precoUnitario = getPrecoPeca(produtoCompleto, user);
-            const precoGrade = getPrecoGrade(produtoCompleto, user);
-
-            // Foto do produto
-            let fotoUrl = null;
-            if (detalhe.foto) {
-              fotoUrl = typeof detalhe.foto === 'string' ? detalhe.foto : detalhe.foto?.url;
-            }
-            if (!fotoUrl) {
-              fotoUrl = getPrimeiraFoto(produtoCompleto);
-            }
-
-            // Quando o produto eh vendido em grade, o pedido guarda:
-            //   quantidade = num. de GRADES (nao pecas)
-            //   preco      = preco da GRADE inteira (= preco_grade_completa)
-            // Quando eh avulso, guarda peca: quantidade = pecas, preco = por peca.
-            // (mesmo padrao do checkout de produto normal, linhas ~537-540)
-            const isGrade = tipoVenda === 'grade';
-
-            // Se tem variantes por cor, criar um item por cor.
-            // IMPORTANTE: variantes com quantidade 0 sao IGNORADAS (cliente
-            // viu a cor disponivel mas optou por nao pedir).
-            if (config && typeof config === 'object' && config.variantes && Array.isArray(config.variantes)) {
-              return config.variantes
-                .map(variante => {
-                  const numGrades = (Number(variante.quantidade) || 0) * capsulaQtd;
-                  if (numGrades <= 0) return null; // pula cor zerada
-                  const precoSalvo = isGrade ? precoGrade : precoUnitario;
-                  return {
-                    produto_id: detalhe.id,
-                    nome: produtoCompleto.nome,
-                    marca: produtoCompleto.marca || '',
-                    referencia: produtoCompleto.referencia_polo || produtoCompleto.referencia_fornecedor || '',
-                    referencia_fornecedor: produtoCompleto.referencia_fornecedor || '',
-                    referencia_linx: produtoCompleto.referencia_polo || '',
-                    tipo_venda: tipoVenda,
-                    quantidade: numGrades,
-                    total_pecas_grade: pecasGrade,
-                    preco: precoSalvo,
-                    total: precoSalvo * numGrades,
-                    foto: fotoUrl,
-                    grade_selecionada: null,
-                    cor_selecionada: {
-                      cor_nome: variante.cor_nome,
-                      cor_codigo_hex: variante.cor_codigo_hex || variante.cor_hex || '#000000'
-                    },
-                    origem_capsula: item.capsula_id,
-                    // Mes de entrega escolhido pelo cliente para esta capsula.
-                    // Vira o mes de entrega/faturamento no relatorio.
-                    mes_entrega: item.mes_selecionado || null
-                  };
-                })
-                .filter(Boolean);
-            }
-
-            // Produto por tamanho na capsula: gera 1 item por tamanho.
-            // Quantidade eh em PECAS. Se grade, preco = preco_grade / total_pecas_grade.
-            if (config && typeof config === 'object' && Array.isArray(config.tamanhos)) {
-              const precoPorPecaTam = isGrade && pecasGrade > 0
-                ? (precoGrade / pecasGrade)
-                : precoUnitario;
-              return config.tamanhos
-                .map(tamConfig => {
-                  const qtdPecas = (Number(tamConfig.quantidade) || 0) * capsulaQtd;
-                  if (qtdPecas <= 0) return null;
-                  return {
-                    produto_id: detalhe.id,
-                    nome: produtoCompleto.nome,
-                    marca: produtoCompleto.marca || '',
-                    referencia: produtoCompleto.referencia_polo || produtoCompleto.referencia_fornecedor || '',
-                    referencia_fornecedor: produtoCompleto.referencia_fornecedor || '',
-                    referencia_linx: produtoCompleto.referencia_polo || '',
-                    tipo_venda: tipoVenda,
-                    quantidade: qtdPecas,
-                    total_pecas_grade: pecasGrade,
-                    preco: precoPorPecaTam,
-                    total: precoPorPecaTam * qtdPecas,
-                    foto: fotoUrl,
-                    grade_selecionada: null,
-                    cor_selecionada: null,
-                    tamanho_selecionado: tamConfig.tamanho,
-                    origem_capsula: item.capsula_id,
-                    // Mes de entrega escolhido pelo cliente para esta capsula.
-                    // Vira o mes de entrega/faturamento no relatorio.
-                    mes_entrega: item.mes_selecionado || null
-                  };
-                })
-                .filter(Boolean);
-            }
-
-            // Quantidade simples (sem variantes de cor)
-            const qtdSimples = (typeof config === 'number' ? config : 0) * capsulaQtd;
-            if (qtdSimples <= 0) return []; // produto opcional nao pedido
-            const precoSimples = isGrade ? precoGrade : precoUnitario;
-            return [{
-              produto_id: detalhe.id,
-              nome: produtoCompleto.nome,
-              marca: produtoCompleto.marca || '',
-              referencia: produtoCompleto.referencia_polo || produtoCompleto.referencia_fornecedor || '',
-              referencia_fornecedor: produtoCompleto.referencia_fornecedor || '',
-              referencia_linx: produtoCompleto.referencia_polo || '',
-              tipo_venda: tipoVenda,
-              quantidade: qtdSimples,
-              total_pecas_grade: pecasGrade,
-              preco: precoSimples,
-              total: precoSimples * qtdSimples,
-              foto: fotoUrl,
-              grade_selecionada: null,
-              cor_selecionada: null,
-              origem_capsula: item.capsula_id,
-              mes_entrega: item.mes_selecionado || null
-            }];
-          });
-        }
-        // Produto por tamanho: quantidade eh sempre em PECAS. Se for grade,
-        // o preco por peca vem da grade dividida (grade R$120 / 6 pcs = R$20).
-        const isPorTamanho = !!item.tamanho_selecionado;
-        let precoBase;
-        if (isPorTamanho) {
-          if (item.tipo_venda === 'grade' && (item.total_pecas_grade || 0) > 0) {
-            precoBase = getPrecoGrade(item, user) / item.total_pecas_grade;
-          } else {
-            precoBase = getPrecoPeca(item, user);
-          }
-        } else {
-          precoBase = item.tipo_venda === 'grade' ? getPrecoGrade(item, user) : getPrecoPeca(item, user);
-        }
-        return [{
-          produto_id: item.id,
-          nome: item.nome,
-          marca: item.marca,
-          referencia: item.referencia_polo || item.referencia_fornecedor || '',
-          referencia_fornecedor: item.referencia_fornecedor || '',
-          referencia_linx: item.referencia_polo || '',
-          tipo_venda: item.tipo_venda,
-          quantidade: item.quantidade,
-          total_pecas_grade: item.total_pecas_grade || 0,
-          preco: precoBase,
-          total: precoBase * item.quantidade,
-          foto: getPrimeiraFoto(item),
-          grade_selecionada: item.grade_configuracao || null,
-          cor_selecionada: item.cor_selecionada || null,
-          tamanho_selecionado: item.tamanho_selecionado || null,
-        }];
-      });
-
-      // Calcular total com base nos itens (pode ter sido editado no modal)
-      const totalCalculado = itensPedido.reduce((sum, it) => sum + it.total, 0);
-
-      // Endereço de entrega. `user` aqui e o COMPRADOR — nunca o vendedor.
-      // Para o vendedor a loja e obrigatoria (exigeLoja), senao o pedido cairia
-      // no endereco de quem operou a tela.
-      const src = loja || user;
-      const enderecoEntrega = {
-        endereco: src.endereco_completo,
-        cep: src.cep,
-        cidade: src.cidade,
-        estado: src.estado,
-        destinatario: loja ? (loja.nome_fantasia || loja.nome) : user.full_name,
-        telefone: loja?.telefone || user.telefone || user.whatsapp
-      };
-
-      const fornecedorId = grupoData.fornecedor_id;
-      const pedidoData = {
-        comprador_user_id: user.id,
-        fornecedor_id: fornecedorId === 'capsula' ? null : fornecedorId,
-        loja_id: loja?.id || null,
-        itens: itensPedido,
-        valor_total: totalCalculado,
-        valor_final: totalCalculado,
-        status: 'novo_pedido',
-        status_pagamento: 'pendente',
-        metodo_pagamento: metodo,
-        endereco_entrega: enderecoEntrega,
+      const resultado = await criarPedido({
+        carrinho: carrinhoParaPayload(grupoData.itens),
+        lojaId: loja?.id || null,
+        metodoPagamento: metodo,
+        chave: chavesEnvio.current[chaveId],
         observacoes: obs || '',
-        observacoes_comprador: obs || '',
-        estoque_baixado: true,
-        // Autoria: quem operou a tela (o cliente, ou o vendedor em nome dele).
-        criado_por_user_id: usuarioLogado?.id || null,
-        criado_por_papel: isVendedor ? 'vendedor' : 'cliente',
-      };
-
-      const pedido = await Pedido.create(pedidoData);
-
-      // Baixa automática de estoque dos produtos vendidos.
-      // Não bloqueia o pedido caso falhe — apenas registra o erro.
-      try {
-        await darBaixaEstoque(itensPedido);
-      } catch (estoqueErr) {
-        console.error('Erro ao dar baixa no estoque:', estoqueErr);
-      }
-
-      const dataVencimento = new Date();
-      dataVencimento.setDate(dataVencimento.getDate() + 30);
-
-      const descricaoCarteira = fornecedorId === 'capsula'
-        ? `Pedido #${pedido.id.slice(-8).toUpperCase()} - Cápsula`
-        : `Pedido #${pedido.id.slice(-8).toUpperCase()} - ${fornecedor?.nome_fantasia || fornecedor?.nome_marca}`;
-
-      await Carteira.create({
-        pedido_id: pedido.id,
-        cliente_user_id: user.id,
-        loja_id: loja?.id || null,
-        tipo: 'a_pagar',
-        descricao: descricaoCarteira,
-        valor: totalCalculado,
-        data_vencimento: dataVencimento.toISOString().split('T')[0],
-        status: 'pendente',
-        categoria: 'Pedido'
+        // `user` e o comprador; so muda quando um vendedor compra pelo cliente.
+        compradorUserId: isVendedor ? user.id : null,
       });
-
-      return { success: true, pedidoId: pedido.id };
+      delete chavesEnvio.current[chaveId];
+      return { success: true, pedidoId: resultado?.pedido_id, valorTotal: resultado?.valor_total };
     } catch (err) {
       console.error('Erro ao criar pedido para loja:', err);
       return { success: false, error: err.message || 'Erro desconhecido ao criar pedido.' };
@@ -821,6 +598,16 @@ export default function Carrinho() {
   };
 
   const finalizarCompraPorFornecedor = async (fornecedorId) => {
+    if (enviando.current.has(fornecedorId)) return;
+    enviando.current.add(fornecedorId);
+    try {
+      await finalizarCompraPorFornecedorInterno(fornecedorId);
+    } finally {
+      enviando.current.delete(fornecedorId);
+    }
+  };
+
+  const finalizarCompraPorFornecedorInterno = async (fornecedorId) => {
     // Vendedor sem cliente escolhido nao tem em nome de quem comprar.
     if (!user) {
       toast.error('Escolha o cliente no topo da tela antes de finalizar o pedido.');
@@ -1422,9 +1209,7 @@ export default function Carrinho() {
                         }
 
                         // Renderização normal para produtos
-                        const preco = item.tipo_venda === 'grade'
-                          ? getPrecoGrade(item, user)
-                          : getPrecoPeca(item, user);
+                        const preco = precoItemCarrinho(item);
                         const itemKey = `${item.id}_${item.cor_selecionada?.cor_nome || 'default'}`;
                         const indisponivel = itensIndisponiveis.has(itemKey);
 

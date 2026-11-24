@@ -141,8 +141,32 @@ export async function darBaixaEstoque(itens) {
   if (error) throw error;
 }
 
+/**
+ * O banco ja cuida do estoque do pedido? (T8, trigger trg_pedidos_zz_estoque)
+ *
+ * Ligado, cancelar o pedido devolve o estoque uma unica vez e revisar os itens
+ * aplica a diferenca, tudo no banco -- a tela nao deve mexer no estoque, senao
+ * devolve em dobro. Desligado (antes da fase 2 ou num rollback), as telas
+ * seguem pelo caminho antigo (devolverEstoque / darBaixaEstoque). Na duvida
+ * (erro na consulta), assume ligado: devolver a menos aparece na conferencia,
+ * devolver em dobro some no estoque sem aviso.
+ *
+ * Quando a fase 2 estiver no ar ha um tempo, este caminho antigo pode sair.
+ */
+// Sem cache de proposito: uma aba aberta antes de a fase 2 ir ao ar nao pode
+// continuar achando que o estorno e da tela (devolveria em dobro).
+export async function estoqueAutomaticoAtivo() {
+  try {
+    const { data, error } = await supabase.rpc('estoque_automatico_ativo');
+    return error ? true : data === true;
+  } catch {
+    return true;
+  }
+}
+
 // Devolve o estoque (cancelamento/recusa). Só quem tem acesso de staff faz isso,
 // e o staff pode escrever em `produtos` — segue pelo caminho normal.
+// Só use quando estoqueAutomaticoAtivo() for falso.
 export async function devolverEstoque(itens) {
   return ajustarEstoque(itens, 1);
 }

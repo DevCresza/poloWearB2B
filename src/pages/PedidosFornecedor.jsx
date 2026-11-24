@@ -11,7 +11,7 @@ import { Fornecedor } from '@/api/entities'; // Added import for Fornecedor
 import { Faturamento } from '@/api/entities';
 import { substituirParcelas, avisoPreservadas, avisoAntecipadas } from '@/api/parcelas';
 import { SendEmail, UploadFile } from '@/api/integrations';
-import { devolverEstoque } from '@/utils/estoqueUtils';
+import { devolverEstoque, estoqueAutomaticoAtivo } from '@/utils/estoqueUtils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -301,7 +301,8 @@ export default function PedidosFornecedor() {
       });
 
       // Devolver ao estoque os produtos do pedido recusado
-      if (selectedPedido.estoque_baixado) {
+      // Com o estorno automatico no banco (T8), o cancelamento ja devolveu.
+      if (selectedPedido.estoque_baixado && !(await estoqueAutomaticoAtivo())) {
         try {
           await devolverEstoque(selectedPedido.itens);
           await Pedido.update(selectedPedido.id, { estoque_baixado: false });
@@ -591,7 +592,8 @@ export default function PedidosFornecedor() {
       });
 
       // Devolver ao estoque os produtos do pedido cancelado
-      if (selectedPedido.estoque_baixado) {
+      // Com o estorno automatico no banco (T8), o cancelamento ja devolveu.
+      if (selectedPedido.estoque_baixado && !(await estoqueAutomaticoAtivo())) {
         try {
           await devolverEstoque(selectedPedido.itens);
           await Pedido.update(selectedPedido.id, { estoque_baixado: false });
