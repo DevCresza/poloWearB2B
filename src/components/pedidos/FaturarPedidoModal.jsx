@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { Carteira } from '@/api/entities';
 import { registrarFaturamento } from '@/api/faturamento';
 import { UploadFile, SendEmail } from '@/api/integrations';
+import { caminhoDocumento } from '@/utils/documentos';
 import { formatCurrency } from '@/utils/exportUtils';
 import { parseNFeXml, casarItensNFe } from '@/utils/nfeXml';
 import { conferirDivisao, rotuloMetodo, METODOS } from '@/utils/divisaoPagamento';
@@ -250,7 +251,7 @@ export default function FaturarPedidoModal({
       const nfArquivos = [];
       if (!isQuebraOnly) {
         for (const arquivo of nfFiles) {
-          const enviado = await UploadFile({ file: arquivo });
+          const enviado = await UploadFile({ file: arquivo, dono: { fornecedorId: pedido.fornecedor_id } });
           // Numero lido do proprio XML; sem XML, cai no numero digitado -- que
           // e o certo quando ha uma nota so.
           const lido = dadosPorArquivo[arquivo.name];
@@ -314,6 +315,9 @@ export default function FaturarPedidoModal({
             from_name: 'POLO B2B',
             to: cliente.email,
             subject,
+            // Link do arquivo: o servidor (sendEmail) troca {{documento_N}} por
+            // uma URL assinada de 60 dias do caminho N. O bucket e privado.
+            documentos: nfArquivos.map(a => caminhoDocumento(a.url)),
             body: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <div style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); padding: 30px; text-align: center;">
@@ -328,7 +332,7 @@ export default function FaturarPedidoModal({
                     ${!todosResolvidos ? `<p><strong>Saldo pendente:</strong> ${formatCurrency(saldoPendente)}</p>` : ''}
                   </div>
                   ${nfArquivos.length > 0 ? `<div style="text-align: center; margin-top: 30px;">
-                    ${nfArquivos.map((a, i) => `<a href="${a.url}" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; margin: 4px;">
+                    ${nfArquivos.map((a, i) => `<a href="{{documento_${i}}}" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; margin: 4px;">
                       ${nfArquivos.length > 1 ? `Baixar Nota ${i + 1}` : 'Baixar Nota Fiscal'}
                     </a>`).join('')}
                   </div>` : ''}

@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Recurso } from '@/api/entities';
-import { UploadFile } from '@/api/integrations';
+import { uploadArquivoPublico, TAMANHO_MAXIMO_PUBLICO } from '@/lib/storageHelpers';
 import { Save, X, Upload, Plus, Trash2, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import ImageEditor from '@/components/ImageEditor';
@@ -49,13 +49,13 @@ export default function RecursoForm({ recurso, onClose, onSuccess }) {
 
     try {
       // Validacao de tamanho ANTES do upload (evita esperar pelo erro 413)
-      const limiteMB = 500;
+      const limiteMB = TAMANHO_MAXIMO_PUBLICO / (1024 * 1024);
       const tamanhoMB = (file.size || 0) / (1024 * 1024);
       if (tamanhoMB > limiteMB) {
         toast.error(`Arquivo muito grande: ${tamanhoMB.toFixed(1)} MB. Limite: ${limiteMB} MB.`);
         return;
       }
-      const result = await UploadFile({ file });
+      const result = await uploadArquivoPublico(file, 'recursos');
       const fileUrl = result.url || result.file_url;
       setFormData({ ...formData, [field]: fileUrl });
       toast.success(`Upload concluído (${tamanhoMB.toFixed(1)} MB)`);
@@ -373,7 +373,7 @@ export default function RecursoForm({ recurso, onClose, onSuccess }) {
                 setUploadingThumb(true);
                 try {
                   const file = arquivoDoBlob(blob, 'capa');
-                  const result = await UploadFile({ file });
+                  const result = await uploadArquivoPublico(file, 'recursos');
                   const url = result.url || result.file_url;
                   setFormData(prev => ({ ...prev, thumbnail_url: url }));
                   toast.success('Capa salva!');

@@ -308,7 +308,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     if (checagem.aviso && !window.confirm(checagem.aviso)) return;
     setUploadingBoletoFat(true);
     try {
-      const result = await UploadFile({ file: boletoFatFile });
+      const result = await UploadFile({ file: boletoFatFile, dono: { fornecedorId: pedido.fornecedor_id } });
 
       // Parcelas primeiro (RPC substituir_parcelas, numa transacao): reenviar o
       // boleto da MESMA NF substitui as parcelas anteriores, mantendo as pagas e
@@ -547,7 +547,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     if (checagem.aviso && !window.confirm(checagem.aviso)) return;
     setUploading(true);
     try {
-      const result = await UploadFile({ file: boletoFile });
+      const result = await UploadFile({ file: boletoFile, dono: { fornecedorId: pedido.fornecedor_id } });
 
       // Parcelas pela RPC substituir_parcelas (uma transacao): mantem as pagas
       // e as em analise, e nao cria jogo em dobro. Antes o fornecedor
@@ -626,7 +626,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     try {
       let novaUrl = pedido.boleto_url;
       if (boletoFile) {
-        const result = await UploadFile({ file: boletoFile });
+        const result = await UploadFile({ file: boletoFile, dono: { fornecedorId: pedido.fornecedor_id } });
         novaUrl = result.file_url;
       }
 
@@ -715,7 +715,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
     }
     setUploading(true);
     try {
-      const result = await UploadFile({ file: nfFile });
+      const result = await UploadFile({ file: nfFile, dono: { fornecedorId: pedido.fornecedor_id } });
       // Pedido ja faturado: so troca o arquivo da NF, sem mexer no status.
       const dadosNF = {
         nf_url: result.file_url,
@@ -777,7 +777,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
 
     setSalvandoNota(true);
     try {
-      const enviado = await UploadFile({ file: notaFile });
+      const enviado = await UploadFile({ file: notaFile, dono: { fornecedorId: pedido.fornecedor_id } });
       // Parte da lista JA GRAVADA, nao do estado da tela: a nota antiga
       // continua na lista. Era exatamente isso que o fluxo de substituir
       // perdia.
@@ -1110,7 +1110,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
 
     setUploadingParcela(true);
     try {
-      const uploadResult = await UploadFile({ file: comprovanteParcelaFile });
+      const uploadResult = await UploadFile({ file: comprovanteParcelaFile, dono: { clienteId: pedido.comprador_user_id } });
 
       // Atualizar título com comprovante e data informada
       await Carteira.update(parcelaSelecionada.id, {

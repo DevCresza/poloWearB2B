@@ -520,7 +520,7 @@ export default function PedidosFornecedor() {
 
     setUploading(true);
     try {
-      const nfUpload = await UploadFile({ file: nfFile });
+      const nfUpload = await UploadFile({ file: nfFile, dono: { fornecedorId: selectedPedido.fornecedor_id } });
 
       await Pedido.update(selectedPedido.id, {
         nf_url: nfUpload.file_url,
@@ -536,6 +536,8 @@ export default function PedidosFornecedor() {
             from_name: 'POLO B2B',
             to: cliente.email,
             subject: `Nota Fiscal Atualizada - NF #${nfNumero}`,
+            // {{documento_0}} vira URL assinada de 60 dias no servidor (sendEmail).
+            documentos: [nfUpload.file_path],
             body: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <div style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); padding: 30px; text-align: center;">
@@ -548,7 +550,7 @@ export default function PedidosFornecedor() {
                     <p><strong>Data de Emissão:</strong> ${new Date(nfDataEmissao).toLocaleDateString('pt-BR')}</p>
                   </div>
                   <div style="text-align: center; margin-top: 30px;">
-                    <a href="${nfUpload.file_url}" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px;">
+                    <a href="{{documento_0}}" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px;">
                       Baixar Nota Fiscal
                     </a>
                   </div>
@@ -1093,11 +1095,11 @@ export default function PedidosFornecedor() {
       // arquivo -- o comportamento de antes.
       const urlsPorParcela = [];
       if (umArquivoSo) {
-        const result = await UploadFile({ file: boletoNFFile });
+        const result = await UploadFile({ file: boletoNFFile, dono: { fornecedorId: selectedPedido.fornecedor_id } });
         for (let i = 0; i < boletoNFQtdParcelas; i++) urlsPorParcela.push(result.file_url);
       } else {
         for (const parcela of boletoNFParcelas) {
-          const result = await UploadFile({ file: parcela.arquivo });
+          const result = await UploadFile({ file: parcela.arquivo, dono: { fornecedorId: selectedPedido.fornecedor_id } });
           urlsPorParcela.push(result.file_url);
         }
       }

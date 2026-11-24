@@ -338,7 +338,10 @@ export default function CarteiraFinanceira() {
 
     setUploadingComprovante(true);
     try {
-      const uploadResult = await UploadFile({ file: comprovanteFile });
+      const uploadResult = await UploadFile({
+        file: comprovanteFile,
+        dono: { clienteId: selectedTitulo.cliente_user_id },
+      });
 
       // Atualizar título com comprovante e data informada
       await Carteira.update(selectedTitulo.id, {

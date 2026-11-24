@@ -57,7 +57,7 @@ export default function PedidoEditModal({ pedido, onClose, onUpdate }) {
     }
 
     try {
-      const { file_url } = await UploadFile({ file });
+      const { file_url } = await UploadFile({ file, dono: { fornecedorId: pedido.fornecedor_id } });
 
       const updateData = {};
       if (tipo === 'nf') {

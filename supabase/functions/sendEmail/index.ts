@@ -1,6 +1,15 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// sendEmail v11 — 24/11/2026 (T3): links de documento assinados no servidor.
+//   O bucket `documentos` (NF, boleto, comprovante) fica privado. Quem manda
+//   e-mail com link de arquivo envia `documentos: [caminho, ...]` e usa
+//   {{documento_0}}, {{documento_1}}... no html. Aqui, para cada caminho:
+//     - confere que quem envia tem acesso ao arquivo (RPC documento_acessivel:
+//       staff, o fornecedor dono da pasta/pedido ou o cliente do pedido);
+//     - gera URL assinada de 60 dias com a service role e troca o marcador.
+//   Sem acesso: 403 e nada sai. Arquivo sumido: o marcador vira link do portal.
+//
 // sendEmail v10 — hotfix 23/11/2026: deixou de ser relay aberto.
 //
 // Ate a v9 qualquer pessoa, sem login, mandava POST com to/subject/html/from_name
@@ -60,6 +69,50 @@ const FROM_NAME_PADRAO = 'POLO B2B';
 const EQUIPE = ['roberto@polomultimarca.com.br'];
 
 const PAPEIS_STAFF = ['admin', 'vendedor'];
+
+// Links de documento (T3).
+const PORTAL_URL = 'https://www.portalpolowear.com.br';
+const VALIDADE_LINK_EMAIL = 60 * 24 * 60 * 60; // 60 dias, decisao do dono
+const MAX_DOCUMENTOS = 10;
+const RE_CAMINHO_DOCUMENTO = /^(?:uploads|fornecedor|cliente)\/[A-Za-z0-9._\-\/ ]+$/;
+
+function caminhoDocumentoValido(c: unknown): c is string {
+  if (typeof c !== 'string' || c.length > 400) return false;
+  if (!RE_CAMINHO_DOCUMENTO.test(c)) return false;
+  return !c.split('/').some((p) => p === '' || p === '.' || p === '..');
+}
+
+// Troca {{documento_N}} pela URL assinada do caminho N. Devolve null se quem
+// envia nao tem acesso a algum dos arquivos.
+// deno-lint-ignore no-explicit-any
+async function linksDeDocumentos(admin: any, callerId: string, documentos: unknown): Promise<string[] | null> {
+  if (documentos === undefined || documentos === null) return [];
+  if (!Array.isArray(documentos) || documentos.length > MAX_DOCUMENTOS) return null;
+  const links: string[] = [];
+  for (const caminho of documentos) {
+    // null = a tela nao achou o caminho (URL fora do padrao): link do portal.
+    if (caminho === null) { links.push(`${PORTAL_URL}/MeusPedidos`); continue; }
+    if (!caminhoDocumentoValido(caminho)) return null;
+    const { data: ok, error: errAcesso } = await admin.rpc('documento_acessivel', { p_nome: caminho, p_user: callerId });
+    if (errAcesso || ok !== true) {
+      console.warn('sendEmail: documento recusado', { caller: callerId, erro: errAcesso?.message ?? null });
+      return null;
+    }
+    const { data, error } = await admin.storage.from('documentos').createSignedUrl(caminho, VALIDADE_LINK_EMAIL);
+    if (error || !data?.signedUrl) {
+      console.warn('sendEmail: nao assinou documento, usa link do portal', error?.message);
+      links.push(`${PORTAL_URL}/MeusPedidos`);
+    } else {
+      links.push(data.signedUrl);
+    }
+  }
+  return links;
+}
+
+function aplicarLinks(html: string, links: string[]): string {
+  // Marcador sem documento correspondente vira link do portal: nunca sai cru.
+  return html.replace(/\{\{documento_(\d+)\}\}/g, (_m, i) => escapeHtml(links[Number(i)] ?? `${PORTAL_URL}/MeusPedidos`));
+}
 const MAX_DESTINATARIOS_NAO_STAFF = 5;
 
 const norm = (e: unknown) => String(e ?? '').trim().toLowerCase();
@@ -285,7 +338,7 @@ async function handler(req: Request): Promise<Response> {
       return json({ success: false, error: 'Usuario sem permissao para enviar e-mail' }, 403);
     }
 
-    const { to, subject, body, html, from_name } = payload ?? {};
+    const { to, subject, body, html, from_name, documentos } = payload ?? {};
 
     if (!to || !subject || (!body && !html)) {
       return json({ success: false, error: 'Campos obrigatórios: to, subject, body ou html' }, 400);
@@ -310,6 +363,11 @@ async function handler(req: Request): Promise<Response> {
         console.warn('sendEmail: destinatario recusado', { caller: caller.id, role: perfil.role, qtd: destinos.length });
         return json({ success: false, error: 'Destinatario nao permitido' }, 403);
       }
+    }
+
+    const linksDocumentos = await linksDeDocumentos(admin, caller.id, documentos);
+    if (linksDocumentos === null) {
+      return json({ success: false, error: 'Documento nao permitido' }, 403);
     }
 
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
@@ -342,7 +400,7 @@ async function handler(req: Request): Promise<Response> {
         from: `${nomeRemetente} <${FROM_EMAIL}>`,
         to: destinos,
         subject: String(subject),
-        html: emailContent
+        html: aplicarLinks(emailContent, linksDocumentos)
       })
     });
 
