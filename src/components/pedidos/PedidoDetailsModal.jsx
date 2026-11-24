@@ -31,6 +31,7 @@ import { validarVencimentos } from '@/utils/vencimentoUtils';
 import { autorDaLinha, resumoDaLinha, detalhesDaLinha } from '@/utils/historicoPedido';
 import { Store } from 'lucide-react';
 import { thumb, usarOriginalSeFalhar } from '@/utils/thumb';
+import FaturarPedidoModal from './FaturarPedidoModal';
 
 // Notas de um faturamento. nf_arquivos e a lista; nf_url (campo antigo) vale
 // como item unico para faturamento gravado antes da migration 20260922000001.
@@ -79,6 +80,8 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
   const [uploading, setUploading] = useState(false);
   const [boletoFile, setBoletoFile] = useState(null);
   const [nfFile, setNfFile] = useState(null);
+  // "Enviar NF" em pedido em producao abre o Faturar (T7).
+  const [faturarComNF, setFaturarComNF] = useState(null);
   const [nfNumero, setNfNumero] = useState(pedido.nf_numero || '');
   const [nfDataEmissao, setNfDataEmissao] = useState('');
   // Dados lidos do XML da NF-e anexada (numero, emissao, transportadora)
@@ -697,14 +700,27 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
       toast.info('Informe o número da nota fiscal');
       return;
     }
+    // Pedido em producao: a NF e um faturamento. Antes este botao so gravava
+    // a NF no pedido e mudava o status para 'faturado' -- sem registro em
+    // faturamentos, sem baixa de item, sem valor_faturado e sem os titulos
+    // a vista/cartao/pix (394 pedidos ficaram assim; 40 so em nov/2026).
+    // Agora abre o Faturar ja com o saldo inteiro e esta NF: no caso comum e
+    // so confirmar; para parcial, ajusta os itens la.
+    if (pedido.status === 'em_producao') {
+      setFaturarComNF({
+        arquivos: [nfFile],
+        nf: { numero: nfNumero, dataEmissao: nfDataEmissao || null },
+      });
+      return;
+    }
     setUploading(true);
     try {
       const result = await UploadFile({ file: nfFile });
+      // Pedido ja faturado: so troca o arquivo da NF, sem mexer no status.
       const dadosNF = {
         nf_url: result.file_url,
         nf_numero: nfNumero,
         nf_data_upload: nfDataEmissao ? nfDataEmissao + 'T00:00:00' : new Date().toISOString(),
-        status: pedido.status === 'em_producao' ? 'faturado' : pedido.status
       };
       // So preenche a transportadora se o pedido ainda nao tem uma: quem
       // informou o envio manualmente tem a palavra final.
@@ -3135,7 +3151,7 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
                         className="w-full bg-green-600 hover:bg-green-700"
                       >
                         <Upload className="w-4 h-4 mr-2" />
-                        {uploading ? 'Enviando...' : 'Enviar Nota Fiscal'}
+                        {uploading ? 'Enviando...' : (pedido.status === 'em_producao' ? 'Faturar com esta NF' : 'Enviar Nota Fiscal')}
                       </Button>
                     </div>
                   ) : (
@@ -3745,6 +3761,22 @@ export default function PedidoDetailsModal({ pedido, onClose, onUpdate, currentU
             </div>
           </DialogContent>
         </Dialog>
+      )}
+      {faturarComNF && (
+        <FaturarPedidoModal
+          pedido={pedido}
+          faturarSaldoInteiro
+          arquivosIniciais={faturarComNF.arquivos}
+          nfInicial={faturarComNF.nf}
+          onClose={() => setFaturarComNF(null)}
+          onSuccess={() => {
+            setFaturarComNF(null);
+            setNfFile(null);
+            setNfDataEmissao('');
+            setNfeLida(null);
+            onUpdate();
+          }}
+        />
       )}
     </Dialog>
   );

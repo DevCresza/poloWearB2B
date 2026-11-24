@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,14 +29,28 @@ import { conferirDivisao, rotuloMetodo, METODOS } from '@/utils/divisaoPagamento
  *
  * `clientes` e usado so para achar o e-mail do comprador na notificacao; quando
  * a lista nao vem, o faturamento acontece igual e o e-mail e pulado.
+ *
+ * Aberto pelo "Enviar NF" do detalhe do pedido (T7): `faturarSaldoInteiro` ja
+ * marca o saldo inteiro de todos os itens e preenche a forma de pagamento com o
+ * valor total, e `arquivosIniciais` / `nfInicial` trazem a NF que o usuario
+ * anexou la. O caso comum (NF do pedido inteiro) vira um clique em "Faturar";
+ * para faturar parcial, basta ajustar os itens aqui.
  */
-export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onSuccess }) {
+export default function FaturarPedidoModal({
+  pedido,
+  clientes = [],
+  onClose,
+  onSuccess,
+  faturarSaldoInteiro = false,
+  arquivosIniciais = null,
+  nfInicial = null,
+}) {
   const [itensFaturamento, setItensFaturamento] = useState([]);
   // Lista: o fornecedor pode emitir mais de uma nota para a MESMA remessa
   // (CFOP diferente, nota complementar, limite do emissor).
   const [nfFiles, setNfFiles] = useState([]);
-  const [nfNumero, setNfNumero] = useState('');
-  const [nfDataEmissao, setNfDataEmissao] = useState(new Date().toISOString().split('T')[0]);
+  const [nfNumero, setNfNumero] = useState(nfInicial?.numero || '');
+  const [nfDataEmissao, setNfDataEmissao] = useState(nfInicial?.dataEmissao || new Date().toISOString().split('T')[0]);
   // Divisao do pagamento desta nota. Uma linha = uma forma. O cliente que
   // paga metade a vista e metade no credito tem duas linhas aqui -- antes
   // era um select unico e nao havia como registrar isso.
@@ -58,16 +72,31 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
     if (typeof raw === 'string') {
       try { raw = JSON.parse(raw); } catch (_e) { raw = []; }
     }
-    setItensFaturamento(raw.map((item, idx) => ({
-      ...item,
-      _index: idx,
-      _selected: false,
-      _qtdFaturar: 0,
-      _isQuebra: false,
-      _qtdQuebra: 0,
-      _saldo: (item.quantidade || 0) - (item.qtd_faturada || 0) - (item.qtd_quebra || 0),
-    })));
-  }, [pedido.id, pedido.itens]);
+    setItensFaturamento(raw.map((item, idx) => {
+      const saldo = (item.quantidade || 0) - (item.qtd_faturada || 0) - (item.qtd_quebra || 0);
+      const marcar = faturarSaldoInteiro && saldo > 0;
+      return {
+        ...item,
+        _index: idx,
+        _selected: marcar,
+        _qtdFaturar: marcar ? saldo : 0,
+        _isQuebra: false,
+        _qtdQuebra: 0,
+        _saldo: saldo,
+      };
+    }));
+  }, [pedido.id, pedido.itens, faturarSaldoInteiro]);
+
+  // NF anexada no "Enviar NF" do detalhe: entra como se tivesse sido escolhida
+  // aqui (o XML ainda e lido e casa os itens). Uma vez so, depois que os itens
+  // existem -- o casamento precisa deles.
+  const arquivosAplicados = useRef(false);
+  useEffect(() => {
+    if (arquivosAplicados.current || !arquivosIniciais?.length || itensFaturamento.length === 0) return;
+    arquivosAplicados.current = true;
+    handleNfFilesChange(arquivosIniciais);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itensFaturamento.length, arquivosIniciais]);
 
   // O fornecedor ja anexava o XML aqui; ate agora ele subia sem ser lido e os
   // 30+ itens do pedido eram marcados um a um. Agora o arquivo preenche numero,
@@ -136,13 +165,25 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
 
   const divisaoPagamento = conferirDivisao(pagamentos, valorAFaturar);
 
+  // Saldo inteiro: a forma unica de pagamento acompanha o valor selecionado
+  // ate o usuario mexer na divisao.
+  const divisaoTocada = useRef(false);
+  useEffect(() => {
+    if (!faturarSaldoInteiro || divisaoTocada.current) return;
+    setPagamentos(prev => (prev.length === 1
+      ? [{ ...prev[0], valor: valorAFaturar > 0 ? valorAFaturar.toFixed(2) : '' }]
+      : prev));
+  }, [faturarSaldoInteiro, valorAFaturar]);
+
   const alterarPagamento = (i, campo, valor) => {
+    divisaoTocada.current = true;
     setPagamentos(prev => prev.map((l, idx) => (idx === i ? { ...l, [campo]: valor } : l)));
   };
 
   // A nova linha ja nasce com o que falta para fechar: dividir R$ 17.277,12 em
   // duas partes nao deveria obrigar ninguem a calcular a metade na mao.
   const adicionarPagamento = () => {
+    divisaoTocada.current = true;
     const jaSomado = pagamentos.reduce((s2, l) => s2 + (parseFloat(String(l.valor).replace(',', '.')) || 0), 0);
     const restante = Math.max(0, valorAFaturar - jaSomado);
     const usados = new Set(pagamentos.map(l => l.metodo));
@@ -151,6 +192,7 @@ export default function FaturarPedidoModal({ pedido, clientes = [], onClose, onS
   };
 
   const removerPagamento = (i) => {
+    divisaoTocada.current = true;
     setPagamentos(prev => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
   };
 
