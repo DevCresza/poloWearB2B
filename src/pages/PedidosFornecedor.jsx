@@ -54,7 +54,7 @@ export default function PedidosFornecedor() {
     'status', 'status_pagamento', 'metodo_pagamento',
     'valor_total', 'valor_final', 'valor_faturado', 'valor_frete_fob',
     'qtd_pecas', 'created_date', 'data_prevista_entrega', 'mes_referencia',
-    'meses_entrega_efetivos',
+    'meses_entrega_efetivos', 'meses_faturamento',
     'transportadora', 'codigo_rastreio',
     'nf_url', 'nf_numero', 'nf_data_upload', 'boleto_url',
     'frete_incluso_boleto', 'frete_modo_cobranca',

@@ -290,8 +290,29 @@ export const getMesEntregaItem = (pedido, item, produtoEntregaMap = {}) => {
  * o mês real do faturamento é o da nota.
  */
 export const getMesFaturamentoItem = (pedido, item, produtoEntregaMap = {}) => {
-  if (pedido?.nf_data_upload) return formatMesAno(pedido.nf_data_upload);
+  const nota = mesNotaDoItem(pedido, item);
+  if (nota) return formatMesAno(`${nota}-01`);
   return getMesEntregaItem(pedido, item, produtoEntregaMap);
+};
+
+/**
+ * Mês ('YYYY-MM') da nota que vale para UM item, ou null se o pedido não tem nota.
+ *
+ * Desde a T7 o mês vem dos faturamentos, não da NF gravada no pedido (que é só
+ * a primeira nota; antes era a ÚLTIMA, e um faturamento parcial mudava o mês
+ * de tudo o que já tinha sido faturado):
+ *   1) item.mes_faturamento: mês da primeira nota que faturou o item
+ *      (gravado por registrar_faturamento);
+ *   2) pedido.meses_faturamento: meses das notas do pedido (trigger em
+ *      faturamentos) -- o primeiro;
+ *   3) pedido.nf_data_upload: pedido antigo, sem faturamento registrado.
+ */
+const mesNotaDoItem = (pedido, item) => {
+  if (item?.mes_faturamento) return String(item.mes_faturamento).slice(0, 7);
+  const meses = pedido?.meses_faturamento;
+  if (Array.isArray(meses) && meses.length > 0 && meses[0]) return String(meses[0]).slice(0, 7);
+  if (pedido?.nf_data_upload) return String(pedido.nf_data_upload).slice(0, 7);
+  return null;
 };
 
 /**
@@ -326,7 +347,8 @@ export const getMesesEntregaPedido = (pedido, produtoEntregaMap = {}) => {
  * dos outros meses — filtrar só a lista de pedidos não basta.
  */
 export const getMesFaturamentoItemKey = (pedido, item, produtoEntregaMap = {}) => {
-  if (pedido?.nf_data_upload) return String(pedido.nf_data_upload).slice(0, 7);
+  const nota = mesNotaDoItem(pedido, item);
+  if (nota) return nota;
   if (item?.mes_entrega) return String(item.mes_entrega).slice(0, 7);
   const ep = item?.produto_id ? produtoEntregaMap[item.produto_id] : null;
   const base = ep || pedido?.data_prevista_entrega || pedido?.created_date;
@@ -342,7 +364,13 @@ export const getMesFaturamentoItemKey = (pedido, item, produtoEntregaMap = {}) =
  * telas que carregam o pedido COM itens (MeusPedidos, PedidosFornecedor).
  */
 export const getMesesFaturamentoPedido = (pedido, produtoEntregaMap = {}) => {
-  // Pedido com NF mas sem os itens carregados ainda tem mês: o da nota.
+  // Meses das notas registradas em faturamentos (um pedido faturado em duas
+  // notas, em outubro e novembro, entra nos dois meses).
+  const mesesNotas = pedido?.meses_faturamento;
+  if (Array.isArray(mesesNotas) && mesesNotas.length > 0) {
+    return [...new Set(mesesNotas.filter(Boolean).map(m => String(m).slice(0, 7)))];
+  }
+  // Pedido antigo, com NF no pedido mas sem faturamento registrado.
   if (pedido?.nf_data_upload) {
     const k = String(pedido.nf_data_upload).slice(0, 7);
     return k ? [k] : [];

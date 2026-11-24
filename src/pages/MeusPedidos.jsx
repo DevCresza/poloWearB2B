@@ -84,7 +84,7 @@ export default function MeusPedidos() {
     'id', 'comprador_user_id', 'fornecedor_id', 'loja_id',
     'status', 'status_pagamento', 'metodo_pagamento',
     'valor_total', 'valor_final', 'qtd_pecas',
-    'created_date', 'data_prevista_entrega', 'meses_entrega_efetivos',
+    'created_date', 'data_prevista_entrega', 'meses_entrega_efetivos', 'meses_faturamento',
     'transportadora', 'codigo_rastreio', 'link_rastreio',
     'nf_url', 'nf_numero', 'nf_data_upload', 'boleto_url',
     'cliente_confirmou_nf', 'cliente_confirmou_boleto', 'cliente_confirmou_recebimento',
