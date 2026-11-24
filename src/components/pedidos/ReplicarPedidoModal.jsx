@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { formatCurrency } from '@/utils/exportUtils';
 import { getPedidoMinimo } from '@/utils/pedidoMinimo';
 import { precoUnitarioItem } from '@/utils/itemPedido';
+import { novaChaveEnvio } from '@/api/pedidos';
 import {
   Store, Check, Minus, Plus, Trash2, AlertTriangle,
   CheckCircle, XCircle, Loader2, CreditCard, ArrowRight, ArrowLeft
@@ -79,6 +80,13 @@ export default function ReplicarPedidoModal({
   const [processando, setProcessando] = useState(false);
   const [resultados, setResultados] = useState([]);
   const [progressAtual, setProgressAtual] = useState(0);
+  // Trava sincrona do "Confirmar Todos": o estado `processando` so vale no
+  // proximo render, e um clique duplo rodaria o laco duas vezes.
+  const enviandoRef = useRef(false);
+  // Uma chave de envio por loja, gerada uma vez e reaproveitada enquanto o modal
+  // estiver aberto: repetir o envio devolve o pedido ja criado (criar_pedido e
+  // idempotente pela chave) em vez de criar outro.
+  const chavesPorLoja = useRef({});
 
   const fornecedor = fornecedores.find(f => f.id === grupo.fornecedor_id);
   const fornecedorNome = fornecedor?.nome_marca || fornecedor?.nome_fantasia || 'Fornecedor';
@@ -111,6 +119,7 @@ export default function ReplicarPedidoModal({
       setProcessando(false);
       setResultados([]);
       setProgressAtual(0);
+      chavesPorLoja.current = {};
 
       onOpenChange(false);
 
@@ -242,6 +251,16 @@ export default function ReplicarPedidoModal({
   }, [selectedLojaIds, pedidosConfig]);
 
   const processarPedidos = async () => {
+    if (enviandoRef.current) return;
+    enviandoRef.current = true;
+    try {
+      await processarPedidosInterno();
+    } finally {
+      enviandoRef.current = false;
+    }
+  };
+
+  const processarPedidosInterno = async () => {
     setProcessando(true);
     setResultados([]);
     setProgressAtual(0);
@@ -263,7 +282,8 @@ export default function ReplicarPedidoModal({
       };
 
       try {
-        const result = await criarPedidoParaLoja(grupoData, loja, config.metodo, config.obs);
+        if (!chavesPorLoja.current[lojaId]) chavesPorLoja.current[lojaId] = novaChaveEnvio();
+        const result = await criarPedidoParaLoja(grupoData, loja, config.metodo, config.obs, chavesPorLoja.current[lojaId]);
         results.push({
           lojaId,
           lojaNome: loja?.nome_fantasia || loja?.nome || 'Loja',
