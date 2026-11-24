@@ -8,9 +8,12 @@ import { toast } from 'sonner';
 import { can, PERM } from '@/utils/permissoes';
 import { isFornecedor } from '@/utils/roles';
 import { thumb } from '@/utils/thumb';
+import { capsulasComPedidos } from '@/api/catalogo';
 
 export default function GestaoCapsulas() {
   const [capsulas, setCapsulas] = useState([]);
+  // ids com pedido: essas so podem ser arquivadas (null = ainda nao sei).
+  const [comPedidos, setComPedidos] = useState(null);
   const [fornecedoresMap, setFornecedoresMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -53,6 +56,7 @@ export default function GestaoCapsulas() {
       }
 
       setCapsulas(capsulasList || []);
+      capsulasComPedidos((capsulasList || []).map(c => c.id)).then(setComPedidos);
 
       // Carregar fornecedores para exibir razão social
       const fornecedores = await Fornecedor.list();
@@ -97,6 +101,7 @@ export default function GestaoCapsulas() {
         loadCapsulas();
       } catch (error) {
         toast.error(`Falha ao excluir a cápsula: ${error?.message || 'erro desconhecido'}`);
+        loadCapsulas();
       }
     }
   };
@@ -227,9 +232,13 @@ export default function GestaoCapsulas() {
                       >
                         {capsula.arquivada ? <ArchiveRestore className="w-4 h-4"/> : <Archive className="w-4 h-4"/>}
                       </Button>
-                       <Button variant="ghost" size="icon" onClick={() => handleDelete(capsula.id)} className="text-red-500 hover:text-red-600">
-                        <Trash2 className="w-4 h-4"/>
-                      </Button>
+                      {/* Capsula que ja esta em pedido nao se exclui, so se arquiva
+                          (o botao Arquivar fica ao lado). */}
+                      {comPedidos !== null && !comPedidos.has(capsula.id) && (
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(capsula.id)} className="text-red-500 hover:text-red-600" title="Excluir">
+                          <Trash2 className="w-4 h-4"/>
+                        </Button>
+                      )}
                     </div>
                   </Card>
                 ))}

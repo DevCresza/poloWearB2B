@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { can, PERM } from '@/utils/permissoes';
 import { isAdmin as ehAdmin } from '@/utils/roles';
 import { thumb, usarOriginalSeFalhar } from '@/utils/thumb';
+import { produtosComPedidos } from '@/api/catalogo';
 
 // So o que a lista e os filtros leem. variantes_cor, descricao e o resto do
 // cadastro ficam para o formulario, que busca a linha inteira ao abrir.
@@ -32,6 +33,8 @@ const COLUNAS_LISTA_PRODUTOS = [
 export default function GestaoProdutos() {
   const [user, setUser] = useState(null);
   const [produtos, setProdutos] = useState([]);
+  // ids com pedido: esses so podem ser arquivados (null = ainda nao sei).
+  const [comPedidos, setComPedidos] = useState(null);
   const [fornecedores, setFornecedores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -100,6 +103,7 @@ export default function GestaoProdutos() {
 
       setProdutos(produtosList || []);
       setFornecedores(fornecedoresList || []);
+      produtosComPedidos((produtosList || []).map(p => p.id)).then(setComPedidos);
     } catch (error) {
     } finally {
       setLoading(false);
@@ -252,11 +256,12 @@ export default function GestaoProdutos() {
     }
 
     try {
-      // Primeiro remover de todas as cápsulas
-      const qtdCapsulas = await removerProdutoDasCapsulas(produto.id);
-
-      // Depois excluir o produto
+      // Primeiro excluir o produto: o banco recusa quando ele ja esta em algum
+      // pedido, e entao as capsulas ficam como estavam.
       await Produto.delete(produto.id);
+
+      // Depois remover de todas as cápsulas
+      const qtdCapsulas = await removerProdutoDasCapsulas(produto.id);
 
       if (qtdCapsulas > 0) {
         toast.success(`Produto excluído e removido de ${qtdCapsulas} cápsula(s)!`);
@@ -267,6 +272,7 @@ export default function GestaoProdutos() {
       loadData();
     } catch (error) {
       toast.error(`Falha ao excluir o produto: ${error?.message || 'verifique se não há pedidos vinculados.'}`);
+      loadData();
     }
   };
 
@@ -369,6 +375,9 @@ export default function GestaoProdutos() {
   const podeCriar = can(user, PERM.CADASTRAR_PRODUTOS);
   const podeEditar = can(user, PERM.EDITAR_PRODUTOS);
   const podeExcluir = ehAdmin(user); // exclusao continua so do admin
+  // Produto que ja esta em pedido nao se exclui, so se arquiva (o botao
+  // Arquivar ja fica ao lado); sem a resposta do banco, tambem nao.
+  const podeExcluirProduto = (produto) => podeExcluir && comPedidos !== null && !comPedidos.has(produto.id);
 
   return (
     <div className="space-y-6">
@@ -619,7 +628,7 @@ export default function GestaoProdutos() {
                                   : <Archive className="w-3 h-3" />}
                               </Button>
                             )}
-                            {podeExcluir && (
+                            {podeExcluirProduto(produto) && (
                               <Button
                                 variant="destructive"
                                 size="sm"
@@ -822,7 +831,7 @@ export default function GestaoProdutos() {
                                   )}
                                 </Button>
                               )}
-                              {podeExcluir && (
+                              {podeExcluirProduto(produto) && (
                                 <Button
                                   variant="destructive"
                                   size="sm"
