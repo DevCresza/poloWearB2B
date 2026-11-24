@@ -2,9 +2,29 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+// Versão do build: o commit na Vercel, senão a hora do build. Vai embutida no
+// JS (import.meta.env.VITE_VERSAO_BUILD) e em /version.json; a aba compara as
+// duas para saber que houve deploy novo (src/utils/versaoApp.js).
+const VERSAO_BUILD = process.env.VERCEL_GIT_COMMIT_SHA || `local-${Date.now()}`;
+
+const versaoDoBuild = () => ({
+  name: 'polo-versao-build',
+  apply: 'build',
+  generateBundle() {
+    this.emitFile({
+      type: 'asset',
+      fileName: 'version.json',
+      source: JSON.stringify({ versao: VERSAO_BUILD }),
+    });
+  },
+});
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), versaoDoBuild()],
+  define: {
+    'import.meta.env.VITE_VERSAO_BUILD': JSON.stringify(VERSAO_BUILD),
+  },
   server: {
     allowedHosts: true
   },
