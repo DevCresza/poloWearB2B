@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Pedido, Carteira, Capsula } from '@/api/entities';
-import { darBaixaEstoque, devolverEstoque } from '@/utils/estoqueUtils';
+import { darBaixaEstoque, devolverEstoque, estoqueAutomaticoAtivo } from '@/utils/estoqueUtils';
 import { formatCurrency } from '@/utils/exportUtils';
 import { Save, X, Trash2, AlertTriangle, Edit, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
@@ -252,7 +252,9 @@ Valor: ${formatCurrency(valorAtual)} → ${formatCurrency(novoValorTotal)}`;
       // 3) Ajuste de estoque, só depois que o pedido foi gravado: se o banco
       //    recusar o update, o estoque não pode ter sido mexido (antes o ajuste
       //    vinha primeiro e ficava órfão). Só se o pedido já teve baixa anterior.
-      if (pedido.estoque_baixado) {
+      //    Com o estoque automático no banco (T8), o próprio update já aplicou
+      //    a diferença (e recusa aumento sem saldo).
+      if (pedido.estoque_baixado && !(await estoqueAutomaticoAtivo())) {
         if (itensParaDevolver.length > 0) {
           try {
             await devolverEstoque(itensParaDevolver);

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { User, Capsula, Produto, Loja, Pedido, Carteira, Fornecedor } from '@/api/entities';
+import { User, Capsula, Loja, Fornecedor } from '@/api/entities';
+import { emitirPedidoLote, novaChaveEnvio } from '@/api/pedidos';
+import { can, PERM } from '@/utils/permissoes';
 import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,7 +15,6 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { AlertTriangle, Store, Package, Search, Send, CheckCircle, XCircle, Filter } from 'lucide-react';
-import { getPrecoGrade, getPrecoPeca } from '@/utils/precoCliente';
 import { formatCurrency } from '@/utils/exportUtils';
 
 // Pedidos não cancelados que já têm algum item desta cápsula -- só comprador
@@ -36,84 +37,11 @@ async function pedidosComItemDaCapsula(capsulaId) {
   }
 }
 
-// Expande a capsula em itens de pedido, respeitando o tipo_negocio do
-// user destinatario (franqueado vs multimarca). Preco vem de getPrecoGrade
-// ou getPrecoPeca. Variantes com quantidade 0 sao IGNORADAS.
-function expandirCapsulaEmItens(capsula, produtos, userDaLoja, capsulaQtd = 1) {
-  let pq = {};
-  try {
-    pq = typeof capsula.produtos_quantidades === 'string'
-      ? JSON.parse(capsula.produtos_quantidades)
-      : (capsula.produtos_quantidades || {});
-  } catch { pq = {}; }
-
-  const produtoIds = capsula.produto_ids || [];
-  return produtoIds.flatMap(pid => {
-    const produto = produtos.find(p => p.id === pid);
-    if (!produto) return [];
-    const config = pq[pid];
-    const tipoVenda = produto.tipo_venda || 'avulso';
-    const isGrade = tipoVenda === 'grade';
-    const pecasGrade = parseInt(produto.total_pecas_grade) || 1;
-    const precoPeca = getPrecoPeca(produto, userDaLoja);
-    const precoGrade = getPrecoGrade(produto, userDaLoja);
-
-    if (config && typeof config === 'object' && Array.isArray(config.variantes)) {
-      return config.variantes
-        .map(v => {
-          const numGrades = (Number(v.quantidade) || 0) * capsulaQtd;
-          if (numGrades <= 0) return null;
-          const precoSalvo = isGrade ? precoGrade : precoPeca;
-          return {
-            produto_id: pid,
-            nome: produto.nome,
-            marca: produto.marca || '',
-            referencia: produto.referencia_polo || produto.referencia_fornecedor || '',
-            referencia_fornecedor: produto.referencia_fornecedor || '',
-            referencia_linx: produto.referencia_polo || '',
-            tipo_venda: tipoVenda,
-            quantidade: numGrades,
-            total_pecas_grade: pecasGrade,
-            preco: precoSalvo,
-            total: precoSalvo * numGrades,
-            foto: null,
-            grade_selecionada: null,
-            cor_selecionada: { cor_nome: v.cor_nome, cor_codigo_hex: v.cor_hex || '#000000' },
-            origem_capsula: capsula.id
-          };
-        })
-        .filter(Boolean);
-    }
-
-    const qtdSimples = (typeof config === 'number' ? config : 0) * capsulaQtd;
-    if (qtdSimples <= 0) return [];
-    const precoSimples = isGrade ? precoGrade : precoPeca;
-    return [{
-      produto_id: pid,
-      nome: produto.nome,
-      marca: produto.marca || '',
-      referencia: produto.referencia_polo || produto.referencia_fornecedor || '',
-      referencia_fornecedor: produto.referencia_fornecedor || '',
-      referencia_linx: produto.referencia_polo || '',
-      tipo_venda: tipoVenda,
-      quantidade: qtdSimples,
-      total_pecas_grade: pecasGrade,
-      preco: precoSimples,
-      total: precoSimples * qtdSimples,
-      foto: null,
-      grade_selecionada: null,
-      cor_selecionada: null,
-      origem_capsula: capsula.id
-    }];
-  });
-}
-
 export default function EmissaoLote() {
   const [me, setMe] = useState(null);
   const [loading, setLoading] = useState(true);
   const [emitindo, setEmitindo] = useState(false);
   const [capsulas, setCapsulas] = useState([]);
-  const [produtos, setProdutos] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
   const [lojas, setLojas] = useState([]);
   const [users, setUsers] = useState([]);
@@ -136,16 +64,17 @@ export default function EmissaoLote() {
     (async () => {
       try {
         const currentUser = await User.me();
-        if (currentUser?.role !== 'admin') {
+        if (!can(currentUser, PERM.EMITIR_LOTE)) {
           toast.error('Acesso restrito ao administrador.');
           setLoading(false);
           return;
         }
         setMe(currentUser);
 
-        const [cs, ps, fs, ls, us] = await Promise.all([
+        // Produtos nao vem mais para a tela: itens e precos sao montados no
+        // servidor (emitir_pedido_lote).
+        const [cs, fs, ls, us] = await Promise.all([
           Capsula.list(),
-          Produto.list(),
           Fornecedor.list(),
           Loja.list(),
           User.list()
@@ -158,7 +87,6 @@ export default function EmissaoLote() {
           return (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
         });
         setCapsulas(cAtivas);
-        setProdutos(ps || []);
         setFornecedores(fs || []);
         setLojas(ls || []);
         setUsers(us || []);
@@ -284,9 +212,8 @@ export default function EmissaoLote() {
 
     setEmitindo(true);
     const relatorio = { sucesso: [], falha: [] };
-
-    // Fornecedor da capsula (opcional, usado pra info)
-    const fornecedor = fornecedores.find(f => f.id === capsulaSelecionada.fornecedor_id) || null;
+    // Uma chave por clique em "emitir"; cada loja vira `${chaveLote}:${loja}`.
+    const chaveLote = novaChaveEnvio();
 
     for (const { loja, dono } of lojasVisiveis) {
       if (!selectedLojaIds.has(loja.id)) continue;
@@ -297,73 +224,20 @@ export default function EmissaoLote() {
           continue;
         }
 
-        const itensBase = expandirCapsulaEmItens(capsulaSelecionada, produtos, dono, qtdCapsula);
-        if (itensBase.length === 0) {
-          relatorio.falha.push({ loja, motivo: 'Cápsula não gerou itens (todas cores em 0)' });
-          continue;
-        }
-        // Carimba o mes escolhido em cada item — mesma chave que o Carrinho grava,
-        // e que o relatorio/badge de entrega leem (getMesEntregaItem).
-        const itens = mesEntrega
-          ? itensBase.map(it => ({ ...it, mes_entrega: mesEntrega }))
-          : itensBase;
-        const total = itens.reduce((s, it) => s + (it.total || 0), 0);
-        if (total <= 0) {
-          relatorio.falha.push({ loja, motivo: 'Total zerado' });
-          continue;
-        }
-
-        const enderecoEntrega = {
-          endereco: loja.endereco_completo,
-          cep: loja.cep,
-          cidade: loja.cidade,
-          estado: loja.estado,
-          destinatario: loja.nome_fantasia || loja.nome,
-          telefone: loja.telefone || dono.telefone || dono.whatsapp
-        };
-
-        const pedidoData = {
-          comprador_user_id: dono.id,
-          fornecedor_id: capsulaSelecionada.fornecedor_id || null,
-          loja_id: loja.id,
-          itens,
-          valor_total: total,
-          valor_final: total,
-          status: 'novo_pedido',
-          status_pagamento: 'pendente',
-          metodo_pagamento: metodoPagamento,
-          endereco_entrega: enderecoEntrega,
-          observacoes: observacoes || `Emissão em lote pela administração — ${capsulaSelecionada.nome}`,
-          observacoes_comprador: observacoes || '',
-          estoque_baixado: false, // admin emitindo em nome do cliente — nao dar baixa automatica
-          emitido_por_admin_user_id: me?.id || null,
-          // Mesma autoria que o Carrinho grava, para o relatorio nao precisar
-          // saber de qual tela o pedido veio.
-          criado_por_user_id: me?.id || null,
-          criado_por_papel: 'admin',
-        };
-
-        const pedido = await Pedido.create(pedidoData);
-
-        // Placeholder na carteira mantido pra compatibilidade com fluxo normal
-        // (fornecedor cria as parcelas reais depois no faturamento).
-        try {
-          const dv = new Date();
-          dv.setDate(dv.getDate() + 30);
-          await Carteira.create({
-            pedido_id: pedido.id,
-            cliente_user_id: dono.id,
-            loja_id: loja.id,
-            tipo: 'a_pagar',
-            descricao: `Pedido #${pedido.id.slice(-8).toUpperCase()} - ${capsulaSelecionada.nome}`,
-            valor: total,
-            data_vencimento: dv.toISOString().split('T')[0],
-            status: 'pendente',
-            categoria: 'Pedido'
-          });
-        } catch (cerr) {
-          console.warn('Placeholder de carteira falhou (nao bloqueia):', cerr);
-        }
+        // Itens, precos (do perfil do dono da loja), pedido e titulo provisorio
+        // saem do servidor numa transacao so. A chave e deste lote + loja:
+        // clicar de novo (ou repetir depois de uma falha de rede) nao duplica.
+        const res = await emitirPedidoLote({
+          capsulaId: capsulaSelecionada.id,
+          quantidade: qtdCapsula,
+          mesEntrega,
+          lojaId: loja.id,
+          metodoPagamento,
+          observacoes,
+          chave: `${chaveLote}:${loja.id}`,
+        });
+        const pedido = { id: res.pedido_id };
+        const total = Number(res.valor_total) || 0;
 
         relatorio.sucesso.push({ loja, dono, pedidoId: pedido.id, valor: total });
       } catch (err) {
@@ -383,7 +257,7 @@ export default function EmissaoLote() {
   }, [capsulaSelecionada, fornecedores]);
 
   if (loading) return <div className="p-6">Carregando...</div>;
-  if (!me || me.role !== 'admin') {
+  if (!me || !can(me, PERM.EMITIR_LOTE)) {
     return (
       <div className="p-6">
         <Alert variant="destructive">

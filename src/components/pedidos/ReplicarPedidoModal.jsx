@@ -13,6 +13,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/utils/exportUtils';
+import { getPedidoMinimo } from '@/utils/pedidoMinimo';
+import { precoUnitarioItem } from '@/utils/itemPedido';
 import {
   Store, Check, Minus, Plus, Trash2, AlertTriangle,
   CheckCircle, XCircle, Loader2, CreditCard, ArrowRight, ArrowLeft
@@ -81,16 +83,7 @@ export default function ReplicarPedidoModal({
   const fornecedor = fornecedores.find(f => f.id === grupo.fornecedor_id);
   const fornecedorNome = fornecedor?.nome_marca || fornecedor?.nome_fantasia || 'Fornecedor';
   // Pedido minimo do fornecedor conforme o tipo do cliente que esta replicando
-  const valorMinimo = (() => {
-    if (!fornecedor) return 0;
-    const isMulti = user?.tipo_negocio === 'multimarca';
-    const especifico = isMulti
-      ? fornecedor.pedido_minimo_multimarca
-      : fornecedor.pedido_minimo_franqueado;
-    const v = Number(especifico);
-    if (Number.isFinite(v) && v > 0) return v;
-    return Number(fornecedor.pedido_minimo_valor) || 0;
-  })();
+  const valorMinimo = getPedidoMinimo(fornecedor, user);
   const metodosPagamento = getMetodosPagamentoDisponiveis(grupo.fornecedor_id);
 
   const outrasLojas = useMemo(() =>
@@ -218,9 +211,10 @@ export default function ReplicarPedidoModal({
     const config = pedidosConfig[lojaId];
     if (!config) return 0;
     return config.itens.reduce((sum, item) => {
+      // Estimativa; o valor final e recalculado no servidor (criar_pedido).
       const preco = item.tipo === 'capsula'
         ? (item.preco_unitario || 0)
-        : (item.tipo_venda === 'grade' ? item.preco_grade_completa : item.preco_por_peca);
+        : precoUnitarioItem(item, user, { porTamanho: !!item.tamanho_selecionado });
       return sum + preco * item.quantidade;
     }, 0);
   };
