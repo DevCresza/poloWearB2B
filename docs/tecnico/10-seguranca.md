@@ -66,7 +66,7 @@ O preço vem sempre do banco, nunca do navegador. Um clique duplo devolve o mesm
 1. O bucket de documentos (NF, XML, boleto e comprovante) é privado desde 24/11/2026.
 2. Cada arquivo é aberto por URL assinada de 1 hora.
 3. Lê o arquivo a equipe, o dono da pasta e a outra parte do pedido.
-4. O fornecedor grava em fornecedor/(id da marca)/; o cliente, em cliente/(id do usuário)/.
+4. O fornecedor grava em fornecedor/(id da marca)/; o cliente, em cliente/(id do usuário)/. A pasta antiga uploads/ só é lida: desde 26/11/2026 só a equipe grava nela.
 5. Limite de 20 MB; só PDF, XML e imagem.
 6. Fotos de produto ficam num bucket público, mas só quem gere o catálogo grava nele.
 
