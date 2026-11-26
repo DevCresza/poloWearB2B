@@ -6,6 +6,7 @@ Datas e horas no horário de Brasília (data do merge no main). Da mais nova par
 
 | Data | Mudança | PR |
 |---|---|---|
+| 26/11, 20h07 | Pasta antiga de documentos (uploads/) volta a ser só leitura para fornecedor e cliente | #36 |
 | 24/11, 20h52 | Regras de acesso mais rápidas aplicadas em todas as tabelas; fornecedor preenchido nos títulos provisórios | #34 |
 | 24/11, 20h44 | Produto apagado não muda o mês de entrega; produto e cápsula com pedido só se arquivam | #33 |
 | 24/11, 20h21 | Mês de entrega recalculado quando o fornecedor muda a data prevista do pedido | #31 |
